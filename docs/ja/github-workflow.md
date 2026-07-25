@@ -316,17 +316,17 @@ Closes #125
 - ローカル検証: PR 作成前の早期フィードバック
 - GitHub Actions: リモート上の正式な必須チェック
 
-このリポジトリの `CI` ワークフローは、Pull Request と push のたびに
-`experiments/devin-acp` を Node.js 24 / pnpm 11.1.2 で検証します。依存関係は
-`pnpm install --frozen-lockfile` で再現し、次の順序で全て成功することを必須にします。
+このリポジトリの `CI` ワークフローは、Pull Request と push のたびに root
+workspace を検証します。Ubuntu / Windows の両方で Node.js 24 / pnpm 11.1.2
+を使い、依存関係は `pnpm install --frozen-lockfile` で再現します。次の順序で
+全て成功することを、両OSで必須にします。
 
 1. `pnpm lint`
 2. `pnpm typecheck`
 3. `pnpm test`
 4. `pnpm build`
-5. `pnpm smoke -- --fake`
 
-実機の Devin 認証や外部 MCP へ接続する smoke は CI では実行しません。CI は最小権限で実行し、同じ Pull Request / branch の古い実行は新しい実行へ置き換えます。
+`experiments/devin-acp` のPoC smokeはCIでは実行しません。実機の Devin 認証や外部 MCP へ接続する smoke も実行しません。CI は最小権限で実行し、同じ Pull Request / branch の古い実行は新しい実行へ置き換えます。
 
 Meguribi は CI 完了を待つオプションを提供しますが、自動マージは行いません。
 
