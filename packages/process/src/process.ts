@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import type { AgentError, AgentErrorCode } from "@meguribi/core";
 
 export type ProcessErrorCode =
   | "executable_not_found"
   | "timeout"
   | "cancelled"
+  | "permission_denied"
   | "process_crashed"
   | "force_failed"
   | "unsupported_signal"
@@ -23,6 +25,8 @@ export class ProcessError extends Error {
 export interface ProcessExit {
   code: number | null;
   signal: NodeJS.Signals | null;
+  startedAt: string;
+  finishedAt: string;
 }
 
 export interface TerminationOptions {
@@ -30,27 +34,49 @@ export interface TerminationOptions {
 }
 
 export interface ProcessRunnerOptions {
-  cwd?: string;
+  cwd: string;
   env?: NodeJS.ProcessEnv;
+  envAllow?: string[];
+  envDeny?: string[];
+  timeoutMs?: number;
+  abortSignal?: AbortSignal;
+  terminationGraceMs?: number;
 }
 
 export interface ManagedProcess {
   readonly pid: number;
+  readonly startedAt: string;
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array>;
   writeStdin(data: Uint8Array | string): Promise<void>;
   closeStdin(): Promise<void>;
   signal(kind: "SIGINT" | "SIGTERM" | "SIGKILL"): Promise<void>;
-  waitForExit(timeoutMs?: number): Promise<ProcessExit>;
+  waitForExit(): Promise<ProcessExit>;
   terminateTree(options?: TerminationOptions): Promise<ProcessExit>;
 }
 
-function toProcessError(error: Error, executable?: string): ProcessError {
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  );
+}
+
+export function toProcessError(error: Error, executable?: string): ProcessError {
   const nodeError = error as NodeJS.ErrnoException;
   if (nodeError.code === "ENOENT") {
     return new ProcessError(
       "executable_not_found",
       `Executable not found: ${executable ?? "unknown"}`,
+      false,
+    );
+  }
+  if (nodeError.code === "EACCES" || nodeError.code === "EPERM") {
+    return new ProcessError(
+      "permission_denied",
+      `Permission denied: ${executable ?? "unknown"}`,
       false,
     );
   }
@@ -60,8 +86,38 @@ function toProcessError(error: Error, executable?: string): ProcessError {
   return new ProcessError("process_crashed", error.message ?? "Process crashed", false);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export function filterEnvironment(
+  source: NodeJS.ProcessEnv,
+  allow?: string[],
+  deny?: string[],
+): NodeJS.ProcessEnv {
+  const denySet = new Set(deny ?? []);
+  if (allow && allow.length > 0) {
+    const entries = allow
+      .filter((key) => !denySet.has(key) && source[key] !== undefined)
+      .map((key) => [key, source[key]!]);
+    return Object.fromEntries(entries);
+  }
+  const entries = Object.entries(source).filter(([key]) => !denySet.has(key));
+  return Object.fromEntries(entries);
+}
+
+export function toAgentError(error: ProcessError): AgentError {
+  const codeMap: Record<ProcessErrorCode, AgentErrorCode> = {
+    executable_not_found: "executable_not_found",
+    timeout: "timeout",
+    cancelled: "cancelled",
+    permission_denied: "permission_denied",
+    process_crashed: "process_crashed",
+    force_failed: "cleanup_failed",
+    unsupported_signal: "process_crashed",
+    unknown: "unknown",
+  };
+  return {
+    code: codeMap[error.code],
+    message: error.message,
+    isRetryable: error.isRetryable,
+  };
 }
 
 async function* readStream(stream: Readable | null): AsyncGenerator<Uint8Array> {
@@ -99,15 +155,68 @@ function closeStream(stream: Writable): Promise<void> {
 }
 
 function isNoSuchProcessError(error: unknown): boolean {
+  return isErrnoException(error) && error.code === "ESRCH";
+}
+
+function isUnsupportedSignalError(error: unknown, _kind: string): boolean {
+  if (!isErrnoException(error)) {
+    return false;
+  }
+  const code = error.code;
+  const message = error.message?.toLowerCase() ?? "";
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code: string }).code === "ESRCH"
+    code === "EINVAL" ||
+    code === "ERR_UNKNOWN_SIGNAL" ||
+    message.includes("unknown signal") ||
+    message.includes("unsupported signal")
   );
 }
 
-function runTaskkill(pid: number, force: boolean): Promise<void> {
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (isNoSuchProcessError(err)) {
+      return false;
+    }
+    if (isErrnoException(err) && (err.code === "EPERM" || err.code === "EACCES")) {
+      return true;
+    }
+    return false;
+  }
+}
+
+function waitForProcessDeath(pid: number, timeoutMs: number, intervalMs = 50): Promise<boolean> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (!isProcessAlive(pid)) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(check, intervalMs);
+    };
+    check();
+  });
+}
+
+function sendGroupSignal(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch (err) {
+    if (isNoSuchProcessError(err)) {
+      return;
+    }
+    throw toProcessError(err as Error);
+  }
+}
+
+function runTaskkill(pid: number, force: boolean): Promise<number | null> {
   return new Promise((resolve, reject) => {
     const args = ["/PID", String(pid), "/T"];
     if (force) {
@@ -118,24 +227,89 @@ function runTaskkill(pid: number, force: boolean): Promise<void> {
       windowsHide: true,
       stdio: "ignore",
     });
-    killer.on("error", (err: Error) => reject(toProcessError(err)));
+    killer.on("error", (err: Error) => {
+      reject(new ProcessError("force_failed", `taskkill failed: ${err.message}`, false));
+    });
     killer.on("close", (code: number | null) => {
-      if (code === 0 || code === 128) {
-        resolve();
-      } else {
-        reject(
-          new ProcessError("force_failed", `taskkill exited with ${code ?? "unknown"}`, false),
-        );
-      }
+      resolve(code);
     });
   });
 }
 
+async function terminateWindows(pid: number, graceMs: number): Promise<void> {
+  let lastCode: number | null = null;
+
+  try {
+    lastCode = await runTaskkill(pid, false);
+  } catch (err) {
+    if (await waitForProcessDeath(pid, graceMs)) {
+      return;
+    }
+    throw err;
+  }
+  if (await waitForProcessDeath(pid, graceMs)) {
+    return;
+  }
+
+  try {
+    lastCode = await runTaskkill(pid, true);
+  } catch (err) {
+    if (await waitForProcessDeath(pid, graceMs)) {
+      return;
+    }
+    throw err;
+  }
+  if (await waitForProcessDeath(pid, graceMs)) {
+    return;
+  }
+
+  if (isProcessAlive(pid)) {
+    throw new ProcessError(
+      "force_failed",
+      `Process ${pid} survived taskkill /T /F (last exit code ${lastCode ?? "unknown"})`,
+      false,
+    );
+  }
+}
+
+async function terminatePosix(pid: number, graceMs: number): Promise<void> {
+  sendGroupSignal(pid, "SIGTERM");
+  if (await waitForProcessDeath(-pid, graceMs)) {
+    return;
+  }
+
+  sendGroupSignal(pid, "SIGKILL");
+  if (await waitForProcessDeath(-pid, graceMs)) {
+    return;
+  }
+
+  if (isProcessAlive(-pid)) {
+    throw new ProcessError(
+      "force_failed",
+      `Process group ${pid} survived SIGTERM and SIGKILL`,
+      false,
+    );
+  }
+}
+
+function buildEnvironment(options: ProcessRunnerOptions): NodeJS.ProcessEnv {
+  const source = options.env ?? {};
+  return filterEnvironment(source, options.envAllow, options.envDeny);
+}
+
 export class ProcessRunner {
-  run(executable: string, args: string[], options?: ProcessRunnerOptions): ManagedProcess {
+  run(executable: string, args: string[], options: ProcessRunnerOptions): ManagedProcess {
+    if (!options.cwd) {
+      throw new ProcessError("executable_not_found", "cwd is required to run an executable", false);
+    }
+    if (options.abortSignal?.aborted) {
+      throw new ProcessError("cancelled", "Process was cancelled before start", false);
+    }
+
+    const startedAt = new Date().toISOString();
     const child = spawn(executable, args, {
-      cwd: options?.cwd,
-      env: options?.env,
+      cwd: options.cwd,
+      env: buildEnvironment(options),
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
       detached: true,
@@ -147,15 +321,80 @@ export class ProcessRunner {
     let settled = false;
     const waiters: Array<() => void> = [];
 
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let abortHandler: (() => void) | undefined;
+
     const settle = () => {
       if (settled) {
         return;
       }
       settled = true;
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
+      if (abortHandler && options.abortSignal) {
+        options.abortSignal.removeEventListener("abort", abortHandler);
+      }
       for (const waiter of waiters) {
         waiter();
       }
       waiters.length = 0;
+    };
+
+    const waitForSettled = (): Promise<ProcessExit> => {
+      if (settled) {
+        if (spawnError) {
+          return Promise.reject(spawnError);
+        }
+        return Promise.resolve(exit!);
+      }
+      return new Promise((resolve, reject) => {
+        waiters.push(() => {
+          if (spawnError) {
+            reject(spawnError);
+          } else {
+            resolve(exit!);
+          }
+        });
+        if (settled) {
+          settle();
+        }
+      });
+    };
+
+    const terminateTree = async (terminationOptions?: TerminationOptions): Promise<ProcessExit> => {
+      const graceMs = terminationOptions?.graceMs ?? options.terminationGraceMs ?? 5000;
+      const pid = child.pid;
+      if (pid === undefined || settled) {
+        return waitForSettled();
+      }
+
+      if (process.platform === "win32") {
+        await terminateWindows(pid, graceMs);
+      } else {
+        await terminatePosix(pid, graceMs);
+      }
+      return waitForSettled();
+    };
+
+    const startTermination = async (error: ProcessError, graceMs: number): Promise<void> => {
+      if (settled) {
+        return;
+      }
+      spawnError = error;
+      try {
+        await terminateTree({ graceMs });
+      } catch (terminationError) {
+        if (settled) {
+          return;
+        }
+        if (terminationError instanceof ProcessError) {
+          spawnError = terminationError;
+        } else {
+          spawnError = toProcessError(terminationError as Error);
+        }
+        settle();
+      }
     };
 
     child.on("error", (err: Error) => {
@@ -166,11 +405,16 @@ export class ProcessRunner {
       settle();
     });
 
-    child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) {
         return;
       }
-      exit = { code, signal };
+      exit = {
+        code,
+        signal,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      };
       settle();
     });
 
@@ -185,39 +429,30 @@ export class ProcessRunner {
     const stdout = readStream(child.stdout);
     const stderr = readStream(child.stderr);
 
-    const waitForExit = (timeoutMs?: number): Promise<ProcessExit> => {
-      if (settled) {
-        if (spawnError) {
-          return Promise.reject(spawnError);
-        }
-        if (exit) {
-          return Promise.resolve(exit);
-        }
-      }
-      return new Promise((resolve, reject) => {
-        const timer =
-          timeoutMs !== undefined
-            ? setTimeout(() => {
-                reject(
-                  new ProcessError("timeout", `waitForExit timed out after ${timeoutMs}ms`, true),
-                );
-              }, timeoutMs)
-            : undefined;
-        waiters.push(() => {
-          if (timer) {
-            clearTimeout(timer);
-          }
-          if (spawnError) {
-            reject(spawnError);
-          } else if (exit) {
-            resolve(exit);
-          }
-        });
+    if (options.abortSignal) {
+      abortHandler = () => {
         if (settled) {
-          settle();
+          return;
         }
-      });
-    };
+        const error = new ProcessError("cancelled", "Process was cancelled by caller", false);
+        startTermination(error, options.terminationGraceMs ?? 5000).catch(() => {});
+      };
+      options.abortSignal.addEventListener("abort", abortHandler);
+    }
+
+    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        const error = new ProcessError(
+          "timeout",
+          `Process timed out after ${options.timeoutMs}ms`,
+          true,
+        );
+        startTermination(error, options.terminationGraceMs ?? 5000).catch(() => {});
+      }, options.timeoutMs);
+    }
 
     const signal = async (kind: "SIGINT" | "SIGTERM" | "SIGKILL"): Promise<void> => {
       if (settled || child.pid === undefined) {
@@ -233,62 +468,21 @@ export class ProcessRunner {
         if (settled) {
           return;
         }
+        if (isNoSuchProcessError(err)) {
+          return;
+        }
+        if (isUnsupportedSignalError(err, kind)) {
+          throw new ProcessError("unsupported_signal", `Unsupported signal: ${kind}`, false);
+        }
         throw toProcessError(err as Error);
       }
     };
 
-    const terminateTree = async (terminationOptions?: TerminationOptions): Promise<ProcessExit> => {
-      const graceMs = terminationOptions?.graceMs ?? 5000;
-      const pid = child.pid;
-      if (pid === undefined || settled) {
-        return waitForExit(0);
-      }
-
-      if (process.platform === "win32") {
-        try {
-          await runTaskkill(pid, false);
-        } catch {
-          // process may already be gone
-        }
-        await delay(graceMs);
-        if (!settled) {
-          try {
-            await runTaskkill(pid, true);
-          } catch {
-            // process may already be gone
-          }
-        }
-        return waitForExit(graceMs);
-      }
-
-      try {
-        process.kill(-pid, "SIGTERM");
-      } catch (err) {
-        if (isNoSuchProcessError(err)) {
-          return waitForExit(0);
-        }
-        throw toProcessError(err as Error);
-      }
-
-      await delay(graceMs);
-      if (settled) {
-        return waitForExit(0);
-      }
-
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch (err) {
-        if (isNoSuchProcessError(err)) {
-          return waitForExit(0);
-        }
-        throw toProcessError(err as Error);
-      }
-
-      return waitForExit(graceMs);
-    };
+    const waitForExit = (): Promise<ProcessExit> => waitForSettled();
 
     return {
       pid: child.pid,
+      startedAt,
       stdout,
       stderr,
       writeStdin: async (data: Uint8Array | string) => {

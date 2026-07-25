@@ -1,4 +1,10 @@
-export { ProcessError, ProcessRunner } from "./process.js";
+export {
+  ProcessError,
+  ProcessRunner,
+  filterEnvironment,
+  toAgentError,
+  toProcessError,
+} from "./process.js";
 export type {
   ManagedProcess,
   ProcessErrorCode,
