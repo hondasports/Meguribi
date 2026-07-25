@@ -13,6 +13,7 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 5. [Artifacts, state, and schemas](artifacts-and-schemas.md)
 6. [Safety and operations](security-and-operations.md)
 7. [Implementation roadmap](implementation-roadmap.md)
+8. [Architecture decision records](decisions/)
 
 ## Document responsibilities
 
@@ -25,6 +26,11 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 | Artifacts, state, and schemas | Implementers | Local storage and structured agent output |
 | Safety and operations | Users / implementers | Permissions, blocked operations, retry, and recovery |
 | Implementation roadmap | Implementers | MVP order, issue decomposition, and completion criteria |
+| Architecture decision records | Implementers | Adopted and rejected decisions, PoC evidence, and revisit conditions |
+
+## Key decisions
+
+- [ADR 0001: Adopt ACP as the Devin implementation transport](decisions/0001-adopt-devin-acp.md)
 
 ## Design priorities
 
