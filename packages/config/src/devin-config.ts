@@ -3,7 +3,7 @@ import * as v from "valibot";
 const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 
 export const DevinConfigSchema = v.strictObject({
-  executable: v.optional(v.string()),
+  executable: v.optional(v.pipe(v.string(), v.nonEmpty())),
   transport: v.optional(v.picklist(["acp"])),
   gracefulShutdownMs: v.optional(positiveInteger),
   terminateTimeoutMs: v.optional(positiveInteger),
