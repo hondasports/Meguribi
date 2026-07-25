@@ -393,3 +393,47 @@ Suggested defaults:
 - Worktree is removed after PR merge or close through cleanup
 
 Retention is user-configurable.
+
+## 16. Agent event and error contracts
+
+To abstract external agents such as the Codex SDK and Devin ACP, domain types live in `@meguribi/core` and Valibot schemas live in `@meguribi/schemas`.
+
+### AgentEvent
+
+A discriminated union identified by the `type` field.
+
+| type | description | main fields |
+| --- | --- | --- |
+| `session.started` | session started | `sessionId`, `at` |
+| `message.delta` | text stream chunk | `sessionId`, `text`, `at` |
+| `tool.started` | tool execution started | `sessionId`, `tool`, `toolCallId?`, `summary?`, `at` |
+| `tool.completed` | tool execution completed | `sessionId`, `tool`, `toolCallId?`, `exitCode?`, `status?`, `at` |
+| `file.changed` | file changed | `sessionId`, `path`, `at` |
+| `approval.required` | human approval requested | `sessionId`, `requestId`, `summary`, `at` |
+| `turn.completed` | one turn completed | `sessionId`, `stopReason?`, `at` |
+| `session.failed` | session failed | `sessionId`, `error`, `at` |
+| `unknown` | unrecognized raw event | `sessionId`, `rawType`, `at` |
+
+`at` is an ISO 8601 timestamp string.
+
+Raw events from Devin ACP and similar sources are normalized inside each adapter. The adapter stores the redacted raw payload as JSONL / artifact and returns only normalized `AgentEvent` values to the core. This prevents vendor-specific information from leaking into the core contract.
+
+### AgentError
+
+| code | description |
+| --- | --- |
+| `executable_not_found` | executable not found |
+| `unsupported_version` | unsupported version |
+| `unauthenticated` | not authenticated |
+| `protocol_initialization_failure` | protocol initialization failed |
+| `protocol_violation` | protocol violation detected |
+| `malformed_message` | malformed message received |
+| `permission_denied` | execution denied |
+| `timeout` | operation timed out |
+| `cancelled` | cancelled |
+| `process_crashed` | child process crashed |
+| `cleanup_failed` | cleanup failed |
+| `policy_blocked` | blocked by policy |
+| `unknown` | unexpected error |
+
+`isRetryable` is a flag indicating whether the same input may be retried.

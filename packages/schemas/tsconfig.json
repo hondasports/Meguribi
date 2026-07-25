@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "paths": {
+      "@meguribi/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}
