@@ -36,6 +36,19 @@ async function collect(stream: AsyncIterable<Uint8Array>): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
+async function waitForFile(path: string, timeoutMs = 5000, intervalMs = 50): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      readFileSync(path);
+      return;
+    } catch {
+      await delay(intervalMs);
+    }
+  }
+  throw new Error(`Timeout waiting for file: ${path}`);
+}
+
 let current: ManagedProcess | undefined;
 
 afterEach(async () => {
@@ -146,7 +159,7 @@ describe("ProcessRunner", () => {
     await current.signal("SIGTERM");
     const result = await current.terminateTree({ graceMs: 100 });
     expect(result.signal ?? result.code).toBeTruthy();
-    expect(() => process.kill(pid, 0)).toThrow();
+    expect(() => process.kill(pid!, 0)).toThrow();
   });
 
   it("recovers process tree", async () => {
@@ -156,7 +169,7 @@ describe("ProcessRunner", () => {
       cwd: process.cwd(),
       env: { MEGURIBI_TEST_PID_FILE: pidFile },
     });
-    await delay(300);
+    await waitForFile(pidFile);
     const childPid = Number(readFileSync(pidFile, "utf-8"));
     await current.terminateTree({ graceMs: 100 });
     expect(() => process.kill(childPid, 0)).toThrow();
@@ -174,16 +187,12 @@ describe("ProcessRunner", () => {
     await expect(current.terminateTree({ graceMs: 100 })).resolves.toBeDefined();
   });
 
-  it("fails when executable is not found", () => {
-    expect(() => runner.run("this-does-not-exist-executable", [], { cwd: process.cwd() })).toThrow(
-      ProcessError,
-    );
-    try {
-      runner.run("this-does-not-exist-executable", [], { cwd: process.cwd() });
-    } catch (err) {
-      expect(err).toBeInstanceOf(ProcessError);
-      expect((err as ProcessError).code).toBe("executable_not_found");
-    }
+  it("rejects with executable_not_found when executable is not found", async () => {
+    current = runner.run("this-does-not-exist-executable", [], { cwd: process.cwd() });
+    await expect(current.waitForExit()).rejects.toBeInstanceOf(ProcessError);
+    await expect(current.waitForExit()).rejects.toMatchObject({
+      code: "executable_not_found",
+    });
   });
 
   it("requires cwd", () => {
@@ -243,7 +252,7 @@ describe("ProcessRunner", () => {
     current = runner.run(node(), [fixture("ignore-sigterm.js")], {
       cwd: process.cwd(),
     });
-    await expect(current.signal("SIGUSR1" as "SIGTERM")).rejects.toMatchObject({
+    await expect(current.signal("SIGDOESNOTEXIST" as "SIGTERM")).rejects.toMatchObject({
       code: "unsupported_signal",
     });
     await current.terminateTree({ graceMs: 100 });
