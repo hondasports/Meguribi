@@ -42,7 +42,10 @@ CLI entry point は薄く保ち、次だけを担当させます。
 
 ## 実装方針
 
-- Node.js 22 以上、TypeScript strict、pnpm を前提とする。
+- 実装時点で公式に提供されている最新の Node.js LTS メジャーを使用する。2026年7月時点では Node.js 24（Krypton）。
+- Node.js のメジャーバージョンは `package.json` の `engines`、バージョン管理ファイル、CI で一致させる。
+- Current リリースは使用せず、LTS へ昇格したメジャーだけを採用する。
+- TypeScript strict、pnpm を前提とする。
 - ESM / CJS は最初に一つへ固定し、混在させない。
 - Commander 等の CLI parser を利用する。
 - process 実行は共通 `ProcessRunner` を経由する。
@@ -70,6 +73,7 @@ CLI entry point は薄く保ち、次だけを担当させます。
 - remote URL の正規化
 - GitHub repository identity
 - `git`、`gh`、Codex、Devin の存在と version
+- Node.js がリポジトリで固定された LTS メジャーと一致しているか
 - `gh` 認証
 - default branch
 - `.meguribi.yml` の有無
@@ -95,6 +99,7 @@ CLI entry point は薄く保ち、次だけを担当させます。
 - config defaults / override / invalid input
 - remote URL normalization
 - dependency diagnostics with fake executables
+- Node.js LTS major mismatch diagnostics
 - existing config overwrite protection
 - Windows / POSIX path fixture
 
@@ -102,5 +107,6 @@ CLI entry point は薄く保ち、次だけを担当させます。
 
 - `pnpm meguribi --help` が動く。
 - lint / typecheck / test / build が CI とローカルで一致する。
+- Node.js の LTS メジャーがローカル、`package.json`、バージョン管理ファイル、CI で一致する。
 - CLI 層に外部ツール固有ロジックがない。
 - 不足 dependency を具体的に案内する。
