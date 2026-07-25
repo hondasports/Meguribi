@@ -1,15 +1,28 @@
 import * as v from "valibot";
 
+// Node.js setTimeout uses a signed 32-bit integer for the delay, so values
+// greater than or equal to 2^31 overflow to 1ms. We keep a small margin below
+// that limit to avoid any platform-specific rounding issues.
+const MAX_TIMEOUT_MS = 2_147_483_647 - 1;
+const MAX_TIMEOUT_MINUTES = Math.floor(MAX_TIMEOUT_MS / 60_000);
+
 const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
+const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
+const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
+
+// Single executable path/name only: no whitespace, no `=`, no leading `-`,
+// no URL-like `:/` sequences. This rejects command templates and secret flags
+// such as `devin --token=SECRET` while still allowing simple names and paths.
+const executablePattern = /^(?!.*=)(?!.*\s)(?!^-)(?!.*:\/)[A-Za-z0-9_\-./\\~:]+$/;
 
 export const DevinConfigSchema = v.strictObject({
-  executable: v.optional(v.pipe(v.string(), v.nonEmpty())),
+  executable: v.optional(v.pipe(v.string(), v.nonEmpty(), v.regex(executablePattern))),
   transport: v.optional(v.picklist(["acp"])),
-  gracefulShutdownMs: v.optional(positiveInteger),
-  terminateTimeoutMs: v.optional(positiveInteger),
-  forceKillTimeoutMs: v.optional(positiveInteger),
-  startupTimeoutMs: v.optional(positiveInteger),
-  turnTimeoutMinutes: v.optional(positiveInteger),
+  gracefulShutdownMs: v.optional(msTimeout),
+  terminateTimeoutMs: v.optional(msTimeout),
+  forceKillTimeoutMs: v.optional(msTimeout),
+  startupTimeoutMs: v.optional(msTimeout),
+  turnTimeoutMinutes: v.optional(minutesTimeout),
   inheritedMcpPolicy: v.optional(v.picklist(["warn", "allow", "deny"])),
 });
 
@@ -133,7 +146,7 @@ function redact(value: unknown, key?: string): unknown {
 }
 
 export function toRedactedDevinConfigSnapshot(
-  config: Record<string, unknown>,
+  config: unknown,
 ): Record<string, unknown> {
   return redact(config) as Record<string, unknown>;
 }
