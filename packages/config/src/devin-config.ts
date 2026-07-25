@@ -10,45 +10,64 @@ const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
 
-// Single executable path/name only. This allows spaces and colons in Windows
-// and Unix paths while rejecting command templates and secret flags such as
-// `devin acp` or `devin --token=SECRET`.
-function isValidExecutable(value: string): boolean {
+function isValidExecutableBase(value: string): boolean {
   if (value.trim() !== value) return false;
   if (value.startsWith("-")) return false;
   if (value.includes("://")) return false;
+  if (value.includes("=")) return false;
+  return true;
+}
 
-  // Command templates contain spaces; legitimate file paths may also contain
-  // spaces in directory names. Distinguish them by requiring a path separator
-  // when whitespace is present, rejecting any whitespace-separated token that
-  // looks like a flag or secret assignment, and ensuring the final path segment
-  // (the executable file name) does not contain spaces so "path arg" cannot
-  // masquerade as a path.
-  const whitespace = /\s/u;
-  if (whitespace.test(value)) {
-    if (!/[\\/]/.test(value)) return false;
+// Single executable path/name only, without spaces. This rejects command
+// templates and secret flags for the simple string form.
+function isValidExecutableString(value: string): boolean {
+  if (!isValidExecutableBase(value)) return false;
+  if (/\s/u.test(value)) return false;
+  return true;
+}
 
-    const lastSeparator = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
-    const finalSegment = value.slice(lastSeparator + 1);
-    if (whitespace.test(finalSegment)) return false;
+// Used for the one-element tuple form, which is the only way to represent an
+// executable path that contains spaces. The whole element is the executable
+// path; additional tuple elements (command arguments) are rejected by the
+// schema shape itself.
+function isValidExecutablePath(value: string): boolean {
+  if (!isValidExecutableBase(value)) return false;
 
-    const tokens = value.split(/\s+/u);
-    for (const token of tokens) {
-      if (token.length === 0) continue;
-      if (token.startsWith("-")) return false;
-      if (token.includes("=")) return false;
-    }
+  // A tuple element with whitespace must contain a path separator; otherwise it
+  // is a bare command template such as `devin acp`.
+  if (/\s/u.test(value) && !/[\\/]/.test(value)) return false;
+
+  // Reject any whitespace-separated token that looks like a flag or secret
+  // assignment embedded in the path string.
+  const tokens = value.split(/\s+/u);
+  for (const token of tokens) {
+    if (token.length === 0) continue;
+    if (token.startsWith("-")) return false;
+    if (token.includes("=")) return false;
   }
-
-  // Single-token secret assignments like `FOO=bar` are rejected unless the
-  // value contains a path separator, which makes it a plausible path.
-  if (!/[\\/]/.test(value) && value.includes("=")) return false;
 
   return true;
 }
 
+const executableSchema = v.optional(
+  v.union([
+    v.pipe(
+      v.string(),
+      v.nonEmpty(),
+      v.check(isValidExecutableString, "Invalid executable"),
+    ),
+    v.strictTuple([
+      v.pipe(
+        v.string(),
+        v.nonEmpty(),
+        v.check(isValidExecutablePath, "Invalid executable"),
+      ),
+    ]),
+  ]),
+);
+
 export const DevinConfigSchema = v.strictObject({
-  executable: v.optional(v.pipe(v.string(), v.nonEmpty(), v.check(isValidExecutable, "Invalid executable"))),
+  executable: executableSchema,
   transport: v.optional(v.picklist(["acp"])),
   gracefulShutdownMs: v.optional(msTimeout),
   terminateTimeoutMs: v.optional(msTimeout),
@@ -136,11 +155,24 @@ export function validateDevinConfig(input: unknown): DevinConfigInput {
   return result.output;
 }
 
+function normalizeDevinConfigInput(input: DevinConfigInput): Partial<DevinConfig> {
+  const { executable, ...rest } = input;
+  const result: Partial<DevinConfig> = { ...rest };
+  if (executable !== undefined) {
+    result.executable = Array.isArray(executable) ? executable[0] : executable;
+  }
+  return result;
+}
+
 export function resolveDevinConfig(sources: DevinConfigSources): DevinConfig {
-  const user = validateDevinConfig(sources.user ?? {});
-  const repository = validateDevinConfig(sources.repository ?? {});
-  const environment = validateDevinConfig(sources.environment ?? {});
-  const cli = validateDevinConfig(sources.cli ?? {});
+  const user = normalizeDevinConfigInput(validateDevinConfig(sources.user ?? {}));
+  const repository = normalizeDevinConfigInput(
+    validateDevinConfig(sources.repository ?? {}),
+  );
+  const environment = normalizeDevinConfigInput(
+    validateDevinConfig(sources.environment ?? {}),
+  );
+  const cli = normalizeDevinConfigInput(validateDevinConfig(sources.cli ?? {}));
   const config: DevinConfig = {
     ...defaults,
     ...user,

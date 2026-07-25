@@ -43,7 +43,8 @@ export function getDefaultUserConfigPath(
       return pathModule.join(appData, "meguribi", "config.yml");
     }
   }
-  const home = environment.HOME ?? environment.USERPROFILE;
+  // HOME may be an empty string; prefer the first non-empty value.
+  const home = environment.HOME || environment.USERPROFILE;
   if (home) {
     return pathModule.join(home, ".config", "meguribi", "config.yml");
   }
