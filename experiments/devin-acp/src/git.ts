@@ -6,9 +6,9 @@ export interface CommandResult {
   code: number;
 }
 
-export async function runCommand(executable: string, args: string[], cwd: string): Promise<CommandResult> {
+export async function runCommand(executable: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { cwd, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     child.stdout?.on("data", (chunk: Buffer) => stdout.push(chunk));

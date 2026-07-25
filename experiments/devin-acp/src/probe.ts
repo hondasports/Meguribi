@@ -4,7 +4,10 @@ import path from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import type { ChildProcess } from "node:child_process";
+import { diagnoseDevinCapabilities } from "./diagnose.js";
 import { gitChangedFiles } from "./git.js";
+import { CONFIG_SOURCE_ORDER } from "./isolation.js";
+import { assessMcpPolicy, classifyMcpDiagnostics } from "./mcp.js";
 import { normalizeSessionUpdate, pathsFromToolCall } from "./normalize.js";
 import { redactText } from "./redaction.js";
 import { assertSafeFilePath, assertSafeReadPath, isForbiddenTool } from "./safety.js";
@@ -89,6 +92,18 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
   let error: string | undefined;
   let exitCode: number | null = null;
   let signal: NodeJS.Signals | null = null;
+  let residualProcesses = false;
+  const mcpPolicy = options.mcpPolicy ?? "deny-all";
+  const allowedMcpNames = options.allowedMcpNames ?? [];
+  const mcpObservations = [] as ReturnType<typeof classifyMcpDiagnostics>;
+  let unexpectedMcp = false;
+  let mcpAction: "none" | "blocked-and-terminated" = "none";
+  let cancelConnection: (() => Promise<unknown>) | undefined;
+  let rejectSecurity: ((reason?: unknown) => void) | undefined;
+  const securityPromise = new Promise<never>((_, reject) => {
+    rejectSecurity = reject;
+  });
+  securityPromise.catch(() => undefined);
   let promptPromise: Promise<acp.PromptResponse> | undefined;
   let controlTimer: NodeJS.Timeout | undefined;
 
@@ -98,7 +113,18 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
       throw new Error("failed to create piped Devin ACP process");
     }
     child.stdout.on("data", (chunk: Buffer) => rawOutput.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => rawError.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => {
+      rawError.push(chunk);
+      const observations = classifyMcpDiagnostics(chunk.toString("utf8"));
+      mcpObservations.push(...observations);
+      const assessment = assessMcpPolicy(mcpPolicy, allowedMcpNames, mcpObservations);
+      if (assessment.unexpected.length > 0) {
+        unexpectedMcp = true;
+        mcpAction = "blocked-and-terminated";
+        void cancelConnection?.().catch(() => undefined);
+        rejectSecurity?.(new Error("unexpected MCP connection detected"));
+      }
+    });
     const stdoutTee = new PassThrough();
     child.stdout.pipe(stdoutTee);
 
@@ -142,6 +168,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
         Readable.toWeb(stdoutTee) as unknown as ReadableStream<Uint8Array>
       )
     );
+    cancelConnection = () => connection.cancel({ sessionId: sessionId ?? "unknown" });
     const initializeResponse = await connection.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
@@ -152,6 +179,10 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
     const sessionResponse = await connection.newSession({ cwd: options.cwd, mcpServers: [] });
     sessionId = sessionResponse.sessionId;
     normalized.push({ type: "session.started", sessionId });
+    await wait(options.mcpStartupGraceMs ?? 100);
+    if (unexpectedMcp) {
+      throw new Error("unexpected MCP connection detected before prompt");
+    }
     await writeJson(sessionPath, {
       protocolVersion,
       agentInfo,
@@ -173,7 +204,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
         reject(new Error(controlKind === "timeout" ? "ACP prompt timed out" : "ACP prompt cancelled"));
       }, delay);
     });
-    const promptResult = await Promise.race([promptPromise, controlPromise]);
+    const promptResult = await Promise.race([promptPromise, controlPromise, securityPromise]);
     if (controlTimer) {
       clearTimeout(controlTimer);
     }
@@ -203,6 +234,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
       const exit = await closeProcess(child, options.shutdownGraceMs ?? 5_000);
       exitCode = exit.code;
       signal = exit.signal;
+      residualProcesses = child.exitCode === null && child.signalCode === null;
     }
   }
 
@@ -214,6 +246,16 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
     status = "failed";
     error = error ?? `Devin ACP exited unexpectedly (code=${exitCode}, signal=${signal})`;
   }
+  const mcpAssessment = assessMcpPolicy(mcpPolicy, allowedMcpNames, mcpObservations);
+  const diagnosis = diagnoseDevinCapabilities({
+    cliVersion: options.cliVersion,
+    rootHelp: options.rootHelp ?? "",
+    acpHelp: options.acpHelp ?? "",
+    isolation: options.isolationStatus ?? "unknown",
+    authentication: options.authenticationStatus ?? "unknown",
+    unexpectedMcp,
+    residualProcesses
+  });
   const result: ProbeResult = {
     schemaVersion: 1,
     artifactType: "devin-acp-probe",
@@ -239,6 +281,17 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeResult> {
     changedFiles,
     outsideChanges,
     permissionRequests,
+    mcp: {
+      policy: mcpPolicy,
+      allowedNames: allowedMcpNames,
+      observations: mcpObservations,
+      unexpected: mcpAssessment.unexpected,
+      action: mcpAction,
+      configSources: options.configSources ?? [],
+      sourceOrder: CONFIG_SOURCE_ORDER
+    },
+    diagnosis,
+    residualProcesses,
     ...(error === undefined ? {} : { error: redactText(error) }),
     artifacts: {
       events: eventsPath,

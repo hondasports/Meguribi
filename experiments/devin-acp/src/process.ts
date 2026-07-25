@@ -24,7 +24,18 @@ const SAFE_ENVIRONMENT_KEYS = new Set([
   "XDG_CONFIG_HOME",
   "XDG_DATA_HOME"
 ]);
-const SAFE_EXPLICIT_ENVIRONMENT_KEYS = new Set(["FAKE_ACP_MODE"]);
+const SAFE_EXPLICIT_ENVIRONMENT_KEYS = new Set([
+  "APPDATA",
+  "FAKE_ACP_MODE",
+  "FAKE_MCP_HTTP_URL",
+  "FAKE_MCP_MARKER",
+  "FAKE_MCP_NAME",
+  "HOME",
+  "LOCALAPPDATA",
+  "USERPROFILE",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME"
+]);
 
 export function safeAgentEnvironment(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
