@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@meguribi/core": path.resolve(root, "packages/core/src/index.ts"),
+      "@meguribi/process": path.resolve(root, "packages/process/src/index.ts"),
       "@meguribi/schemas": path.resolve(root, "packages/schemas/src/index.ts"),
     },
   },
