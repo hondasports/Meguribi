@@ -65,6 +65,14 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: "~/bin/devin" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "C:/tools/devin.exe" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin.exe" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "C:\\Program Files (x86)\\Devin\\devin.exe" })).not.toThrow();
+  });
+
+  it("rejects full paths followed by bare arguments or secret flags", () => {
+    expect(() => validateDevinConfig({ executable: "/usr/local/bin/devin acp" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin acp" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin.exe -t" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "/usr/local/bin/devin --token=SECRET" })).toThrow(/executable/);
   });
 
   it("blocks non-interactive execution when inherited MCP policy is warn", () => {

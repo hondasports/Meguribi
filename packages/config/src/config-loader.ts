@@ -31,20 +31,21 @@ export function getDefaultUserConfigPath(
   environment: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
 ): string {
+  const pathModule = platform === "win32" ? path.win32 : path.posix;
   const xdgConfigHome = environment.XDG_CONFIG_HOME;
   if (xdgConfigHome) {
-    return path.join(xdgConfigHome, "meguribi", "config.yml");
+    return pathModule.join(xdgConfigHome, "meguribi", "config.yml");
   }
   if (platform === "win32") {
     // APPDATA may be an empty string; prefer the first non-empty value.
     const appData = environment.APPDATA || environment.LOCALAPPDATA;
     if (appData) {
-      return path.join(appData, "meguribi", "config.yml");
+      return pathModule.join(appData, "meguribi", "config.yml");
     }
   }
   const home = environment.HOME ?? environment.USERPROFILE;
   if (home) {
-    return path.join(home, ".config", "meguribi", "config.yml");
+    return pathModule.join(home, ".config", "meguribi", "config.yml");
   }
   throw new Error("Could not determine user configuration directory");
 }
