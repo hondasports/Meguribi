@@ -27,13 +27,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function getDefaultUserConfigPath(environment: NodeJS.ProcessEnv): string {
+export function getDefaultUserConfigPath(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const xdgConfigHome = environment.XDG_CONFIG_HOME;
   if (xdgConfigHome) {
     return path.join(xdgConfigHome, "meguribi", "config.yml");
   }
-  if (process.platform === "win32") {
-    const appData = environment.APPDATA ?? environment.LOCALAPPDATA;
+  if (platform === "win32") {
+    // APPDATA may be an empty string; prefer the first non-empty value.
+    const appData = environment.APPDATA || environment.LOCALAPPDATA;
     if (appData) {
       return path.join(appData, "meguribi", "config.yml");
     }

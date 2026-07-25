@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadDevinConfig } from "./config-loader.js";
+import { getDefaultUserConfigPath, loadDevinConfig } from "./config-loader.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -86,6 +86,26 @@ describe("loadDevinConfig", () => {
       environment: { HOME: root },
     });
     expect(result.config.executable).toBe("home-devin");
+  });
+
+  it("prefers APPDATA over LOCALAPPDATA on Windows", () => {
+    const environment = {
+      APPDATA: "C:\\Users\\x\\AppData\\Roaming",
+      LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local",
+    };
+    expect(getDefaultUserConfigPath(environment, "win32")).toBe(
+      "C:\\Users\\x\\AppData\\Roaming\\meguribi\\config.yml",
+    );
+  });
+
+  it("falls back to LOCALAPPDATA when APPDATA is empty on Windows", () => {
+    const environment = {
+      APPDATA: "",
+      LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local",
+    };
+    expect(getDefaultUserConfigPath(environment, "win32")).toBe(
+      "C:\\Users\\x\\AppData\\Local\\meguribi\\config.yml",
+    );
   });
 
   it("lets userConfigPath override the default path", async () => {

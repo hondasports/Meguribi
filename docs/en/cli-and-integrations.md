@@ -248,7 +248,7 @@ devin:
 
 The MVP default is `warn`. Non-interactive execution rejects `warn` and fails closed unless `allow` or `deny` is explicit. Documentation must not claim that MCP is fully isolated.
 
-In the MVP, `transport` only accepts `acp`. `executable` must be a single executable name or path and cannot contain whitespace, `=`, a leading `-`, or `:/`. Every timeout must be an integer greater than zero and below the Node.js setTimeout 32-bit limit (less than about 24.8 days); `turnTimeoutMinutes` is bounded so that its ms conversion stays below the same limit. Timeouts cannot be disabled or wait indefinitely. Unknown configuration keys and unknown policies are validation errors. Shell command templates, credential paths, tokens, and cookies are not configuration fields.
+In the MVP, `transport` only accepts `acp`. `executable` must be a single executable name or path. Command-line arguments (e.g. `devin acp`), flags or environment assignments such as `--token=SECRET`, and URL schemes such as `http://...` or `file://...` are rejected. Spaces in legitimate Windows and Unix paths, as well as `C:`, `C:/`, and `C:\` drive letters, are allowed. Every timeout must be an integer greater than zero and below the Node.js setTimeout 32-bit limit (less than about 24.8 days); `turnTimeoutMinutes` is bounded so that its ms conversion stays below the same limit. Timeouts cannot be disabled or wait indefinitely. Unknown configuration keys and unknown policies are validation errors. Shell command templates, credential paths, tokens, and cookies are not configuration fields.
 
 ## 6. Configuration precedence
 
