@@ -33,7 +33,7 @@ meguribi init ./path/to/repository
 - Git リポジトリか
 - remote と GitHub リポジトリが一致するか
 - `git`、`gh`、Codex、Devin の利用可否
-- GitHub 認証
+- GitHub / Codex / Devin の認証状態
 - default branch
 - package manager
 - 検証コマンド候補
@@ -52,14 +52,6 @@ meguribi discover owner/repo --since 30d --limit 5
 
 既定では候補をローカルに保存し、Issue を自動作成しません。
 
-主要オプション:
-
-- `--since <duration>`
-- `--label <label>`
-- `--input <file>`
-- `--limit <number>`
-- `--post-comment`
-
 ### `meguribi hypothesis`
 
 課題候補または Issue から仮説を構造化します。
@@ -67,17 +59,6 @@ meguribi discover owner/repo --since 30d --limit 5
 ```bash
 meguribi hypothesis owner/repo#123
 ```
-
-出力:
-
-- 観測と推測の分離
-- 課題候補
-- 原因仮説
-- 解決仮説
-- 反対仮説
-- 検証方法
-- 成功・失敗条件
-- 根拠不足
 
 ### `meguribi promote`
 
@@ -117,13 +98,11 @@ meguribi require owner/repo#124 --solution 2
 
 ### `meguribi plan`
 
-Codex が対象リポジトリを読み取り、技術計画を作成します。
+Codex が対象リポジトリを読み取り、技術計画を作成します。`plan` はコードを変更しません。
 
 ```bash
 meguribi plan owner/repo#125
 ```
-
-`plan` はコードを変更しません。
 
 ### `meguribi run`
 
@@ -162,7 +141,7 @@ meguribi review https://github.com/owner/repo/pull/456
 meguribi resume owner/repo#125
 ```
 
-再開前に、branch、worktree、HEAD、Issue、PR が保存状態と一致するか確認します。差異がある場合は自動継続せず停止します。
+再開前に branch、worktree、HEAD、Issue、PR が保存状態と一致するか確認し、差異がある場合は停止します。
 
 ### `meguribi measure`
 
@@ -174,7 +153,7 @@ meguribi measure owner/repo#125 --period 14d
 
 ### `meguribi cleanup`
 
-終了した Run の worktree と一時情報を整理します。
+終了した Run の worktree と一時情報を整理します。未マージ・未保存の変更は削除しません。
 
 ```bash
 meguribi cleanup owner/repo#125
@@ -192,7 +171,7 @@ meguribi cleanup owner/repo#125
 --run-id <id>
 ```
 
-`--json` は人間向けログと混ぜず、stdout に最終 JSON だけを出します。進行ログは stderr へ出します。
+`--json` は stdout に最終 JSON だけを出し、進行ログは stderr へ出します。
 
 ## 4. 終了コード
 
@@ -260,12 +239,23 @@ codex:
 
 devin:
   executable: devin
-  commandTemplate:
-    - '{executable}'
-    - '{promptFile}'
+  transport: acp
+  inheritedMcpPolicy: warn
+  shutdown:
+    stdinCloseGraceMs: 1000
+    sigtermGraceMs: 3000
+    forceKillGraceMs: 1000
 ```
 
-Devin の実際の CLI 引数は、導入されているバージョンに合わせて設定します。秘密情報やトークンは設定ファイルへ記述しません。
+`transport: acp` が MVP の標準です。秘密情報やトークンは設定ファイルへ記述しません。
+
+`inheritedMcpPolicy` は、Devin CLI が利用者の保存済み MCP 設定を継承する可能性をどう扱うかを表します。
+
+- `warn`: 対話実行では警告を表示し、利用者へ確認する
+- `deny`: MCP 接続を検知した場合に停止する
+- `allow`: 利用者の Devin 設定を明示的に受け入れる
+
+MVP の既定値は `warn` とします。非対話実行では確認できないため、継承を明示的に許可していない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
 
 ## 6. 設定の優先順位
 
@@ -295,38 +285,31 @@ export interface CodexAdapter {
 }
 ```
 
-### 7.2 Thread の扱い
+### 7.2 Thread と権限
 
-- ロールごとに Thread を分ける。
-- 同じタスクの修正だけ既存 Thread を再開する。
-- Thread ID を Run に保存する。
-- BIZ の長い会話履歴を実装ロールへ直接渡さない。
-
-```text
-hypothesis thread
-requirements thread
-planning thread
-review thread
-```
-
-### 7.3 権限
-
-- discovery / hypothesis / require / plan / review: 読み取り専用
-- Codex にコード変更を許可しないのが MVP の標準
+- ロールごとに Thread を分ける
+- 同じタスクの修正だけ既存 Thread を再開する
+- Thread ID を Run に保存する
+- discovery / hypothesis / require / plan / review は読み取り専用
 - network access は既定で無効
-- 必要な外部情報は Meguribi が取得し、入力成果物として渡す
+- コード変更を Codex に許可しないのが MVP の標準
 
-### 7.4 構造化出力
+### 7.3 構造化出力
 
-Codex にはコマンドごとの JSON Schema を指定します。
-
-自然文の最終回答を解析して制御フローを決めません。
+Codex にはコマンドごとの JSON Schema を指定します。自然文の最終回答を解析して制御フローを決めません。
 
 ## 8. Devin 連携
 
-### 8.1 接続方式
+### 8.1 採用する接続方式
 
-初期実装は Devin CLI を子プロセスとして実行します。
+MVP は `DevinAcpAdapter` を採用し、Meguribi が `devin acp` を Issue 専用 worktree を `cwd` として子プロセス起動します。人間が事前に Devin CLI を起動しておく必要はありません。
+
+```text
+Meguribi
+  -> DevinAcpAdapter
+      -> ACP client
+          -> devin acp subprocess
+```
 
 ```ts
 export interface DevinAdapter {
@@ -335,24 +318,78 @@ export interface DevinAdapter {
 }
 ```
 
-### 8.2 CLI 差異の吸収
+ACP 固有の request / event / error 型は adapter 内に閉じ込め、コア層では正規化した `AgentEvent` とドメイン型だけを扱います。
 
-Devin CLI のバージョンによって、非対話モード、プロンプトファイル、セッション再開、エクスポートの引数が変わる可能性があります。
+### 8.2 ACP セッション
 
-そのため、次を設定またはバージョン別 driver に閉じ込めます。
+最低限、次の ACP ライフサイクルを扱います。
 
-- 実行ファイル
-- 引数テンプレート
-- プロンプトの渡し方
-- 結果・セッション ID の取得方法
-- 再開方法
-- サンドボックス指定
+```text
+process spawn
+  -> initialize
+  -> session/new
+  -> session/prompt
+  -> session/update stream
+  -> turn completion
+  -> controlled shutdown
+```
 
-起動時に `--version` 相当を実行し、未対応バージョンでは停止します。
+保存対象:
 
-### 8.3 入力
+- Devin CLI バージョン
+- session ID
+- raw ACP event log
+- 正規化 event log
+- stderr 診断ログ
+- stop reason
+- duration
+- process exit code / signal
+- Git が確認した changed files
 
-Devin に渡すのは次だけです。
+Devin が報告した changed files は参考情報とし、正本は `GitAdapter` が取得した差分です。
+
+### 8.3 終了シーケンス
+
+Issue #3 の PoC では、prompt 完了後も `devin acp` が待機状態で残りました。これは通信失敗ではなく、stdio ACP server のプロセス寿命として扱います。
+
+通常完了時:
+
+1. turn 完了と `stopReason` を保存する
+2. stdin を閉じる
+3. 短い grace period を待つ
+4. 終了しなければ `SIGTERM` を送る
+5. さらに終了しなければ強制終了する
+6. 子プロセス・子孫プロセスの残留がないことを確認する
+
+キャンセル・timeout 時:
+
+1. 可能なら `session/cancel` を送る
+2. stdin を閉じる
+3. grace period 後に `SIGTERM`
+4. 必要時に強制終了
+
+POSIX では `SIGTERM` / `SIGKILL` を使用します。Windows では同等のプロセスツリー終了を `ProcessTerminator` の背後へ抽象化します。
+
+### 8.4 MCP 設定継承
+
+Issue #3 と #6 の PoC では、通常の利用者環境で `devin acp` を起動すると、保存済み MCP 設定を読み込む可能性が確認されました。一方、`HOME` や XDG 系ディレクトリを完全に隔離すると、保存済み MCP は遮断できるものの Devin の認証も失われました。
+
+この結果が示すのは、**Devin CLI の設定隔離と認証維持を同時に保証できない**ことです。ACP が他の Devin CLI モードより危険であることや、`--print` へ変更すれば解決することは証明されていません。
+
+したがって採用判断は次のとおりです。
+
+- 通信方式は、構造化イベント、permission、cancel、session 管理を利用できる ACP を採用する
+- MCP 継承は Devin CLI 共通の実行環境制約として扱う
+- 実行前診断で警告し、対話実行では確認を取る
+- 検知可能な予期しない MCP 接続は prompt 前に停止する
+- credential のコピーや Meguribi 独自保存は行わない
+- MCP を完全隔離済みとは表現しない
+
+`DevinPrintAdapter` は、ACP の互換性が失われた場合のフォールバック候補に留めます。
+
+### 8.5 入力と禁止事項
+
+Devin に渡すもの:
 
 - 承認済み Issue 本文・関連コメント
 - Codex の `plan.json`
@@ -361,67 +398,36 @@ Devin に渡すのは次だけです。
 - 変更可能範囲
 - 成果物出力先
 
-Codex の内部推論や全文会話ログは渡しません。
-
-### 8.4 禁止事項
-
-Devin に次を担当させません。
+Devin に担当させないもの:
 
 - Issue / PR の直接更新
 - branch 作成
-- commit / push
-- merge
+- commit / push / merge
 - production deploy
 - secret 取得
 - worktree 外の変更
+- `/handoff` やクラウドセッション作成
 
-### 8.5 Issue #3 ACP PoC 結果（2026-07-25）
+### 8.6 バージョン診断
 
-`devin 3000.2.17` では `devin acp` が利用でき、TypeScript から stdio ACP 接続を確立できた。`initialize`、`session/new`、`session/prompt`、`session/cancel`、`session/update` の受信を確認し、ACP SDK `1.3.0` で fixture worktree の `README.md` を変更できた。通常 checkout と worktree 外の変更は検出されなかった。
+起動前に `devin --version`、認証状態、`devin acp` の利用可否を確認します。バージョン文字列だけで安全性を断定せず、対応する機能 probe と最小 smoke test の結果を組み合わせます。
 
-実機では prompt 完了後も子プロセスが常駐したが、これは ACP の通信失敗ではなく、CLI プロセスの終了処理として扱える。`stopReason` を保存し、stdin を閉じ、短い猶予後に `SIGTERM` を送り、必要なら強制終了する実装でセッションを安全に閉じられる。残留プロセスがないことも確認した。
-
-- 空の `--config` を指定しても、CLI が保存済みの MCP 設定を自動接続し、外部 HTTP / stdio MCP の起動を試みた。Meguribi の PoC 制約である network、secret、外部サービスの非使用を ACP 起動だけでは保証できない。
-
-Issue #6 のMCP隔離検証前の暫定判断は「ACP は利用可能で、`SIGTERM` を含む終了処理を前提に MVP の採用候補」とした。最終判断は次の Issue #6 結果を参照する。
-
-### 8.6 Issue #6 MCP 隔離 PoC 結果（2026-07-25）
-
-`devin --help` では `--config` と `--agent-config` が確認できたが、`devin acp --help` には MCP 全面無効化または allowlist 専用のオプションは確認できなかった。CLI のMCP設定形式は `mcpServers` 配下の stdio / HTTP定義である。
-
-PoCでは `HOME`、`USERPROFILE`、`APPDATA`、`LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME` をartifact配下の空ディレクトリへ変更する isolated variant を実装した。保存済みMCPの接続は観測されなかったが、認証情報をコピーせずに実行した `devin auth status` は未認証となり、実機 `devin acp` は `ACP connection closed` で終了した。したがって「MCP隔離」と「認証維持」を同時には確認できなかった。
-
-fake stdio / localhost HTTP MCPでは、deny-all時のprompt前検知・接続前停止、allowlist時の指定名だけの許可、cancel・SIGTERM後の残留プロセスなしを自動検証した。これはPoCポリシーの検証であり、Devin CLI自身が同じallowlistを提供することの証明ではない。
-
-採用判断は `DevinAcpAdapter` 不採用とする。`3000.2.17` では保存済みMCPを遮断した状態で認証を安全に維持する公式機構を確認できず、`diagnose` も安全側に `MCP isolation is not mechanically guaranteed` または認証失敗を返す。次の方式として `DevinPrintAdapter` を検証する。本番ACP adapter、allowlist管理UI、認証credentialのコピーは実装しない。
+未対応バージョン、未認証、ACP 初期化失敗、予期しないプロセス終了では推測して継続しません。
 
 ## 9. GitHub 連携
 
-MVP は `gh` CLI を利用します。
+MVP は `gh` CLI を利用し、実行前に version、認証、対象リポジトリを確認します。
 
-実行前に次を確認します。
+主な操作:
 
-```bash
-gh --version
-gh auth status
-gh repo view owner/repo --json nameWithOwner,defaultBranchRef
-```
+- Issue / コメント / ラベル取得
+- Meguribi 管理コメントの作成・更新
+- Draft PR 作成
+- PR / CI 状態取得
 
-主な利用操作:
-
-- `gh issue view --json ...`
-- `gh issue list --json ...`
-- `gh issue comment`
-- `gh issue edit`
-- `gh pr list --json ...`
-- `gh pr create --draft`
-- `gh pr checks`
-
-コマンド文字列を shell 経由で組み立てず、引数配列として実行します。
+コマンド文字列を shell 経由で組み立てず、実行ファイルと引数配列を分けます。
 
 ## 10. Git 連携
-
-Git 操作も引数配列で実行します。
 
 主な操作:
 
@@ -444,12 +450,15 @@ git worktree remove
 
 `--non-interactive` では次の場合に停止します。
 
-- 必須ラベルがない。
-- 高リスク変更を検出した。
-- worktree / branch / PR の競合がある。
-- 不明な Devin CLI バージョン。
-- protected path の変更。
-- 自動修正上限に到達した。
-- 想定外の dirty state がある。
+- 必須ラベルがない
+- 高リスク変更を検出した
+- worktree / branch / PR の競合がある
+- 不明または未対応の Devin CLI バージョン
+- Devin が未認証
+- ACP 初期化に失敗した
+- 継承 MCP の扱いについて明示的な許可がない
+- protected path の変更
+- 自動修正上限に到達した
+- 想定外の dirty state がある
 
 安全側へ倒せない状況で推測して継続しません。
