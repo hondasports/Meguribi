@@ -42,8 +42,9 @@ CLI entry point は薄く保ち、次だけを担当させます。
 
 ## 実装方針
 
-- 実装時点で公式に提供されている最新の Node.js LTS メジャーを使用する。2026年7月時点では Node.js 24（Krypton）。
-- Node.js のメジャーバージョンは `package.json` の `engines`、バージョン管理ファイル、CI で一致させる。
+- 実装着手時点で公式に提供されている最新の Node.js LTS メジャーを採用する。2026年7月時点では Node.js 24（Krypton）。
+- 採用したメジャーは、`package.json` の `engines`、`.node-version` または `.nvmrc`、CI で固定・一致させる。
+- 新しいLTSメジャーへは自動追従せず、依存関係とCIの互換性を確認する明示的な変更として更新する。
 - Current リリースは使用せず、LTS へ昇格したメジャーだけを採用する。
 - TypeScript strict、pnpm を前提とする。
 - ESM / CJS は最初に一つへ固定し、混在させない。
