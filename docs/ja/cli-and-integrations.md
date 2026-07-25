@@ -240,11 +240,12 @@ codex:
 devin:
   executable: devin
   transport: acp
+  gracefulShutdownMs: 2000
+  terminateTimeoutMs: 3000
+  forceKillTimeoutMs: 1000
+  startupTimeoutMs: 10000
+  turnTimeoutMinutes: 45
   inheritedMcpPolicy: warn
-  shutdown:
-    stdinCloseGraceMs: 1000
-    sigtermGraceMs: 3000
-    forceKillGraceMs: 1000
 ```
 
 `transport: acp` が MVP の標準です。秘密情報やトークンは設定ファイルへ記述しません。
@@ -255,7 +256,9 @@ devin:
 - `deny`: MCP 接続を検知した場合に停止する
 - `allow`: 利用者の Devin 設定を明示的に受け入れる
 
-MVP の既定値は `warn` とします。非対話実行では確認できないため、継承を明示的に許可していない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
+MVP の既定値は `warn` とします。非対話実行では `warn` を許可せず、`allow` または `deny` を明示しない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
+
+`transport` は MVP では `acp` だけを受け付けます。すべての timeout は 1 以上の整数で、無効化または無限待機にはできません。未知の設定キーと未知の policy は validation error とします。shell command template、credential path、token、cookie は設定項目に含めません。
 
 ## 6. 設定の優先順位
 
@@ -266,6 +269,8 @@ MVP の既定値は `warn` とします。非対話実行では確認できな�
 3. リポジトリ設定 `.meguribi.yml`
 4. 環境変数
 5. CLI オプション
+
+環境変数では、`MEGURIBI_DEVIN_EXECUTABLE`、`MEGURIBI_DEVIN_TRANSPORT`、`MEGURIBI_DEVIN_INHERITED_MCP_POLICY`、および各 timeout に対応する `MEGURIBI_DEVIN_*` だけを受け付けます。任意の環境変数、token、cookie は設定へ取り込みません。
 
 各 Run の `state.json` には、秘密情報を除いた解決済み設定を保存します。
 

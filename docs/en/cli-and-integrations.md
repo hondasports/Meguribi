@@ -230,11 +230,12 @@ codex:
 devin:
   executable: devin
   transport: acp
+  gracefulShutdownMs: 2000
+  terminateTimeoutMs: 3000
+  forceKillTimeoutMs: 1000
+  startupTimeoutMs: 10000
+  turnTimeoutMinutes: 45
   inheritedMcpPolicy: warn
-  shutdown:
-    stdinCloseGraceMs: 1000
-    sigtermGraceMs: 3000
-    forceKillGraceMs: 1000
 ```
 
 `transport: acp` is the MVP default. Never store secrets or tokens in this file.
@@ -245,7 +246,9 @@ devin:
 - `deny`: stop when an MCP connection is detected
 - `allow`: explicitly accept the user's Devin configuration
 
-The MVP default is `warn`. Non-interactive execution fails closed unless inherited MCP use has been explicitly accepted. Documentation must not claim that MCP is fully isolated.
+The MVP default is `warn`. Non-interactive execution rejects `warn` and fails closed unless `allow` or `deny` is explicit. Documentation must not claim that MCP is fully isolated.
+
+In the MVP, `transport` only accepts `acp`. Every timeout must be an integer greater than zero, so it cannot be disabled or wait indefinitely. Unknown configuration keys and unknown policies are validation errors. Shell command templates, credential paths, tokens, and cookies are not configuration fields.
 
 ## 6. Configuration precedence
 
@@ -256,6 +259,8 @@ Lowest to highest:
 3. repository `.meguribi.yml`
 4. environment variables
 5. CLI options
+
+Only `MEGURIBI_DEVIN_EXECUTABLE`, `MEGURIBI_DEVIN_TRANSPORT`, `MEGURIBI_DEVIN_INHERITED_MCP_POLICY`, and the documented `MEGURIBI_DEVIN_*` timeout variables are accepted from the environment. Arbitrary environment variables, tokens, and cookies are never imported into configuration.
 
 Each Run stores the resolved, redacted configuration in `state.json`.
 
