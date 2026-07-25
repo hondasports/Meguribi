@@ -1,4 +1,7 @@
 import type * as acp from "@agentclientprotocol/sdk";
+import type { AuthenticationStatus } from "./diagnose.js";
+import type { CONFIG_SOURCE_ORDER, ConfigSource } from "./isolation.js";
+import type { McpObservation, McpPolicy } from "./mcp.js";
 
 export type ProbeStatus = "completed" | "cancelled" | "timed_out" | "failed";
 
@@ -27,6 +30,14 @@ export interface ProbeOptions {
   outsideRoots: string[];
   env?: NodeJS.ProcessEnv;
   shutdownGraceMs?: number;
+  mcpPolicy?: McpPolicy;
+  allowedMcpNames?: string[];
+  configSources?: ConfigSource[];
+  isolationStatus?: "isolated" | "blocked" | "unknown";
+  authenticationStatus?: AuthenticationStatus;
+  rootHelp?: string;
+  acpHelp?: string;
+  mcpStartupGraceMs?: number;
 }
 
 export interface ProbeResult {
@@ -58,6 +69,22 @@ export interface ProbeResult {
     summary: string;
     decision: "allow" | "deny";
   }>;
+  mcp: {
+    policy: McpPolicy;
+    allowedNames: string[];
+    observations: McpObservation[];
+    unexpected: McpObservation[];
+    action: "none" | "blocked-and-terminated";
+    configSources: ConfigSource[];
+    sourceOrder: typeof CONFIG_SOURCE_ORDER;
+  };
+  diagnosis: {
+    isolation: "isolated" | "blocked" | "unknown";
+    authentication: AuthenticationStatus;
+    devinAcpCandidate: boolean;
+    reason: string;
+  };
+  residualProcesses: boolean;
   error?: string;
   artifacts: {
     events: string;

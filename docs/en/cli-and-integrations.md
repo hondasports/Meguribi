@@ -311,7 +311,17 @@ The real smoke test showed that the child process remained alive after the promp
 
 - Even with an empty `--config`, the CLI automatically connected to stored MCP configuration and attempted external HTTP / stdio MCP startup. The PoC cannot guarantee the required no-network, no-secret, and no-external-service constraints merely by launching ACP.
 
-The current decision is: ACP is usable and a candidate for MVP adoption when shutdown includes controlled `SIGTERM`. Do not integrate it into the production adapter until MCP auto-connection can be disabled or controlled with an allowlist for the supported CLI version and configuration. Keep `DevinPrintAdapter` as the fallback if MCP control cannot be established.
+The pre-Issue #6 decision was that ACP was usable and an MVP candidate when shutdown included controlled `SIGTERM`. The final decision is recorded in the Issue #6 section below.
+
+### 8.2 Issue #6 MCP isolation PoC result (2026-07-25)
+
+`devin --help` exposes `--config` and `--agent-config`, but `devin acp --help` does not expose a dedicated MCP disable-all or allowlist option. The CLI MCP configuration format uses stdio / HTTP definitions under `mcpServers`.
+
+The PoC added an isolated variant that redirects `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME` to empty directories under the artifact root. No saved MCP connection was observed in that variant, but `devin auth status` became unauthenticated because credentials were not copied, and the real `devin acp` run ended with `ACP connection closed`. Therefore MCP isolation and authentication preservation could not be established at the same time.
+
+Fake stdio and localhost HTTP MCP tests verified prompt-before-connection detection, deny-all termination, exact-name allowlist behavior, and no residual processes after cancel / SIGTERM. These tests validate the PoC policy and detection layer; they do not prove that Devin CLI provides the same allowlist control.
+
+The adoption decision is **do not adopt `DevinAcpAdapter`**. For CLI `3000.2.17`, no supported mechanism was found to preserve authentication safely while blocking saved MCP configuration. The machine diagnosis fails closed with `MCP isolation is not mechanically guaranteed` or an authentication failure. Validate `DevinPrintAdapter` next. Do not implement a production ACP adapter, allowlist UI, or credential copying as part of this PoC.
 
 ## 9. GitHub integration
 

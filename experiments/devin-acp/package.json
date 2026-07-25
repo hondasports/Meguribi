@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "lint": "eslint . --max-warnings=0",
-    "smoke": "tsx src/cli.ts"
+    "smoke": "tsx src/cli.ts",
+    "diagnose": "tsx src/diagnose-cli.ts"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.3.0"

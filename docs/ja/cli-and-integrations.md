@@ -383,7 +383,17 @@ Devin に次を担当させません。
 
 - 空の `--config` を指定しても、CLI が保存済みの MCP 設定を自動接続し、外部 HTTP / stdio MCP の起動を試みた。Meguribi の PoC 制約である network、secret、外部サービスの非使用を ACP 起動だけでは保証できない。
 
-したがって現時点の判断は「ACP は利用可能で、`SIGTERM` を含む終了処理を前提に MVP の採用候補とする」とする。ただし、MCP の自動接続を無効化または allowlist 制御できる CLI の対応 version / 設定が確認できるまで、本番連携へ統合しない。MCP 制御が解決できない場合の代替方式として `DevinPrintAdapter` を候補に残す。
+Issue #6 のMCP隔離検証前の暫定判断は「ACP は利用可能で、`SIGTERM` を含む終了処理を前提に MVP の採用候補」とした。最終判断は次の Issue #6 結果を参照する。
+
+### 8.6 Issue #6 MCP 隔離 PoC 結果（2026-07-25）
+
+`devin --help` では `--config` と `--agent-config` が確認できたが、`devin acp --help` には MCP 全面無効化または allowlist 専用のオプションは確認できなかった。CLI のMCP設定形式は `mcpServers` 配下の stdio / HTTP定義である。
+
+PoCでは `HOME`、`USERPROFILE`、`APPDATA`、`LOCALAPPDATA`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME` をartifact配下の空ディレクトリへ変更する isolated variant を実装した。保存済みMCPの接続は観測されなかったが、認証情報をコピーせずに実行した `devin auth status` は未認証となり、実機 `devin acp` は `ACP connection closed` で終了した。したがって「MCP隔離」と「認証維持」を同時には確認できなかった。
+
+fake stdio / localhost HTTP MCPでは、deny-all時のprompt前検知・接続前停止、allowlist時の指定名だけの許可、cancel・SIGTERM後の残留プロセスなしを自動検証した。これはPoCポリシーの検証であり、Devin CLI自身が同じallowlistを提供することの証明ではない。
+
+採用判断は `DevinAcpAdapter` 不採用とする。`3000.2.17` では保存済みMCPを遮断した状態で認証を安全に維持する公式機構を確認できず、`diagnose` も安全側に `MCP isolation is not mechanically guaranteed` または認証失敗を返す。次の方式として `DevinPrintAdapter` を検証する。本番ACP adapter、allowlist管理UI、認証credentialのコピーは実装しない。
 
 ## 9. GitHub 連携
 
