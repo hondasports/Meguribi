@@ -10,11 +10,14 @@ const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
 
+const allowedExecutableChars = /^[A-Za-z0-9_\-./\\~:()\s]+$/u;
+
 function isValidExecutableBase(value: string): boolean {
   if (value.trim() !== value) return false;
   if (value.startsWith("-")) return false;
   if (value.includes("://")) return false;
   if (value.includes("=")) return false;
+  if (!allowedExecutableChars.test(value)) return false;
   return true;
 }
 
@@ -139,21 +142,36 @@ export function devinConfigFromEnvironment(
   }
 
   // MEGURIBI_DEVIN_EXECUTABLE accepts either a plain executable name/path
-  // (no spaces) or an explicit JSON one-element tuple for paths that contain
-  // spaces. Plain strings with whitespace are not auto-converted, so command
-  // templates such as `devin acp` cannot masquerade as a spaced path.
+  // (no spaces) or an explicit JSON one-element string array for paths that
+  // contain spaces. Plain strings with whitespace are not auto-converted, so
+  // command templates such as `devin acp` cannot masquerade as a spaced path.
   const executable = environment.MEGURIBI_DEVIN_EXECUTABLE;
   if (executable !== undefined) {
     const trimmed = executable.trim();
     if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      let parsed: unknown;
       try {
-        const parsed: unknown = JSON.parse(trimmed);
-        config.executable = Array.isArray(parsed) ? parsed.map(String) : trimmed;
+        parsed = JSON.parse(trimmed);
       } catch {
-        config.executable = trimmed;
+        throw new Error(
+          "Invalid executable in MEGURIBI_DEVIN_EXECUTABLE: value must be a valid JSON one-element string array",
+        );
       }
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length !== 1 ||
+        typeof parsed[0] !== "string" ||
+        parsed[0].length === 0
+      ) {
+        throw new Error(
+          "Invalid executable in MEGURIBI_DEVIN_EXECUTABLE: value must be a JSON one-element string array",
+        );
+      }
+      config.executable = [parsed[0]];
+      assertValidExecutableValue(config.executable);
     } else {
       config.executable = executable;
+      assertValidExecutableValue(config.executable);
     }
   }
 
@@ -184,6 +202,22 @@ export function validateDevinConfig(input: unknown): DevinConfigInput {
     throw new Error(formatValidationError(result.issues));
   }
   return result.output;
+}
+
+function assertValidExecutableValue(value: unknown): void {
+  if (typeof value === "string") {
+    if (!isValidExecutableString(value)) {
+      throw new Error("Invalid executable in MEGURIBI_DEVIN_EXECUTABLE");
+    }
+    return;
+  }
+  if (Array.isArray(value) && value.length === 1 && typeof value[0] === "string") {
+    if (!isValidExecutablePath(value[0])) {
+      throw new Error("Invalid executable in MEGURIBI_DEVIN_EXECUTABLE");
+    }
+    return;
+  }
+  throw new Error("Invalid executable in MEGURIBI_DEVIN_EXECUTABLE");
 }
 
 function normalizeDevinConfigInput(input: DevinConfigInput): Partial<DevinConfig> {
