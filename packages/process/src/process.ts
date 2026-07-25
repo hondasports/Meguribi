@@ -347,6 +347,14 @@ export class ProcessRunner {
     let exit: ProcessExit | undefined;
     let spawnError: ProcessError | undefined;
     let settled = false;
+    let spawnState: "pending" | "ready" | "failed" = "pending";
+    let resolveSpawn!: () => void;
+    let rejectSpawn!: (error: ProcessError) => void;
+    const spawnCompletion = new Promise<void>((resolve, reject) => {
+      resolveSpawn = resolve;
+      rejectSpawn = reject;
+    });
+    void spawnCompletion.catch(() => {});
     const waiters: Array<() => void> = [];
 
     let timeoutTimer: NodeJS.Timeout | undefined;
@@ -399,6 +407,10 @@ export class ProcessRunner {
       });
     };
 
+    const waitForSpawn = async (): Promise<void> => {
+      await spawnCompletion;
+    };
+
     const waitForClose = (): Promise<ProcessExit> => {
       if (settled) {
         if (exit) {
@@ -427,6 +439,7 @@ export class ProcessRunner {
     };
 
     const terminateTree = async (terminationOptions?: TerminationOptions): Promise<ProcessExit> => {
+      await waitForSpawn();
       const graceMs = terminationOptions?.graceMs ?? options.terminationGraceMs ?? 5000;
       const pid = child.pid;
       if (pid === undefined || settled) {
@@ -481,17 +494,34 @@ export class ProcessRunner {
       }
     };
 
+    child.once("spawn", () => {
+      if (spawnState !== "pending") {
+        return;
+      }
+      spawnState = "ready";
+      resolveSpawn();
+    });
+
     child.on("error", (err: Error) => {
       if (settled) {
         return;
       }
       spawnError = toProcessError(err, executable);
+      if (spawnState === "pending") {
+        spawnState = "failed";
+        rejectSpawn(spawnError);
+      }
       settle();
     });
 
     child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       if (settled) {
         return;
+      }
+      if (spawnState === "pending") {
+        spawnError = new ProcessError("unknown", "Process closed before spawn completed", false);
+        spawnState = "failed";
+        rejectSpawn(spawnError);
       }
       exit = {
         code,
@@ -534,6 +564,7 @@ export class ProcessRunner {
     }
 
     const signal = async (kind: "SIGINT" | "SIGTERM" | "SIGKILL"): Promise<void> => {
+      await waitForSpawn();
       if (settled || child.pid === undefined) {
         return;
       }
@@ -565,6 +596,7 @@ export class ProcessRunner {
       stdout,
       stderr,
       writeStdin: async (data: Uint8Array | string) => {
+        await waitForSpawn();
         if (child.stdin === null) {
           throw new ProcessError("process_crashed", "stdin is not available", false);
         }
@@ -572,6 +604,7 @@ export class ProcessRunner {
         await writeToStream(child.stdin, buffer);
       },
       closeStdin: async () => {
+        await waitForSpawn();
         if (child.stdin === null || child.stdin.destroyed) {
           return;
         }
