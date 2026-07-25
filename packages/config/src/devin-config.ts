@@ -16,6 +16,7 @@ function isValidExecutableBase(value: string): boolean {
   if (value.includes("://")) return false;
   if (value.includes("=")) return false;
   if (value.includes('"')) return false;
+  if (/[&|;<>$`\p{Control}]/u.test(value)) return false;
   return true;
 }
 
