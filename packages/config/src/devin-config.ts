@@ -19,12 +19,18 @@ function isValidExecutable(value: string): boolean {
   if (value.includes("://")) return false;
 
   // Command templates contain spaces; legitimate file paths may also contain
-  // spaces. Distinguish them by requiring a path separator when whitespace is
-  // present, and reject any whitespace-separated token that looks like a flag
-  // or secret assignment.
+  // spaces in directory names. Distinguish them by requiring a path separator
+  // when whitespace is present, rejecting any whitespace-separated token that
+  // looks like a flag or secret assignment, and ensuring the final path segment
+  // (the executable file name) does not contain spaces so "path arg" cannot
+  // masquerade as a path.
   const whitespace = /\s/u;
   if (whitespace.test(value)) {
     if (!/[\\/]/.test(value)) return false;
+
+    const lastSeparator = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+    const finalSegment = value.slice(lastSeparator + 1);
+    if (whitespace.test(finalSegment)) return false;
 
     const tokens = value.split(/\s+/u);
     for (const token of tokens) {
