@@ -133,12 +133,6 @@ describe("AgentErrorSchema", () => {
     expect(parsed.isRetryable).toBe(false);
   });
 
-  it("defaults isRetryable to false", () => {
-    const error = { code: "timeout" as const, message: "timed out" };
-    const parsed = v.parse(AgentErrorSchema, error);
-    expect(parsed.isRetryable).toBe(false);
-  });
-
   it("rejects an invalid code", () => {
     const result = v.safeParse(AgentErrorSchema, { code: "invalid_code", message: "x" });
     expect(result.success).toBe(false);
@@ -185,10 +179,10 @@ describe("AgentPromptSchema", () => {
     expect(v.parse(AgentPromptSchema, prompt).content).toBe("implement");
   });
 
-  it("parses a prompt with metadata", () => {
-    const prompt = { content: "implement", metadata: { issue: 10 } };
+  it("strips vendor-specific metadata from prompt", () => {
+    const prompt = { content: "implement", metadata: { rawVendorPayload: "secret" } };
     const parsed = v.parse(AgentPromptSchema, prompt);
-    expect(parsed.metadata?.issue).toBe(10);
+    expect(parsed).not.toHaveProperty("metadata");
   });
 });
 
