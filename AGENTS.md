@@ -39,14 +39,14 @@ Meguribi を、ホステッドサービス、マルチテナント基盤、汎�
 
 ## 3. スキルの選択
 
-すべての実装で、まず次を読んでください。
+すべての実装で、まず次を参照してください。
 
 - `.agents/skills/meguribi-core/SKILL.md`
 - `.agents/skills/testing-and-quality/SKILL.md`
 
-変更内容に応じて、追加で次を読んでください。
+変更内容に応じて、追加で次を参照してください。
 
-| 変更対象 | 必須スキル |
+| 変更対象 | 主スキル |
 |---|---|
 | CLI 基盤、設定、診断 | `typescript-cli-foundation` |
 | GitHub Issue、コメント、PR、CI 状態 | `github-integration` |
@@ -58,7 +58,25 @@ Meguribi を、ホステッドサービス、マルチテナント基盤、汎�
 | `plan`、`run`、`review`、`resume`、`cleanup` | `delivery-workflow` |
 | `discover`、`hypothesis`、`promote`、`explore`、`require`、`measure` | `product-growth-loop` |
 
-複数領域を変更する場合は、該当するスキルをすべて読んでください。
+複数領域を変更する場合も、実際に有効化する主スキルはタスクの中心となる1つを選び、他のスキルは参照資料として読んでください。
+
+### Devinでのスキル利用
+
+Devin は `.agents/skills/<skill-name>/SKILL.md` を自動検出します。
+
+ただし、Devin が同時に有効化できるスキルは1つだけです。
+
+- セッションでは、タスクの中心に対応する主スキルを1つ有効化する。
+- 共通ルールはこの `AGENTS.md` を正本とする。
+- `meguribi-core`、`testing-and-quality`、その他の補助スキルは必要に応じて通常のリポジトリファイルとして参照する。
+- 明示的に有効化する場合は、プロンプトで `@skills:<skill-name>` を指定する。
+- 複数スキルが同時に有効化されている前提で実装してはいけない。
+
+例:
+
+```text
+Issue #123 を実装してください。@skills:delivery-workflow
+```
 
 ## 4. 実装スコープ
 
@@ -73,7 +91,9 @@ Meguribi を、ホステッドサービス、マルチテナント基盤、汎�
 
 Issue で変更されない限り、次を使用します。
 
-- Runtime: Node.js 22 以上
+- Runtime: 実装時点で公式に提供されている最新の Node.js LTS メジャー。2026年7月時点では Node.js 24（Krypton）
+- Node.js のメジャーバージョンは `package.json` の `engines`、バージョン管理ファイル、CI で一致させる
+- Current リリースは採用せず、LTS へ昇格したメジャーだけを採用する
 - Language: TypeScript strict mode
 - Package manager: pnpm
 - CLI parser: Commander などの小さく安定したライブラリ
