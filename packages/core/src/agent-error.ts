@@ -13,6 +13,7 @@ export type AgentErrorCode =
   | "timeout"
   | "cancelled"
   | "process_crashed"
+  | "unsupported_signal"
   | "cleanup_failed"
   | "policy_blocked"
   | "unknown";

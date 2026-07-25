@@ -15,6 +15,7 @@ export const AgentErrorCodeSchema = v.picklist([
   "timeout",
   "cancelled",
   "process_crashed",
+  "unsupported_signal",
   "cleanup_failed",
   "policy_blocked",
   "unknown",
