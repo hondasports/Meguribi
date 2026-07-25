@@ -303,6 +303,16 @@ It does not receive Codex private reasoning or unfiltered conversation history.
 
 Devin does not directly update GitHub, create branches, commit, push, merge, deploy, obtain secrets, or modify paths outside the worktree.
 
+### 8.1 Issue #3 ACP PoC result (2026-07-25)
+
+With Devin CLI `3000.2.17`, `devin acp` is available and a TypeScript client can establish an ACP stdio connection. The PoC confirmed `initialize`, `session/new`, `session/prompt`, `session/cancel`, and `session/update`, and changed `README.md` inside a fixture worktree using ACP SDK `1.3.0`. No changes were detected in the normal checkout or outside the worktree.
+
+The real smoke test showed that the child process remained alive after the prompt completed, but this is a process-shutdown concern rather than an ACP communication failure. The client can save `stopReason`, close stdin, wait for a short grace period, send `SIGTERM`, and force-kill only if necessary. This safely closed the session in the PoC, and no residual process was observed.
+
+- Even with an empty `--config`, the CLI automatically connected to stored MCP configuration and attempted external HTTP / stdio MCP startup. The PoC cannot guarantee the required no-network, no-secret, and no-external-service constraints merely by launching ACP.
+
+The current decision is: ACP is usable and a candidate for MVP adoption when shutdown includes controlled `SIGTERM`. Do not integrate it into the production adapter until MCP auto-connection can be disabled or controlled with an allowlist for the supported CLI version and configuration. Keep `DevinPrintAdapter` as the fallback if MCP control cannot be established.
+
 ## 9. GitHub integration
 
 The MVP uses the `gh` CLI and verifies availability and authentication before work begins.
