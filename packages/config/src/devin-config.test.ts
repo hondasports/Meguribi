@@ -185,6 +185,18 @@ describe("Devin ACP configuration", () => {
     ).toMatchObject({ executable: "C:\\Program Files\\Devin\\devin.exe" });
   });
 
+  it("allows special and Unicode characters in executable paths", () => {
+    expect(() => validateDevinConfig({ executable: "devin+agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin@agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "/opt/Devin+Agent/devin" })).not.toThrow();
+    expect(() =>
+      validateDevinConfig({ executable: ["C:/Program Files/Devin+Agent/devin.exe"] }),
+    ).not.toThrow();
+    expect(() =>
+      validateDevinConfig({ executable: ["/usr/利用者/bin/devin"] }),
+    ).not.toThrow();
+  });
+
   it("rejects paths with spaces when given as a plain string", () => {
     expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin.exe" })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: "/usr/local/bin/devin acp" })).toThrow(/executable/);

@@ -10,7 +10,7 @@ const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
 
-const allowedExecutableChars = /^[A-Za-z0-9_\-./\\~:()\s]+$/u;
+const allowedExecutableChars = /^[\p{Letter}\p{Number}_\-./\\~:+@()\s]+$/u;
 
 function isValidExecutableBase(value: string): boolean {
   if (value.trim() !== value) return false;
