@@ -4,5 +4,4 @@
  */
 export interface AgentPrompt {
   content: string;
-  metadata?: Record<string, unknown>;
 }

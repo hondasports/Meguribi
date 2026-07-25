@@ -412,21 +412,28 @@ A discriminated union identified by the `type` field.
 | `approval.required` | human approval requested | `sessionId`, `requestId`, `summary`, `at` |
 | `turn.completed` | one turn completed | `sessionId`, `stopReason?`, `at` |
 | `session.failed` | session failed | `sessionId`, `error`, `at` |
-| `unknown` | unrecognized raw event | `sessionId`, `rawType`, `payload?`, `at` |
+| `unknown` | unrecognized raw event | `sessionId`, `rawType`, `at` |
 
 `at` is an ISO 8601 timestamp string.
+
+Raw events from Devin ACP and similar sources are normalized inside each adapter. The adapter stores the redacted raw payload as JSONL / artifact and returns only normalized `AgentEvent` values to the core. This prevents vendor-specific information from leaking into the core contract.
 
 ### AgentError
 
 | code | description |
 | --- | --- |
-| `process_crashed` | child process crashed |
-| `connection_lost` | ACP / SSE connection lost |
-| `authentication_failed` | authentication failed |
+| `executable_not_found` | executable not found |
+| `unsupported_version` | unsupported version |
+| `unauthenticated` | not authenticated |
+| `protocol_initialization_failure` | protocol initialization failed |
+| `protocol_violation` | protocol violation detected |
+| `malformed_message` | malformed message received |
 | `permission_denied` | execution denied |
 | `timeout` | operation timed out |
-| `mcp_policy_violation` | MCP inheritance policy violated |
-| `implementation_failed` | implementation step failed |
+| `cancelled` | cancelled |
+| `process_crashed` | child process crashed |
+| `cleanup_failed` | cleanup failed |
+| `policy_blocked` | blocked by policy |
 | `unknown` | unexpected error |
 
 `isRetryable` is a flag indicating whether the same input may be retried.

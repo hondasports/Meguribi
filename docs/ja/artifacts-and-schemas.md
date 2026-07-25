@@ -430,21 +430,28 @@ Codex SDK と Devin ACP などの外部エージェントを抽象化するた�
 | `approval.required` | 人間への承認要求 | `sessionId`, `requestId`, `summary`, `at` |
 | `turn.completed` | 1 ターン完了 | `sessionId`, `stopReason?`, `at` |
 | `session.failed` | セッション失敗 | `sessionId`, `error`, `at` |
-| `unknown` | 未対応の raw イベント | `sessionId`, `rawType`, `payload?`, `at` |
+| `unknown` | 未対応の raw イベント | `sessionId`, `rawType`, `at` |
 
 `at` は ISO 8601 タイムスタンプ文字列とする。
+
+Devin ACP などの raw イベントは、各 adapter 内で正規化される。adapter は redaction 後の raw payload を JSONL / artifact へ保存し、core には正規化済みの `AgentEvent` だけを返す。これにより vendor 固有の情報が core 契約に漏れない。
 
 ### AgentError
 
 | code | 説明 |
 | --- | --- |
-| `process_crashed` | 子プロセスが異常終了した |
-| `connection_lost` | ACP / SSE 接続が途切れた |
-| `authentication_failed` | 認証に失敗した |
+| `executable_not_found` | 実行ファイルが見つからない |
+| `unsupported_version` | サポート外のバージョン |
+| `unauthenticated` | 認証されていない |
+| `protocol_initialization_failure` | プロトコル初期化に失敗した |
+| `protocol_violation` | プロトコル違反を検出した |
+| `malformed_message` | 壊れたメッセージを受信した |
 | `permission_denied` | 実行が拒否された |
 | `timeout` | タイムアウトした |
-| `mcp_policy_violation` | MCP 継承 policy に違反した |
-| `implementation_failed` | 実装処理に失敗した |
+| `cancelled` | キャンセルされた |
+| `process_crashed` | 子プロセスが異常終了した |
+| `cleanup_failed` | cleanup に失敗した |
+| `policy_blocked` | policy によりブロックされた |
 | `unknown` | 想定外のエラー |
 
 `isRetryable` は同じ入力でリトライ可能かを示すフラグとする。
