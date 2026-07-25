@@ -92,7 +92,7 @@ export function filterEnvironment(
   deny?: string[],
 ): NodeJS.ProcessEnv {
   const denySet = new Set(deny ?? []);
-  if (allow && allow.length > 0) {
+  if (allow !== undefined) {
     const entries = allow
       .filter((key) => !denySet.has(key) && source[key] !== undefined)
       .map((key) => [key, source[key]!]);
@@ -110,7 +110,7 @@ export function toAgentError(error: ProcessError): AgentError {
     permission_denied: "permission_denied",
     process_crashed: "process_crashed",
     force_failed: "cleanup_failed",
-    unsupported_signal: "process_crashed",
+    unsupported_signal: "unsupported_signal",
     unknown: "unknown",
   };
   return {
@@ -335,10 +335,14 @@ export class ProcessRunner {
       if (abortHandler && options.abortSignal) {
         options.abortSignal.removeEventListener("abort", abortHandler);
       }
-      for (const waiter of waiters) {
+      notifyWaiters();
+    };
+
+    const notifyWaiters = () => {
+      const pending = waiters.splice(0);
+      for (const waiter of pending) {
         waiter();
       }
-      waiters.length = 0;
     };
 
     const waitForSettled = (): Promise<ProcessExit> => {
@@ -348,16 +352,48 @@ export class ProcessRunner {
         }
         return Promise.resolve(exit!);
       }
+      if (spawnError) {
+        return Promise.reject(spawnError);
+      }
       return new Promise((resolve, reject) => {
         waiters.push(() => {
           if (spawnError) {
             reject(spawnError);
+          } else if (exit) {
+            resolve(exit);
           } else {
-            resolve(exit!);
+            reject(new ProcessError("unknown", "Process closed without exit information", false));
           }
         });
         if (settled) {
-          settle();
+          notifyWaiters();
+        }
+      });
+    };
+
+    const waitForClose = (): Promise<ProcessExit> => {
+      if (settled) {
+        if (exit) {
+          return Promise.resolve(exit);
+        }
+        return spawnError
+          ? Promise.reject(spawnError)
+          : Promise.reject(
+              new ProcessError("unknown", "Process closed without exit information", false),
+            );
+      }
+      return new Promise((resolve, reject) => {
+        waiters.push(() => {
+          if (exit) {
+            resolve(exit);
+          } else if (spawnError) {
+            reject(spawnError);
+          } else {
+            reject(new ProcessError("unknown", "Process closed without exit information", false));
+          }
+        });
+        if (settled) {
+          notifyWaiters();
         }
       });
     };
@@ -366,15 +402,35 @@ export class ProcessRunner {
       const graceMs = terminationOptions?.graceMs ?? options.terminationGraceMs ?? 5000;
       const pid = child.pid;
       if (pid === undefined || settled) {
-        return waitForSettled();
+        if (exit) {
+          return exit;
+        }
+        return spawnError
+          ? Promise.reject(spawnError)
+          : Promise.reject(
+              new ProcessError("unknown", "Process closed without exit information", false),
+            );
       }
 
-      if (process.platform === "win32") {
-        await terminateWindows(pid, graceMs);
-      } else {
-        await terminatePosix(pid, graceMs);
+      try {
+        if (process.platform === "win32") {
+          await terminateWindows(pid, graceMs);
+        } else {
+          await terminatePosix(pid, graceMs);
+        }
+        return await waitForClose();
+      } catch (terminationError) {
+        if (settled || pid === undefined) {
+          throw terminationError;
+        }
+        if (terminationError instanceof ProcessError) {
+          spawnError = terminationError;
+        } else {
+          spawnError = toProcessError(terminationError as Error);
+        }
+        notifyWaiters();
+        throw spawnError;
       }
-      return waitForSettled();
     };
 
     const startTermination = async (error: ProcessError, graceMs: number): Promise<void> => {
@@ -385,7 +441,7 @@ export class ProcessRunner {
       try {
         await terminateTree({ graceMs });
       } catch (terminationError) {
-        if (settled) {
+        if (settled || child.pid === undefined) {
           return;
         }
         if (terminationError instanceof ProcessError) {
@@ -393,7 +449,7 @@ export class ProcessRunner {
         } else {
           spawnError = toProcessError(terminationError as Error);
         }
-        settle();
+        notifyWaiters();
       }
     };
 
@@ -415,6 +471,9 @@ export class ProcessRunner {
         startedAt,
         finishedAt: new Date().toISOString(),
       };
+      if (spawnError?.code === "force_failed") {
+        spawnError = undefined;
+      }
       settle();
     });
 

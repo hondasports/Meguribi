@@ -207,7 +207,7 @@ describe("ProcessRunner", () => {
       ["permission_denied", "permission_denied"],
       ["process_crashed", "process_crashed"],
       ["force_failed", "cleanup_failed"],
-      ["unsupported_signal", "process_crashed"],
+      ["unsupported_signal", "unsupported_signal"],
       ["unknown", "unknown"],
     ];
     for (const [processCode, agentCode] of cases) {
@@ -247,6 +247,10 @@ describe("ProcessRunner", () => {
       FOO: "bar",
       KEEP: "1",
     });
+    expect(filterEnvironment(source, [])).toEqual({});
+    expect(filterEnvironment(source, ["FOO", "SECRET"], ["SECRET"])).toEqual({
+      FOO: "bar",
+    });
   });
 
   it("maps EACCES to permission_denied on POSIX", async () => {
@@ -266,7 +270,7 @@ describe("ProcessRunner", () => {
 });
 
 describe("Windows-specific taskkill behavior", () => {
-  it("throws force_failed when taskkill is not available", async () => {
+  it("throws force_failed when taskkill is not available and can be retried", async () => {
     if (process.platform !== "win32") {
       return;
     }
@@ -279,9 +283,14 @@ describe("Windows-specific taskkill behavior", () => {
       await expect(current.terminateTree({ graceMs: 50 })).rejects.toMatchObject({
         code: "force_failed",
       });
+      await expect(current.waitForExit()).rejects.toMatchObject({
+        code: "force_failed",
+      });
     } finally {
       process.env.PATH = originalPath ?? "";
-      await current?.terminateTree({ graceMs: 100 }).catch(() => {});
     }
+    const result = await current.terminateTree({ graceMs: 100 });
+    expect(result).toBeDefined();
+    await expect(current.waitForExit()).resolves.toBe(result);
   });
 });
