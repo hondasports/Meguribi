@@ -44,7 +44,7 @@ export interface ProcessRunnerOptions {
 }
 
 export interface ManagedProcess {
-  readonly pid: number;
+  readonly pid: number | undefined;
   readonly startedAt: string;
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array>;
@@ -281,7 +281,7 @@ async function terminateWindows(pid: number, graceMs: number): Promise<void> {
     }
   };
 
-  await executeTaskkill(false);
+  const gentleCode = await executeTaskkill(false);
   if (await waitForProcessDeath(pid, graceMs)) {
     return;
   }
@@ -294,7 +294,7 @@ async function terminateWindows(pid: number, graceMs: number): Promise<void> {
   if (isProcessAlive(pid)) {
     throw new ProcessError(
       "force_failed",
-      `Process ${pid} survived taskkill /T /F (exit code ${forceCode ?? "unknown"})`,
+      `Process ${pid} survived taskkill /T (exit ${gentleCode ?? "unknown"}) /F (exit ${forceCode ?? "unknown"})`,
       false,
     );
   }
@@ -504,14 +504,6 @@ export class ProcessRunner {
       }
       settle();
     });
-
-    if (child.pid === undefined) {
-      throw new ProcessError(
-        "executable_not_found",
-        `Failed to spawn executable: ${executable}`,
-        false,
-      );
-    }
 
     const stdout = readStream(child.stdout);
     const stderr = readStream(child.stderr);
