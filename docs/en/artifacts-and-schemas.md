@@ -432,6 +432,7 @@ Raw events from Devin ACP and similar sources are normalized inside each adapter
 | `timeout` | operation timed out |
 | `cancelled` | cancelled |
 | `process_crashed` | child process crashed |
+| `unsupported_signal` | an unsupported signal was requested |
 | `cleanup_failed` | cleanup failed |
 | `policy_blocked` | blocked by policy |
 | `unknown` | unexpected error |

@@ -450,6 +450,7 @@ Devin ACP などの raw イベントは、各 adapter 内で正規化される�
 | `timeout` | タイムアウトした |
 | `cancelled` | キャンセルされた |
 | `process_crashed` | 子プロセスが異常終了した |
+| `unsupported_signal` | サポートされていないシグナルが指定された |
 | `cleanup_failed` | cleanup に失敗した |
 | `policy_blocked` | policy によりブロックされた |
 | `unknown` | 想定外のエラー |

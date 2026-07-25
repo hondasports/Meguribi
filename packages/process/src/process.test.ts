@@ -91,6 +91,18 @@ describe("ProcessRunner", () => {
     expect(result.code).toBe(0);
   });
 
+  it("writes large stdin without losing data", async () => {
+    current = runner.run(node(), [fixture("echo.js")], { cwd: process.cwd() });
+    const size = 64 * 1024;
+    const payload = "x".repeat(size);
+    await current.writeStdin(payload);
+    await current.closeStdin();
+    const [out, result] = await Promise.all([collect(current.stdout), current.waitForExit()]);
+    expect(out.length).toBe(size);
+    expect(out).toBe(payload);
+    expect(result.code).toBe(0);
+  });
+
   it("times out and terminates the process", async () => {
     current = runner.run(node(), [fixture("ignore-sigterm.js")], {
       cwd: process.cwd(),

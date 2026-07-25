@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
 import * as v from "valibot";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AgentEvent } from "./agent-event.js";
 import { AgentCapabilitySchema } from "./agent-capability.js";
 import { AgentErrorCodeSchema, AgentErrorSchema } from "./agent-error.js";
 import { AgentEventSchema } from "./agent-event.js";
 import { AgentExecutionResultSchema } from "./agent-execution-result.js";
 import { AgentPromptSchema } from "./agent-prompt.js";
+
+const CANONICAL_AGENT_ERROR_CODES = [
+  "executable_not_found",
+  "unsupported_version",
+  "unauthenticated",
+  "protocol_initialization_failure",
+  "protocol_violation",
+  "malformed_message",
+  "permission_denied",
+  "timeout",
+  "cancelled",
+  "process_crashed",
+  "unsupported_signal",
+  "cleanup_failed",
+  "policy_blocked",
+  "unknown",
+] as const;
 
 const now = new Date().toISOString();
 
@@ -146,23 +166,8 @@ describe("AgentErrorSchema", () => {
 });
 
 describe("AgentErrorCodeSchema", () => {
-  it("parses all known codes", () => {
-    const codes = [
-      "executable_not_found",
-      "unsupported_version",
-      "unauthenticated",
-      "protocol_initialization_failure",
-      "protocol_violation",
-      "malformed_message",
-      "permission_denied",
-      "timeout",
-      "cancelled",
-      "process_crashed",
-      "cleanup_failed",
-      "policy_blocked",
-      "unknown",
-    ] as const;
-    for (const code of codes) {
+  it("parses all canonical codes", () => {
+    for (const code of CANONICAL_AGENT_ERROR_CODES) {
       expect(v.parse(AgentErrorCodeSchema, code)).toBe(code);
     }
   });
@@ -170,6 +175,23 @@ describe("AgentErrorCodeSchema", () => {
   it("rejects an unknown code", () => {
     const result = v.safeParse(AgentErrorCodeSchema, "foo");
     expect(result.success).toBe(false);
+  });
+
+  it("lists all canonical codes in Japanese and English docs", () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    for (const docPath of [
+      "docs/ja/artifacts-and-schemas.md",
+      "docs/en/artifacts-and-schemas.md",
+    ]) {
+      const content = readFileSync(join(repoRoot, docPath), "utf-8");
+      const sectionMatch = content.match(/### AgentError\s*\n([\s\S]*?)(?:\n## |$)/);
+      expect(sectionMatch, `AgentError section not found in ${docPath}`).toBeTruthy();
+      const rows = sectionMatch?.[1].match(/\| `([^`]+)` \|/g) ?? [];
+      const codes = rows
+        .map((row) => row.match(/\| `([^`]+)` \|/)?.[1])
+        .filter((code): code is string => code !== undefined);
+      expect(new Set(codes)).toEqual(new Set(CANONICAL_AGENT_ERROR_CODES));
+    }
   });
 });
 
