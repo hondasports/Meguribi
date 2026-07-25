@@ -116,6 +116,39 @@ describe("Devin ACP configuration", () => {
     ).toThrow(/executable/);
   });
 
+  it("rejects malformed JSON and non-conforming arrays in MEGURIBI_DEVIN_EXECUTABLE", () => {
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: '{"path":"C:/devin"}',
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: "[C:/devin]",
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: '["C:/devin", "acp"]',
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: "[123]",
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: "[null]",
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+    expect(() =>
+      devinConfigFromEnvironment({
+        MEGURIBI_DEVIN_EXECUTABLE: "[true]",
+      }),
+    ).toThrow(/MEGURIBI_DEVIN_EXECUTABLE/);
+  });
+
   it("rejects unsupported keys, transport, command templates, secret flags, empty executable, and unsafe durations", () => {
     expect(() => validateDevinConfig({ transport: "stdio" })).toThrow(/transport/);
     expect(() => validateDevinConfig({ executable: "" })).toThrow(/executable/);
