@@ -438,3 +438,16 @@ Raw events from Devin ACP and similar sources are normalized inside each adapter
 | `unknown` | unexpected error |
 
 `isRetryable` is a flag indicating whether the same input may be retried.
+
+## 17. ManagedProcess startup and failure contract
+
+`ProcessRunner.run()` in `@meguribi/process` returns a `ManagedProcess` synchronously. Child-process startup may still be pending when the object is returned.
+
+| Item | Contract |
+| --- | --- |
+| `pid` | A `number` after a successful spawn and `undefined` after a spawn failure. Its type is `number | undefined`. |
+| `startedAt` | An ISO 8601 timestamp captured when `run()` is called. |
+| `waitForExit()` | Resolves with the exit result after spawn completion, or rejects with the classified `ProcessError` on spawn failure. |
+| `terminateTree()` / `signal()` / `writeStdin()` / `closeStdin()` | Wait for spawn completion. On a spawn failure, they reject with the same `ProcessError` instance as `waitForExit()`. |
+
+Callers must not treat the presence of `pid` as proof of successful startup. They must await an operation promise and handle either its result or classified error. Spawn failures return `executable_not_found`, `permission_denied`, or `process_crashed`. `ProcessExit` is returned only for a successfully started and terminated process, and includes start and finish timestamps, exit code, and signal.
