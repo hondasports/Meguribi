@@ -255,7 +255,7 @@ In the MVP, `transport` only accepts `acp`. Every timeout must be an integer gre
 Lowest to highest:
 
 1. Meguribi defaults
-2. user configuration at `~/.config/meguribi/config.yml`
+2. user configuration at `$XDG_CONFIG_HOME/meguribi/config.yml` when `XDG_CONFIG_HOME` is set, `%APPDATA%/meguribi/config.yml` (or `%LOCALAPPDATA%`) on Windows, and `~/.config/meguribi/config.yml` otherwise
 3. repository `.meguribi.yml`
 4. environment variables
 5. CLI options

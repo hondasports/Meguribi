@@ -1,5 +1,5 @@
 export { loadDevinConfig } from "./config-loader.js";
-export type { LoadDevinConfigOptions } from "./config-loader.js";
+export type { DevinConfigResult, LoadDevinConfigOptions } from "./config-loader.js";
 export {
   DevinConfigSchema,
   devinConfigFromEnvironment,

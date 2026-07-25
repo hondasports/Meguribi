@@ -46,8 +46,9 @@ describe("Devin ACP configuration", () => {
     ).toMatchObject({ turnTimeoutMinutes: 30, inheritedMcpPolicy: "deny" });
   });
 
-  it("rejects unsupported keys, transport, and unsafe durations", () => {
+  it("rejects unsupported keys, transport, empty executable, and unsafe durations", () => {
     expect(() => validateDevinConfig({ transport: "stdio" })).toThrow(/transport/);
+    expect(() => validateDevinConfig({ executable: "" })).toThrow(/executable/);
     expect(() => validateDevinConfig({ startupTimeoutMs: 0 })).toThrow(/startupTimeoutMs/);
     expect(() => validateDevinConfig({ unknown: true })).toThrow(/unknown/);
   });

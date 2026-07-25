@@ -4,8 +4,10 @@ import { parse } from "yaml";
 import {
   devinConfigFromEnvironment,
   resolveDevinConfig,
+  toRedactedDevinConfigSnapshot,
   type DevinConfig,
   type DevinConfigInput,
+  type DevinConfigSources,
 } from "./devin-config.js";
 
 export interface LoadDevinConfigOptions {
@@ -16,8 +18,31 @@ export interface LoadDevinConfigOptions {
   nonInteractive?: boolean;
 }
 
+export interface DevinConfigResult {
+  config: DevinConfig;
+  snapshot: Record<string, unknown>;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function getDefaultUserConfigPath(environment: NodeJS.ProcessEnv): string {
+  const xdgConfigHome = environment.XDG_CONFIG_HOME;
+  if (xdgConfigHome) {
+    return path.join(xdgConfigHome, "meguribi", "config.yml");
+  }
+  if (process.platform === "win32") {
+    const appData = environment.APPDATA ?? environment.LOCALAPPDATA;
+    if (appData) {
+      return path.join(appData, "meguribi", "config.yml");
+    }
+  }
+  const home = environment.HOME ?? environment.USERPROFILE;
+  if (home) {
+    return path.join(home, ".config", "meguribi", "config.yml");
+  }
+  throw new Error("Could not determine user configuration directory");
 }
 
 function extractDevinConfig(document: unknown, source: string): unknown {
@@ -51,17 +76,36 @@ async function readConfig(pathname: string | undefined): Promise<unknown> {
   }
 }
 
-export async function loadDevinConfig(options: LoadDevinConfigOptions): Promise<DevinConfig> {
+export async function loadDevinConfig(options: LoadDevinConfigOptions): Promise<DevinConfigResult> {
+  const environment = options.environment ?? process.env;
+  const userConfigPath = options.userConfigPath ?? getDefaultUserConfigPath(environment);
   const repositoryConfigPath = options.repositoryPath
     ? path.join(options.repositoryPath, ".meguribi.yml")
     : undefined;
-  return resolveDevinConfig({
-    user: await readConfig(options.userConfigPath),
-    repository: await readConfig(repositoryConfigPath),
-    environment: devinConfigFromEnvironment(options.environment ?? process.env),
-    cli: options.cli,
+
+  const user = await readConfig(userConfigPath);
+  const repository = await readConfig(repositoryConfigPath);
+  const environmentConfig = devinConfigFromEnvironment(environment);
+  const cli = options.cli;
+
+  const sources: DevinConfigSources = {
+    user,
+    repository,
+    environment: environmentConfig,
+    cli,
+    nonInteractive: options.nonInteractive,
+  };
+
+  const config = resolveDevinConfig(sources);
+  const snapshot = toRedactedDevinConfigSnapshot({
+    user: user ?? {},
+    repository: repository ?? {},
+    environment: environmentConfig,
+    cli: cli ?? {},
     nonInteractive: options.nonInteractive,
   });
+
+  return { config, snapshot };
 }
 
 export type { DevinConfigInput };

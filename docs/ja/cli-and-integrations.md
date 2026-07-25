@@ -265,7 +265,7 @@ MVP の既定値は `warn` とします。非対話実行では `warn` を許可
 低い順:
 
 1. Meguribi 内蔵値
-2. ユーザー設定 `~/.config/meguribi/config.yml`
+2. ユーザー設定。`XDG_CONFIG_HOME` が設定されていれば `$XDG_CONFIG_HOME/meguribi/config.yml`、Windows では `%APPDATA%\meguribi\config.yml`（または `%LOCALAPPDATA%`）、それ以外では `~/.config/meguribi/config.yml`
 3. リポジトリ設定 `.meguribi.yml`
 4. 環境変数
 5. CLI オプション
