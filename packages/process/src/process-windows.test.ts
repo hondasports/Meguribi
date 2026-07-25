@@ -63,7 +63,7 @@ describe("Windows-specific taskkill behavior", () => {
     process.env.__TASKKILL_FORCE_FAIL = "1";
     await expect(current.terminateTree({ graceMs: 50 })).rejects.toMatchObject({
       code: "force_failed",
-      message: /exit/,
+      message: /\/T \(exit 1\) \/F \(exit 1\)/,
     });
     await expect(current.waitForExit()).rejects.toMatchObject({
       code: "force_failed",
