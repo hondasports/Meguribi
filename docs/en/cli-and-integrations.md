@@ -1,12 +1,12 @@
-# CLI and Integration Specification
+# CLI and integration specification
 
-## 1. Command form
+## 1. CLI form
 
 ```text
 meguribi <command> <target> [options]
 ```
 
-Accepted target forms:
+Accepted targets:
 
 ```text
 owner/repo
@@ -16,33 +16,43 @@ https://github.com/owner/repo/issues/123
 https://github.com/owner/repo/pull/456
 ```
 
-A target may be omitted only when the current directory is a Git repository and its remote resolves unambiguously.
+The repository may be omitted only when the current directory is a Git repository and its remote resolves to exactly one GitHub repository.
 
 ## 2. Commands
 
 ### `meguribi init`
 
-Diagnose a repository and create a configuration draft.
+Diagnose whether a repository can be managed by Meguribi and generate a configuration skeleton.
 
 ```bash
 meguribi init ./path/to/repository
 ```
 
-Checks Git identity, remote repository, `git`, `gh`, Codex, Devin, authentication, default branch, package manager, verification commands, `AGENTS.md`, and required labels. It does not modify GitHub unless `--apply-labels` is explicitly supplied.
+Checks include:
+
+- Git repository and remote identity
+- `git`, `gh`, Codex, and Devin availability
+- GitHub, Codex, and Devin authentication
+- default branch
+- package manager and verification commands
+- `AGENTS.md`
+- required labels
+
+It does not write to GitHub unless `--apply-labels` is explicitly supplied.
 
 ### `meguribi discover`
 
-Extract problem candidates from existing Issues, selected documents, and optional product data.
+Extract candidate problems from Issues, supplied documents, or optional usage data.
 
 ```bash
 meguribi discover owner/repo --since 30d --limit 5
 ```
 
-Options include `--since`, `--label`, `--input`, `--limit`, and `--post-comment`. The default behavior stores local candidates and does not create Issues.
+Candidates are stored locally by default. Issues are not created automatically.
 
 ### `meguribi hypothesis`
 
-Structure observations, problem candidates, cause hypotheses, solution hypotheses, counter-hypotheses, validation methods, decision conditions, and missing evidence.
+Structure a hypothesis from a candidate or Issue.
 
 ```bash
 meguribi hypothesis owner/repo#123
@@ -50,25 +60,27 @@ meguribi hypothesis owner/repo#123
 
 ### `meguribi promote`
 
-Create a Problem Issue draft from a validated Hypothesis Issue.
+Generate a Problem Issue draft from a validated Hypothesis Issue.
 
 ```bash
 meguribi promote owner/repo#123
 ```
 
-The default is preview-only. `--create-issue` performs the write after human confirmation.
+The default is a local draft. `--create-issue` writes only after human confirmation.
 
 ### `meguribi explore`
 
-Compare multiple solution directions for a Problem Issue by user value, validation power, implementation effort, operating cost, risk, reversibility, and strategic fit.
+Compare multiple solution directions for a Problem Issue.
 
 ```bash
 meguribi explore owner/repo#124
 ```
 
+Comparison dimensions include user value, validation power, implementation and operating cost, risk, reversibility, and product fit.
+
 ### `meguribi require`
 
-Convert an approved solution direction into a Requirement / Feature Issue draft.
+Convert a selected solution into a Requirement / Feature Issue draft.
 
 ```bash
 meguribi require owner/repo#124 --solution 2
@@ -76,7 +88,7 @@ meguribi require owner/repo#124 --solution 2
 
 ### `meguribi plan`
 
-Ask Codex to inspect the repository and create a technical plan without changing files.
+Ask Codex to inspect the repository and produce a technical plan. `plan` is read-only.
 
 ```bash
 meguribi plan owner/repo#125
@@ -84,13 +96,13 @@ meguribi plan owner/repo#125
 
 ### `meguribi run`
 
-Implement an approved Issue, run verification, ask Codex to review, and create a draft PR.
+Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR.
 
 ```bash
 meguribi run owner/repo#125
 ```
 
-Important options:
+Main options:
 
 - `--repo-path <path>`
 - `--base <branch>`
@@ -104,7 +116,7 @@ Important options:
 
 ### `meguribi review`
 
-Review an existing PR or an Issue-linked branch with Codex.
+Review an existing PR or an Issue-associated branch with Codex.
 
 ```bash
 meguribi review owner/repo#125
@@ -113,17 +125,17 @@ meguribi review https://github.com/owner/repo/pull/456
 
 ### `meguribi resume`
 
-Resume an interrupted Run after validating the Issue digest, branch, worktree, HEAD, PR, and configuration.
+Resume an interrupted Run from the last completed step.
 
 ```bash
 meguribi resume owner/repo#125
 ```
 
-Meguribi stops instead of resuming when saved and current state differ unexpectedly.
+Before resuming, branch, worktree, HEAD, Issue, and PR identity must match saved state.
 
 ### `meguribi measure`
 
-Create a Measurement Issue draft from a Feature Issue and PR.
+Create a Measurement Issue draft from a Requirement / Feature Issue and PR.
 
 ```bash
 meguribi measure owner/repo#125 --period 14d
@@ -131,7 +143,7 @@ meguribi measure owner/repo#125 --period 14d
 
 ### `meguribi cleanup`
 
-Clean up worktrees and temporary state for a completed Run.
+Remove temporary state and completed worktrees without deleting unmerged or unsaved work.
 
 ```bash
 meguribi cleanup owner/repo#125
@@ -149,14 +161,14 @@ meguribi cleanup owner/repo#125
 --run-id <id>
 ```
 
-In `--json` mode, stdout contains only the final JSON result and progress logs go to stderr.
+With `--json`, stdout contains only the final JSON result and progress logs go to stderr.
 
 ## 4. Exit codes
 
 | Code | Meaning |
 |---:|---|
 | 0 | Success |
-| 1 | General failure |
+| 1 | General execution failure |
 | 2 | Argument or configuration error |
 | 3 | Authentication or permission error |
 | 4 | Missing approval or policy block |
@@ -164,11 +176,11 @@ In `--json` mode, stdout contains only the final JSON result and progress logs g
 | 6 | Agent execution failure |
 | 7 | Verification failure |
 | 8 | GitHub update failure |
-| 9 | Cancelled or interrupted |
+| 9 | Cancellation or interruption |
 
-## 5. Repository configuration
+## 5. Configuration
 
-`.meguribi.yml` lives at the target repository root.
+Place `.meguribi.yml` in the repository root.
 
 ```yaml
 version: 1
@@ -217,28 +229,41 @@ codex:
 
 devin:
   executable: devin
-  commandTemplate:
-    - '{executable}'
-    - '{promptFile}'
+  transport: acp
+  inheritedMcpPolicy: warn
+  shutdown:
+    stdinCloseGraceMs: 1000
+    sigtermGraceMs: 3000
+    forceKillGraceMs: 1000
 ```
 
-The actual Devin command template is configured for the installed version. Tokens and secrets never belong in this file.
+`transport: acp` is the MVP default. Never store secrets or tokens in this file.
+
+`inheritedMcpPolicy` controls how Meguribi handles the possibility that Devin CLI inherits the user's saved MCP configuration.
+
+- `warn`: show a warning and request confirmation in interactive mode
+- `deny`: stop when an MCP connection is detected
+- `allow`: explicitly accept the user's Devin configuration
+
+The MVP default is `warn`. Non-interactive execution fails closed unless inherited MCP use has been explicitly accepted. Documentation must not claim that MCP is fully isolated.
 
 ## 6. Configuration precedence
 
-From lowest to highest:
+Lowest to highest:
 
-1. Built-in defaults
-2. User config at `~/.config/meguribi/config.yml`
-3. Repository `.meguribi.yml`
-4. Environment variables
+1. Meguribi defaults
+2. user configuration at `~/.config/meguribi/config.yml`
+3. repository `.meguribi.yml`
+4. environment variables
 5. CLI options
 
-The resolved non-secret configuration is stored with each Run.
+Each Run stores the resolved, redacted configuration in `state.json`.
 
 ## 7. Codex integration
 
-The first implementation uses `@openai/codex-sdk`.
+### 7.1 Transport
+
+The initial implementation uses `@openai/codex-sdk`.
 
 ```ts
 export interface CodexAdapter {
@@ -250,27 +275,31 @@ export interface CodexAdapter {
 }
 ```
 
-Thread rules:
+### 7.2 Threads and permissions
 
-- Separate threads by role.
-- Resume only for follow-up work on the same task.
-- Store thread IDs with the Run.
-- Do not pass the entire business conversation to implementation roles.
+- Separate threads by role
+- Resume only follow-up work for the same task
+- Store thread IDs with the Run
+- discovery, hypothesis, requirements, planning, and review are read-only
+- network access is disabled by default
+- Codex does not modify code in the MVP
 
-```text
-hypothesis thread
-requirements thread
-planning thread
-review thread
-```
+### 7.3 Structured output
 
-Discovery, requirements, planning, and review are read-only by default. Network access is disabled unless an explicit Issue and policy allow it.
-
-Every control-flow-relevant Codex result must conform to a command-specific JSON Schema. Meguribi does not parse arbitrary prose to determine workflow state.
+Control-flow-relevant output must conform to a command-specific JSON Schema. Meguribi does not parse arbitrary prose to determine workflow state.
 
 ## 8. Devin integration
 
-The first implementation launches Devin as a child process.
+### 8.1 Adopted transport
+
+The MVP adopts `DevinAcpAdapter`. Meguribi launches `devin acp` as a child process with the Issue-specific worktree as `cwd`. The user does not pre-launch Devin.
+
+```text
+Meguribi
+  -> DevinAcpAdapter
+      -> ACP client
+          -> devin acp subprocess
+```
 
 ```ts
 export interface DevinAdapter {
@@ -279,65 +308,114 @@ export interface DevinAdapter {
 }
 ```
 
-Because CLI flags may differ between versions, the following belong to configuration or a version-specific driver:
+ACP-specific requests, events, and errors remain inside the adapter. Core workflows consume normalized `AgentEvent` and domain types.
 
-- Executable
-- Argument template
-- Prompt delivery mechanism
-- Result and session-ID extraction
-- Resume mechanism
-- Sandbox settings
+### 8.2 ACP session lifecycle
 
-Meguribi detects the installed version and stops for unsupported versions.
+The adapter handles at least:
+
+```text
+process spawn
+  -> initialize
+  -> session/new
+  -> session/prompt
+  -> session/update stream
+  -> turn completion
+  -> controlled shutdown
+```
+
+Persist:
+
+- Devin CLI version
+- session ID
+- raw ACP event log
+- normalized event log
+- stderr diagnostics
+- stop reason
+- duration
+- process exit code or signal
+- changed files verified by Git
+
+Agent-reported changed files are advisory. The Git adapter is authoritative.
+
+### 8.3 Shutdown sequence
+
+Issue #3 showed that `devin acp` can remain alive after a prompt completes. This is treated as ACP server process lifetime, not a protocol failure.
+
+Normal completion:
+
+1. persist turn completion and `stopReason`
+2. close stdin
+3. wait a short grace period
+4. send `SIGTERM` if still running
+5. force-kill only if it still does not exit
+6. verify that the process tree has no residual children
+
+Cancellation or timeout:
+
+1. send `session/cancel` when possible
+2. close stdin
+3. send `SIGTERM` after the grace period
+4. force termination only when required
+
+POSIX uses `SIGTERM` / `SIGKILL`. Windows-equivalent process-tree termination is hidden behind `ProcessTerminator`.
+
+### 8.4 Inherited MCP configuration
+
+Issue #3 and #6 showed that `devin acp` may read saved MCP configuration in the normal user environment. Fully redirecting `HOME` and XDG-related directories blocked saved MCP connections but also removed Devin authentication.
+
+This proves that **Devin CLI configuration isolation and authentication preservation could not be guaranteed together**. It does not prove that ACP is uniquely unsafe or that switching to `--print` solves the problem.
+
+The decision is therefore:
+
+- adopt ACP because it provides structured events, permission requests, cancellation, and session management
+- treat MCP inheritance as a Devin CLI execution-environment constraint
+- warn during preflight and request confirmation in interactive mode
+- stop before prompting when an unexpected MCP connection can be detected
+- never copy credentials or store them in a Meguribi-specific format
+- never claim complete MCP isolation
+
+`DevinPrintAdapter` remains only a fallback if ACP compatibility is lost.
+
+### 8.5 Inputs and prohibited operations
 
 Devin receives only:
 
-- Approved Issue content and relevant comments
+- approved Issue content and relevant comments
 - Codex `plan.json`
-- Repository `AGENTS.md`
-- Verification and prohibited-operation rules from `.meguribi.yml`
-- Allowed change scope
-- Artifact output locations
+- repository `AGENTS.md`
+- verification and prohibited-operation rules from `.meguribi.yml`
+- allowed change scope
+- artifact output locations
 
-It does not receive Codex private reasoning or unfiltered conversation history.
+Devin does not:
 
-Devin does not directly update GitHub, create branches, commit, push, merge, deploy, obtain secrets, or modify paths outside the worktree.
+- directly update Issues or PRs
+- create branches
+- commit, push, or merge
+- deploy to production
+- retrieve secrets
+- modify outside the assigned worktree
+- invoke `/handoff` or create cloud sessions
 
-### 8.1 Issue #3 ACP PoC result (2026-07-25)
+### 8.6 Version diagnosis
 
-With Devin CLI `3000.2.17`, `devin acp` is available and a TypeScript client can establish an ACP stdio connection. The PoC confirmed `initialize`, `session/new`, `session/prompt`, `session/cancel`, and `session/update`, and changed `README.md` inside a fixture worktree using ACP SDK `1.3.0`. No changes were detected in the normal checkout or outside the worktree.
+Before launch, verify `devin --version`, authentication, and `devin acp` support. Do not infer safety from the version string alone; combine feature probes and a minimal smoke test.
 
-The real smoke test showed that the child process remained alive after the prompt completed, but this is a process-shutdown concern rather than an ACP communication failure. The client can save `stopReason`, close stdin, wait for a short grace period, send `SIGTERM`, and force-kill only if necessary. This safely closed the session in the PoC, and no residual process was observed.
-
-- Even with an empty `--config`, the CLI automatically connected to stored MCP configuration and attempted external HTTP / stdio MCP startup. The PoC cannot guarantee the required no-network, no-secret, and no-external-service constraints merely by launching ACP.
-
-The pre-Issue #6 decision was that ACP was usable and an MVP candidate when shutdown included controlled `SIGTERM`. The final decision is recorded in the Issue #6 section below.
-
-### 8.2 Issue #6 MCP isolation PoC result (2026-07-25)
-
-`devin --help` exposes `--config` and `--agent-config`, but `devin acp --help` does not expose a dedicated MCP disable-all or allowlist option. The CLI MCP configuration format uses stdio / HTTP definitions under `mcpServers`.
-
-The PoC added an isolated variant that redirects `HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME` to empty directories under the artifact root. No saved MCP connection was observed in that variant, but `devin auth status` became unauthenticated because credentials were not copied, and the real `devin acp` run ended with `ACP connection closed`. Therefore MCP isolation and authentication preservation could not be established at the same time.
-
-Fake stdio and localhost HTTP MCP tests verified prompt-before-connection detection, deny-all termination, exact-name allowlist behavior, and no residual processes after cancel / SIGTERM. These tests validate the PoC policy and detection layer; they do not prove that Devin CLI provides the same allowlist control.
-
-The adoption decision is **do not adopt `DevinAcpAdapter`**. For CLI `3000.2.17`, no supported mechanism was found to preserve authentication safely while blocking saved MCP configuration. The machine diagnosis fails closed with `MCP isolation is not mechanically guaranteed` or an authentication failure. Validate `DevinPrintAdapter` next. Do not implement a production ACP adapter, allowlist UI, or credential copying as part of this PoC.
+Unsupported versions, missing authentication, ACP initialization failure, and unexpected process exits stop the Run.
 
 ## 9. GitHub integration
 
-The MVP uses the `gh` CLI and verifies availability and authentication before work begins.
+The MVP uses `gh` CLI and checks version, authentication, and repository identity before work begins.
 
 Typical operations:
 
-- `gh issue view --json ...`
-- `gh issue list --json ...`
-- `gh issue comment`
-- `gh issue edit`
-- `gh pr list --json ...`
-- `gh pr create --draft`
-- `gh pr checks`
+- read Issues, comments, and labels
+- create or update Meguribi-managed comments
+- create Draft PRs
+- read PR and CI status
 
-Commands are executed with an executable plus argument array, never by concatenating untrusted text into a shell command.
+Commands use an executable plus argument array. Untrusted content is never concatenated into a shell command.
 
 ## 10. Git integration
 
@@ -356,18 +434,21 @@ git push -u origin <branch>
 git worktree remove
 ```
 
-Meguribi stages only verified changed files. It does not use unconditional `git add -A`.
+Meguribi stages only verified paths and does not use unconditional `git add -A`.
 
 ## 11. Non-interactive mode
 
 `--non-interactive` stops when:
 
-- Approval labels are missing.
-- High-risk work is detected.
-- Branch, worktree, or PR state conflicts.
-- The Devin CLI version is unsupported.
-- A protected path changes.
-- The automatic fix limit is reached.
-- An unexpected dirty state exists.
+- approval labels are missing
+- high-risk work is detected
+- branch, worktree, or PR state conflicts
+- Devin CLI is unknown or unsupported
+- Devin is unauthenticated
+- ACP initialization fails
+- inherited MCP use has not been explicitly accepted
+- a protected path changes
+- the automatic fix limit is reached
+- an unexpected dirty state exists
 
 Meguribi does not guess its way through a condition that cannot be resolved safely.
