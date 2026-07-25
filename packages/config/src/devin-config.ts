@@ -10,13 +10,39 @@ const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
 
-// Single executable path/name only: no whitespace, no `=`, no leading `-`,
-// no URL-like `:/` sequences. This rejects command templates and secret flags
-// such as `devin --token=SECRET` while still allowing simple names and paths.
-const executablePattern = /^(?!.*=)(?!.*\s)(?!^-)(?!.*:\/)[A-Za-z0-9_\-./\\~:]+$/;
+// Single executable path/name only. This allows spaces and colons in Windows
+// and Unix paths while rejecting command templates and secret flags such as
+// `devin acp` or `devin --token=SECRET`.
+function isValidExecutable(value: string): boolean {
+  if (value.trim() !== value) return false;
+  if (value.startsWith("-")) return false;
+  if (value.includes("://")) return false;
+
+  // Command templates contain spaces; legitimate file paths may also contain
+  // spaces. Distinguish them by requiring a path separator when whitespace is
+  // present, and reject any whitespace-separated token that looks like a flag
+  // or secret assignment.
+  const whitespace = /\s/u;
+  if (whitespace.test(value)) {
+    if (!/[\\/]/.test(value)) return false;
+
+    const tokens = value.split(/\s+/u);
+    for (const token of tokens) {
+      if (token.length === 0) continue;
+      if (token.startsWith("-")) return false;
+      if (token.includes("=")) return false;
+    }
+  }
+
+  // Single-token secret assignments like `FOO=bar` are rejected unless the
+  // value contains a path separator, which makes it a plausible path.
+  if (!/[\\/]/.test(value) && value.includes("=")) return false;
+
+  return true;
+}
 
 export const DevinConfigSchema = v.strictObject({
-  executable: v.optional(v.pipe(v.string(), v.nonEmpty(), v.regex(executablePattern))),
+  executable: v.optional(v.pipe(v.string(), v.nonEmpty(), v.check(isValidExecutable, "Invalid executable"))),
   transport: v.optional(v.picklist(["acp"])),
   gracefulShutdownMs: v.optional(msTimeout),
   terminateTimeoutMs: v.optional(msTimeout),
