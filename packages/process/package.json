@@ -13,6 +13,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "@meguribi/core": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.8.3"
   },

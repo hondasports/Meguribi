@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const childPath = fileURLToPath(new URL("./child.js", import.meta.url));
-spawn(process.execPath, [childPath], { stdio: "inherit", detached: true });
+spawn(process.execPath, [childPath], { stdio: "inherit" });
 
 process.on("SIGTERM", () => {
   // ignored

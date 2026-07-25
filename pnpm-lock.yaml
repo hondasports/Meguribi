@@ -34,6 +34,10 @@ importers:
         version: 5.9.3
 
   packages/process:
+    dependencies:
+      '@meguribi/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: ^5.8.3
