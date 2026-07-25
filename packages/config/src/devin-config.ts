@@ -37,13 +37,14 @@ function isValidExecutablePath(value: string): boolean {
   // is a bare command template such as `devin acp`.
   if (/\s/u.test(value) && !/[\\/]/.test(value)) return false;
 
-  // Reject any whitespace-separated token that looks like a flag or secret
-  // assignment embedded in the path string.
+  // Reject any whitespace-separated token that looks like a flag, secret
+  // assignment, or relative-path argument embedded in the path string.
   const tokens = value.split(/\s+/u);
   for (const token of tokens) {
     if (token.length === 0) continue;
     if (token.startsWith("-")) return false;
     if (token.includes("=")) return false;
+    if (/^(\.\/|\.\\|\.\.\/|\.\.\\)/u.test(token)) return false;
   }
 
   return true;
@@ -104,7 +105,6 @@ export function devinConfigFromEnvironment(
 ): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   const stringKeys = [
-    ["MEGURIBI_DEVIN_EXECUTABLE", "executable"],
     ["MEGURIBI_DEVIN_TRANSPORT", "transport"],
     ["MEGURIBI_DEVIN_INHERITED_MCP_POLICY", "inheritedMcpPolicy"],
   ] as const;
@@ -126,6 +126,15 @@ export function devinConfigFromEnvironment(
       config[configKey] = Number(environment[environmentKey]);
     }
   }
+
+  // MEGURIBI_DEVIN_EXECUTABLE may contain spaces in a legitimate path.
+  // Normalize a spaced value to the one-element tuple form used by YAML and
+  // CLI, so the same validation rules apply to all configuration sources.
+  const executable = environment.MEGURIBI_DEVIN_EXECUTABLE;
+  if (executable !== undefined) {
+    config.executable = /\s/u.test(executable) ? [executable] : executable;
+  }
+
   return config;
 }
 
