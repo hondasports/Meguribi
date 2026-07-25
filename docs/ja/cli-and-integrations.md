@@ -375,6 +375,16 @@ Devin に次を担当させません。
 - secret 取得
 - worktree 外の変更
 
+### 8.5 Issue #3 ACP PoC 結果（2026-07-25）
+
+`devin 3000.2.17` では `devin acp` が利用でき、TypeScript から stdio ACP 接続を確立できた。`initialize`、`session/new`、`session/prompt`、`session/cancel`、`session/update` の受信を確認し、ACP SDK `1.3.0` で fixture worktree の `README.md` を変更できた。通常 checkout と worktree 外の変更は検出されなかった。
+
+実機では prompt 完了後も子プロセスが常駐したが、これは ACP の通信失敗ではなく、CLI プロセスの終了処理として扱える。`stopReason` を保存し、stdin を閉じ、短い猶予後に `SIGTERM` を送り、必要なら強制終了する実装でセッションを安全に閉じられる。残留プロセスがないことも確認した。
+
+- 空の `--config` を指定しても、CLI が保存済みの MCP 設定を自動接続し、外部 HTTP / stdio MCP の起動を試みた。Meguribi の PoC 制約である network、secret、外部サービスの非使用を ACP 起動だけでは保証できない。
+
+したがって現時点の判断は「ACP は利用可能で、`SIGTERM` を含む終了処理を前提に MVP の採用候補とする」とする。ただし、MCP の自動接続を無効化または allowlist 制御できる CLI の対応 version / 設定が確認できるまで、本番連携へ統合しない。MCP 制御が解決できない場合の代替方式として `DevinPrintAdapter` を候補に残す。
+
 ## 9. GitHub 連携
 
 MVP は `gh` CLI を利用します。
