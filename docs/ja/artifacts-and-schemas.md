@@ -456,3 +456,16 @@ Devin ACP などの raw イベントは、各 adapter 内で正規化される�
 | `unknown` | 想定外のエラー |
 
 `isRetryable` は同じ入力でリトライ可能かを示すフラグとする。
+
+## 17. ManagedProcess の起動・失敗契約
+
+`@meguribi/process` の `ProcessRunner.run()` は同期的に `ManagedProcess` を返す。返却時点では子プロセスの起動が保留中の場合がある。
+
+| 項目 | 契約 |
+| --- | --- |
+| `pid` | spawn が成功した場合は `number`。spawn に失敗した場合は `undefined`。型は `number | undefined`。 |
+| `startedAt` | `run()` 呼び出し時に記録する ISO 8601 タイムスタンプ。 |
+| `waitForExit()` | spawn 完了または失敗後に終了結果を返す。spawn 失敗時は分類済みの `ProcessError` で reject する。 |
+| `terminateTree()` / `signal()` / `writeStdin()` / `closeStdin()` | spawn 完了を待つ。spawn 失敗時は `waitForExit()` と同じ `ProcessError` インスタンスで reject する。 |
+
+呼び出し側は `pid` の存在を起動成功の証拠として扱わず、操作の Promise を待って成功または分類済みエラーを処理する。spawn 失敗では、`executable_not_found`、`permission_denied`、または `process_crashed` が返る。`ProcessExit` は正常に起動・終了した process にだけ返り、開始・終了時刻、exit code、signal を含む。
