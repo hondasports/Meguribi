@@ -10,14 +10,12 @@ const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
 
-const allowedExecutableChars = /^[\p{Letter}\p{Number}_\-./\\~:+@()\s]+$/u;
-
 function isValidExecutableBase(value: string): boolean {
   if (value.trim() !== value) return false;
   if (value.startsWith("-")) return false;
   if (value.includes("://")) return false;
   if (value.includes("=")) return false;
-  if (!allowedExecutableChars.test(value)) return false;
+  if (value.includes('"')) return false;
   return true;
 }
 
@@ -32,36 +30,11 @@ function isValidExecutableString(value: string): boolean {
 // Used for the one-element tuple form, which is the only way to represent an
 // executable path that contains spaces. The whole element is the executable
 // path; additional tuple elements (command arguments) are rejected by the
-// schema shape itself.
+// strictTuple schema shape itself. We only guard against structural injection
+// patterns (=, URL scheme, leading -) so that relative spaced paths such as
+// [Devin Agent.exe] and [tools\\Devin Agent.exe] are accepted.
 function isValidExecutablePath(value: string): boolean {
-  if (!isValidExecutableBase(value)) return false;
-
-  // A tuple element with whitespace must contain a path separator; otherwise it
-  // is a bare command template such as `devin acp`.
-  if (/\s/u.test(value) && !/[\\/]/.test(value)) return false;
-
-  // Reject any whitespace-separated token that looks like a flag, secret
-  // assignment, or relative-path argument embedded in the path string.
-  const tokens = value.split(/\s+/u);
-  const separator = /[\\/]/u;
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token.length === 0) continue;
-    if (token.startsWith("-")) return false;
-    if (token.includes("=")) return false;
-    if (/^(\.\/|\.\\|\.\.\/|\.\.\\)/u.test(token)) return false;
-
-    // In a spaced path the first and last token must contain a path separator.
-    // Intermediate tokens may be space-only segments like `Files` in
-    // `C:\Program Files (x86)\Devin\devin.exe`, but a bare trailing argument
-    // such as `acp` in `/usr/local/bin/devin acp` has no separator and is
-    // therefore rejected.
-    if ((index === 0 || index === tokens.length - 1) && !separator.test(token)) {
-      return false;
-    }
-  }
-
-  return true;
+  return isValidExecutableBase(value);
 }
 
 const executableSchema = v.optional(
