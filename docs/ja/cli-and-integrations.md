@@ -258,7 +258,7 @@ devin:
 
 MVP の既定値は `warn` とします。非対話実行では `warn` を許可せず、`allow` または `deny` を明示しない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
 
-`transport` は MVP では `acp` だけを受け付けます。すべての timeout は 1 以上の整数で、無効化または無限待機にはできません。未知の設定キーと未知の policy は validation error とします。shell command template、credential path、token、cookie は設定項目に含めません。
+`transport` は MVP では `acp` だけを受け付けます。`executable` は単一の実行ファイル名またはパスで、空白、`=`、先頭 `-`、`:/` を含むものは受け付けません。すべての timeout は 1 以上の整数で、ms 単位の timeout は setTimeout の 32-bit 上限未満（約24.8日未満）、`turnTimeoutMinutes` はその分換算で同じ上限未満です。無効化または無限待機にはできません。未知の設定キーと未知の policy は validation error とします。shell command template、credential path、token、cookie は設定項目に含めません。
 
 ## 6. 設定の優先順位
 

@@ -97,13 +97,7 @@ export async function loadDevinConfig(options: LoadDevinConfigOptions): Promise<
   };
 
   const config = resolveDevinConfig(sources);
-  const snapshot = toRedactedDevinConfigSnapshot({
-    user: user ?? {},
-    repository: repository ?? {},
-    environment: environmentConfig,
-    cli: cli ?? {},
-    nonInteractive: options.nonInteractive,
-  });
+  const snapshot = toRedactedDevinConfigSnapshot(config);
 
   return { config, snapshot };
 }

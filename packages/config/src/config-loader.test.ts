@@ -100,7 +100,7 @@ describe("loadDevinConfig", () => {
     expect(result.config.executable).toBe("explicit-devin");
   });
 
-  it("returns a redacted snapshot of all configuration sources", async () => {
+  it("returns a redacted resolved config snapshot", async () => {
     const root = await createTemporaryDirectory();
     const userConfigPath = path.join(root, "user.yml");
     const repositoryPath = path.join(root, "repository");
@@ -121,12 +121,37 @@ describe("loadDevinConfig", () => {
       cli: { turnTimeoutMinutes: 40 },
     });
 
-    expect(result.snapshot).toEqual({
-      user: { executable: "user-devin", turnTimeoutMinutes: 10 },
-      repository: { turnTimeoutMinutes: 20 },
-      environment: { turnTimeoutMinutes: 30 },
-      cli: { turnTimeoutMinutes: 40 },
+    expect(result.snapshot).toEqual(result.config);
+    expect(result.snapshot).toMatchObject({
+      executable: "user-devin",
+      transport: "acp",
+      turnTimeoutMinutes: 40,
+      inheritedMcpPolicy: "warn",
     });
-    expect(result.snapshot).not.toHaveProperty(["environment", "token"]);
+    expect(result.snapshot).not.toHaveProperty("token");
+  });
+
+  it("rejects executable command templates and secret flags from all sources", async () => {
+    const root = await createTemporaryDirectory();
+    const repositoryPath = path.join(root, "repository");
+    const userConfigPath = path.join(root, "user.yml");
+    await mkdir(repositoryPath);
+
+    await writeFile(
+      path.join(repositoryPath, ".meguribi.yml"),
+      "devin:\n  executable: devin --token=SECRET\n",
+    );
+    await expect(loadDevinConfig({ repositoryPath })).rejects.toThrow(/executable/);
+
+    await writeFile(userConfigPath, "devin:\n  executable: devin acp\n");
+    await expect(
+      loadDevinConfig({ userConfigPath, environment: { HOME: root } }),
+    ).rejects.toThrow(/executable/);
+
+    await expect(
+      loadDevinConfig({
+        cli: { executable: "devin --api-key=SECRET" },
+      }),
+    ).rejects.toThrow(/executable/);
   });
 });
