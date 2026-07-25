@@ -5,10 +5,30 @@
 ## 基本ルール
 
 1. すべての作業で、最初にルートの `AGENTS.md` を読む。
-2. 次に `meguribi-core` と `testing-and-quality` を読む。
-3. 変更対象に応じて専門スキルを追加で読む。
-4. スキル間で矛盾がある場合は、`AGENTS.md`、日本語ドキュメント、対象 Issue の順に優先する。
-5. スキルに書かれていない大規模な設計変更を独断で行わない。
+2. 共通ルールとして `meguribi-core` と `testing-and-quality` を参照する。
+3. 変更対象に応じて、タスクの中心となる主スキルを1つ選ぶ。
+4. その他の関連スキルは補助資料として読む。
+5. スキル間で矛盾がある場合は、`AGENTS.md`、日本語ドキュメント、対象 Issue の順に優先する。
+6. スキルに書かれていない大規模な設計変更を独断で行わない。
+
+## Devinでの利用
+
+Devin は `.agents/skills/<skill-name>/SKILL.md` を公式に自動検出します。
+
+ただし、Devin が同時に有効化できるスキルは1つだけです。
+
+- セッションでは、タスクの中心に対応する主スキルを1つ有効化する。
+- 共通ルールはルートの `AGENTS.md` を正本とする。
+- `meguribi-core`、`testing-and-quality`、その他の補助スキルは、通常のリポジトリファイルとして必要箇所を参照する。
+- 明示的に有効化する場合は、Devinへの依頼に `@skills:<skill-name>` を含める。
+
+例:
+
+```text
+Issue #123 を実装してください。@skills:delivery-workflow
+```
+
+Devin以外のエージェントが複数スキルを同時に扱える場合でも、主スキルと補助スキルの区別は維持してください。
 
 ## スキル一覧
 
@@ -26,15 +46,26 @@
 | `product-growth-loop` | 仮説、課題、要件、効果測定の成長ループ |
 | `testing-and-quality` | Unit、Integration、fixture、品質確認 |
 
-## 推奨する読み合わせ
+## 推奨する主スキル
 
 ### リポジトリ基盤
 
-- `meguribi-core`
+主スキル:
+
 - `typescript-cli-foundation`
+
+補助参照:
+
+- `meguribi-core`
 - `testing-and-quality`
 
 ### Issue から Draft PR まで
+
+主スキル:
+
+- `delivery-workflow`
+
+補助参照:
 
 - `meguribi-core`
 - `github-integration`
@@ -43,14 +74,18 @@
 - `codex-integration`
 - `devin-integration`
 - `verification-and-security`
-- `delivery-workflow`
 - `testing-and-quality`
 
 ### プロダクト成長ループ
 
+主スキル:
+
+- `product-growth-loop`
+
+補助参照:
+
 - `meguribi-core`
 - `github-integration`
-- `product-growth-loop`
 - `testing-and-quality`
 
 ## スキルの更新
