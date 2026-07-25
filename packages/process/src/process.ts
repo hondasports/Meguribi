@@ -131,13 +131,46 @@ async function* readStream(stream: Readable | null): AsyncGenerator<Uint8Array> 
 
 function writeToStream(stream: Writable, data: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    stream.write(data, (err) => {
-      if (err) {
-        reject(toProcessError(err));
-      } else {
-        resolve();
+    let settled = false;
+    const onError = (err: Error) => {
+      if (settled) {
+        return;
       }
-    });
+      settled = true;
+      stream.off("error", onError);
+      stream.off("drain", onDrain);
+      reject(toProcessError(err));
+    };
+    const onDrain = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      stream.off("error", onError);
+      stream.off("drain", onDrain);
+      resolve();
+    };
+    stream.once("error", onError);
+    try {
+      const canContinue = stream.write(data, (err) => {
+        if (settled) {
+          return;
+        }
+        if (err) {
+          onError(err);
+          return;
+        }
+        settled = true;
+        stream.off("error", onError);
+        stream.off("drain", onDrain);
+        resolve();
+      });
+      if (!canContinue) {
+        stream.once("drain", onDrain);
+      }
+    } catch (err) {
+      onError(err as Error);
+    }
   });
 }
 
@@ -237,28 +270,23 @@ function runTaskkill(pid: number, force: boolean): Promise<number | null> {
 }
 
 async function terminateWindows(pid: number, graceMs: number): Promise<void> {
-  let lastCode: number | null = null;
-
-  try {
-    lastCode = await runTaskkill(pid, false);
-  } catch (err) {
-    if (await waitForProcessDeath(pid, graceMs)) {
-      return;
+  const executeTaskkill = async (force: boolean): Promise<number | null> => {
+    try {
+      return await runTaskkill(pid, force);
+    } catch (err) {
+      if (await waitForProcessDeath(pid, graceMs)) {
+        return null;
+      }
+      throw err;
     }
-    throw err;
-  }
+  };
+
+  await executeTaskkill(false);
   if (await waitForProcessDeath(pid, graceMs)) {
     return;
   }
 
-  try {
-    lastCode = await runTaskkill(pid, true);
-  } catch (err) {
-    if (await waitForProcessDeath(pid, graceMs)) {
-      return;
-    }
-    throw err;
-  }
+  const forceCode = await executeTaskkill(true);
   if (await waitForProcessDeath(pid, graceMs)) {
     return;
   }
@@ -266,7 +294,7 @@ async function terminateWindows(pid: number, graceMs: number): Promise<void> {
   if (isProcessAlive(pid)) {
     throw new ProcessError(
       "force_failed",
-      `Process ${pid} survived taskkill /T /F (last exit code ${lastCode ?? "unknown"})`,
+      `Process ${pid} survived taskkill /T /F (exit code ${forceCode ?? "unknown"})`,
       false,
     );
   }
