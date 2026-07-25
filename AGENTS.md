@@ -91,8 +91,9 @@ Issue #123 を実装してください。@skills:delivery-workflow
 
 Issue で変更されない限り、次を使用します。
 
-- Runtime: 実装時点で公式に提供されている最新の Node.js LTS メジャー。2026年7月時点では Node.js 24（Krypton）
-- Node.js のメジャーバージョンは `package.json` の `engines`、バージョン管理ファイル、CI で一致させる
+- Runtime: 実装着手時点で公式に提供されている最新の Node.js LTS メジャーを採用する。2026年7月時点では Node.js 24（Krypton）
+- 採用した Node.js メジャーバージョンは、次のLTSへ自動追従させず、`package.json` の `engines`、バージョン管理ファイル、CI で固定・一致させる
+- 新しいLTSメジャーへ更新する場合は、依存関係とCIの互換性を確認する専用Issueまたは明示的な変更として扱う
 - Current リリースは採用せず、LTS へ昇格したメジャーだけを採用する
 - Language: TypeScript strict mode
 - Package manager: pnpm
