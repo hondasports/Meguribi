@@ -1,0 +1,16 @@
+import { defineConfig } from "vitest/config";
+import path from "node:path";
+
+const root = import.meta.dirname;
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@meguribi/core": path.resolve(root, "packages/core/src/index.ts"),
+      "@meguribi/schemas": path.resolve(root, "packages/schemas/src/index.ts"),
+    },
+  },
+  test: {
+    include: ["packages/*/src/**/*.test.ts"],
+  },
+});

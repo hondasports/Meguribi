@@ -393,3 +393,40 @@ Suggested defaults:
 - Worktree is removed after PR merge or close through cleanup
 
 Retention is user-configurable.
+
+## 16. Agent event and error contracts
+
+To abstract external agents such as the Codex SDK and Devin ACP, domain types live in `@meguribi/core` and Valibot schemas live in `@meguribi/schemas`.
+
+### AgentEvent
+
+A discriminated union identified by the `type` field.
+
+| type | description | main fields |
+| --- | --- | --- |
+| `session.started` | session started | `sessionId`, `at` |
+| `message.delta` | text stream chunk | `sessionId`, `text`, `at` |
+| `tool.started` | tool execution started | `sessionId`, `tool`, `toolCallId?`, `summary?`, `at` |
+| `tool.completed` | tool execution completed | `sessionId`, `tool`, `toolCallId?`, `exitCode?`, `status?`, `at` |
+| `file.changed` | file changed | `sessionId`, `path`, `at` |
+| `approval.required` | human approval requested | `sessionId`, `requestId`, `summary`, `at` |
+| `turn.completed` | one turn completed | `sessionId`, `stopReason?`, `at` |
+| `session.failed` | session failed | `sessionId`, `error`, `at` |
+| `unknown` | unrecognized raw event | `sessionId`, `rawType`, `payload?`, `at` |
+
+`at` is an ISO 8601 timestamp string.
+
+### AgentError
+
+| code | description |
+| --- | --- |
+| `process_crashed` | child process crashed |
+| `connection_lost` | ACP / SSE connection lost |
+| `authentication_failed` | authentication failed |
+| `permission_denied` | execution denied |
+| `timeout` | operation timed out |
+| `mcp_policy_violation` | MCP inheritance policy violated |
+| `implementation_failed` | implementation step failed |
+| `unknown` | unexpected error |
+
+`isRetryable` is a flag indicating whether the same input may be retried.

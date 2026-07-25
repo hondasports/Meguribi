@@ -411,3 +411,40 @@ packages/schemas/
 - worktree: PR merge / close 後に cleanup
 
 保持期間はユーザー設定で変更可能にします。
+
+## 16. Agent イベント・エラー共通契約
+
+Codex SDK と Devin ACP などの外部エージェントを抽象化するため、`@meguribi/core` に Agent 用の型を定義し、`@meguribi/schemas` に Valibot スキーマを配置する。
+
+### AgentEvent
+
+`type` フィールドで判別される discriminated union である。
+
+| type | 説明 | 主要フィールド |
+| --- | --- | --- |
+| `session.started` | セッション開始 | `sessionId`, `at` |
+| `message.delta` | テキストストリームの chunk | `sessionId`, `text`, `at` |
+| `tool.started` | ツール実行開始 | `sessionId`, `tool`, `toolCallId?`, `summary?`, `at` |
+| `tool.completed` | ツール実行完了 | `sessionId`, `tool`, `toolCallId?`, `exitCode?`, `status?`, `at` |
+| `file.changed` | ファイル変更 | `sessionId`, `path`, `at` |
+| `approval.required` | 人間への承認要求 | `sessionId`, `requestId`, `summary`, `at` |
+| `turn.completed` | 1 ターン完了 | `sessionId`, `stopReason?`, `at` |
+| `session.failed` | セッション失敗 | `sessionId`, `error`, `at` |
+| `unknown` | 未対応の raw イベント | `sessionId`, `rawType`, `payload?`, `at` |
+
+`at` は ISO 8601 タイムスタンプ文字列とする。
+
+### AgentError
+
+| code | 説明 |
+| --- | --- |
+| `process_crashed` | 子プロセスが異常終了した |
+| `connection_lost` | ACP / SSE 接続が途切れた |
+| `authentication_failed` | 認証に失敗した |
+| `permission_denied` | 実行が拒否された |
+| `timeout` | タイムアウトした |
+| `mcp_policy_violation` | MCP 継承 policy に違反した |
+| `implementation_failed` | 実装処理に失敗した |
+| `unknown` | 想定外のエラー |
+
+`isRetryable` は同じ入力でリトライ可能かを示すフラグとする。
