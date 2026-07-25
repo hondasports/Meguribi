@@ -192,17 +192,12 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: "devin@agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "devin#agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "devin%agent" })).not.toThrow();
-    expect(() => validateDevinConfig({ executable: "devin&agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "devin[agent]" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "devin,agent" })).not.toThrow();
-    expect(() => validateDevinConfig({ executable: "devin;agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "/opt/Devin+Agent/devin" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "C:/Tools/Devin#Agent/devin.exe" })).not.toThrow();
     expect(() =>
       validateDevinConfig({ executable: ["C:/Program Files/Devin+Agent/devin.exe"] }),
-    ).not.toThrow();
-    expect(() =>
-      validateDevinConfig({ executable: ["C:/Program Files/Devin&Agent/devin.exe"] }),
     ).not.toThrow();
     expect(() =>
       validateDevinConfig({ executable: ["/usr/利用者/bin/devin"] }),
@@ -215,6 +210,15 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin acp" })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: "C:\\Program Files\\Devin\\devin.exe -t" })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: "/usr/local/bin/devin --token=SECRET" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "devin&&echo" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "devin;echo" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "devin|cat" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "$(id)" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "devin$(id)" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: "`id`" })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: ["devin && echo PWNED"] })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: ["devin; echo PWNED"] })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: ["devin | cat"] })).toThrow(/executable/);
   });
 
   it("blocks non-interactive execution when inherited MCP policy is warn", () => {
