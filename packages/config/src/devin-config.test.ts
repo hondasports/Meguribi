@@ -159,8 +159,6 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: [""] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: ["devin", "acp"] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: ["/usr/local/bin/devin", "./acp"] })).toThrow(/executable/);
-    expect(() => validateDevinConfig({ executable: ["/usr/local/bin/devin acp"] })).toThrow(/executable/);
-    expect(() => validateDevinConfig({ executable: ["C:\\Program Files\\Devin\\devin acp"] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ startupTimeoutMs: 0 })).toThrow(/startupTimeoutMs/);
     expect(() => validateDevinConfig({ startupTimeoutMs: 2_147_483_648 })).toThrow(/startupTimeoutMs/);
     expect(() => validateDevinConfig({ turnTimeoutMinutes: 35_792 })).toThrow(/turnTimeoutMinutes/);
@@ -178,6 +176,10 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: ["C:/Program Files/Devin/devin.exe"] })).not.toThrow();
     expect(() => validateDevinConfig({ executable: ["C:\\Program Files\\Devin\\devin.exe"] })).not.toThrow();
     expect(() => validateDevinConfig({ executable: ["C:\\Program Files (x86)\\Devin\\devin.exe"] })).not.toThrow();
+    // Relative spaced paths do not require a path separator in the single
+    // tuple element; the strictTuple length is what prevents command arguments.
+    expect(() => validateDevinConfig({ executable: ["Devin Agent.exe"] })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: ["tools\\Devin Agent.exe"] })).not.toThrow();
     expect(
       resolveDevinConfig({
         cli: { executable: ["C:\\Program Files\\Devin\\devin.exe"] },
@@ -188,9 +190,19 @@ describe("Devin ACP configuration", () => {
   it("allows special and Unicode characters in executable paths", () => {
     expect(() => validateDevinConfig({ executable: "devin+agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "devin@agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin#agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin%agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin&agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin[agent]" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin,agent" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "devin;agent" })).not.toThrow();
     expect(() => validateDevinConfig({ executable: "/opt/Devin+Agent/devin" })).not.toThrow();
+    expect(() => validateDevinConfig({ executable: "C:/Tools/Devin#Agent/devin.exe" })).not.toThrow();
     expect(() =>
       validateDevinConfig({ executable: ["C:/Program Files/Devin+Agent/devin.exe"] }),
+    ).not.toThrow();
+    expect(() =>
+      validateDevinConfig({ executable: ["C:/Program Files/Devin&Agent/devin.exe"] }),
     ).not.toThrow();
     expect(() =>
       validateDevinConfig({ executable: ["/usr/利用者/bin/devin"] }),
