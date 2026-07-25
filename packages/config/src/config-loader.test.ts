@@ -108,6 +108,16 @@ describe("loadDevinConfig", () => {
     );
   });
 
+  it("falls back to USERPROFILE when HOME is empty", () => {
+    const environment = {
+      HOME: "",
+      USERPROFILE: "C:\\Users\\x",
+    };
+    expect(getDefaultUserConfigPath(environment, "win32")).toBe(
+      "C:\\Users\\x\\.config\\meguribi\\config.yml",
+    );
+  });
+
   it("lets userConfigPath override the default path", async () => {
     const root = await createTemporaryDirectory();
     const explicitPath = path.join(root, "explicit.yml");
