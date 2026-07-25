@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@meguribi/core": ["packages/core/src/index.ts"],
+      "@meguribi/schemas": ["packages/schemas/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts"]
+}
