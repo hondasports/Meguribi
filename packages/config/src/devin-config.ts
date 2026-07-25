@@ -40,11 +40,22 @@ function isValidExecutablePath(value: string): boolean {
   // Reject any whitespace-separated token that looks like a flag, secret
   // assignment, or relative-path argument embedded in the path string.
   const tokens = value.split(/\s+/u);
-  for (const token of tokens) {
+  const separator = /[\\/]/u;
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
     if (token.length === 0) continue;
     if (token.startsWith("-")) return false;
     if (token.includes("=")) return false;
     if (/^(\.\/|\.\\|\.\.\/|\.\.\\)/u.test(token)) return false;
+
+    // In a spaced path the first and last token must contain a path separator.
+    // Intermediate tokens may be space-only segments like `Files` in
+    // `C:\Program Files (x86)\Devin\devin.exe`, but a bare trailing argument
+    // such as `acp` in `/usr/local/bin/devin acp` has no separator and is
+    // therefore rejected.
+    if ((index === 0 || index === tokens.length - 1) && !separator.test(token)) {
+      return false;
+    }
   }
 
   return true;
@@ -127,12 +138,23 @@ export function devinConfigFromEnvironment(
     }
   }
 
-  // MEGURIBI_DEVIN_EXECUTABLE may contain spaces in a legitimate path.
-  // Normalize a spaced value to the one-element tuple form used by YAML and
-  // CLI, so the same validation rules apply to all configuration sources.
+  // MEGURIBI_DEVIN_EXECUTABLE accepts either a plain executable name/path
+  // (no spaces) or an explicit JSON one-element tuple for paths that contain
+  // spaces. Plain strings with whitespace are not auto-converted, so command
+  // templates such as `devin acp` cannot masquerade as a spaced path.
   const executable = environment.MEGURIBI_DEVIN_EXECUTABLE;
   if (executable !== undefined) {
-    config.executable = /\s/u.test(executable) ? [executable] : executable;
+    const trimmed = executable.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        config.executable = Array.isArray(parsed) ? parsed.map(String) : trimmed;
+      } catch {
+        config.executable = trimmed;
+      }
+    } else {
+      config.executable = executable;
+    }
   }
 
   return config;

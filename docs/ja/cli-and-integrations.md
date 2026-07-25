@@ -258,7 +258,7 @@ devin:
 
 MVP の既定値は `warn` とします。非対話実行では `warn` を許可せず、`allow` または `deny` を明示しない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
 
-`transport` は MVP では `acp` だけを受け付けます。`executable` は単一の実行ファイル名またはパスです。コマンド引数（`devin acp` など）、`--token=SECRET` のような flag や環境変数代入、`http://...` や `file://...` のような URL scheme は受け付けません。空白を含まないパスは文字列、空白を含むパスは必ず1要素の配列（例：`["C:\\Program Files\\Devin\\devin.exe"]`、`["/my dir/bin/devin"]`）で指定します。配列が2要素以上になることはありません。これにより command-line argument を executable path と曖昧にできません。すべての timeout は 1 以上の整数で、ms 単位の timeout は setTimeout の 32-bit 上限未満（約24.8日未満）、`turnTimeoutMinutes` はその分換算で同じ上限未満です。無効化または無限待機にはできません。未知の設定キーと未知の policy は validation error とします。shell command template、credential path、token、cookie は設定項目に含めません。
+`transport` は MVP では `acp` だけを受け付けます。`executable` は単一の実行ファイル名またはパスです。コマンド引数（`devin acp` など）、`--token=SECRET` のような flag や環境変数代入、`http://...` や `file://...` のような URL scheme は受け付けません。空白を含まないパスは文字列、空白を含むパスは必ず1要素の配列で指定します（例：`["C:\\Program Files\\Devin\\devin.exe"]`、`["/my dir/bin/devin"]`）。配列が2要素以上になることはありません。これにより command-line argument を executable path と曖昧にできません。環境変数 `MEGURIBI_DEVIN_EXECUTABLE` では空白を含むパスを `'["C:\\\\Program Files\\\\Devin\\\\devin.exe"]'` のような JSON 1要素配列で指定してください。文字列のままでは空白を含む path は受け付けません。すべての timeout は 1 以上の整数で、ms 単位の timeout は setTimeout の 32-bit 上限未満（約24.8日未満）、`turnTimeoutMinutes` はその分換算で同じ上限未満です。無効化または無限待機にはできません。未知の設定キーと未知の policy は validation error とします。shell command template、credential path、token、cookie は設定項目に含めません。
 
 ## 6. 設定の優先順位
 

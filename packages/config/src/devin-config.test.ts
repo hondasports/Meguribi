@@ -46,9 +46,16 @@ describe("Devin ACP configuration", () => {
     ).toMatchObject({ turnTimeoutMinutes: 30, inheritedMcpPolicy: "deny" });
   });
 
-  it("normalizes MEGURIBI_DEVIN_EXECUTABLE with spaces to the one-element tuple form", () => {
+  it("accepts MEGURIBI_DEVIN_EXECUTABLE as a plain string without spaces", () => {
     const environment = devinConfigFromEnvironment({
-      MEGURIBI_DEVIN_EXECUTABLE: "C:\\Program Files\\Devin\\devin.exe",
+      MEGURIBI_DEVIN_EXECUTABLE: "devin",
+    });
+    expect(environment).toMatchObject({ executable: "devin" });
+  });
+
+  it("accepts a JSON one-element tuple in MEGURIBI_DEVIN_EXECUTABLE for spaced paths", () => {
+    const environment = devinConfigFromEnvironment({
+      MEGURIBI_DEVIN_EXECUTABLE: '["C:\\\\Program Files\\\\Devin\\\\devin.exe"]',
     });
     expect(environment).toMatchObject({ executable: ["C:\\Program Files\\Devin\\devin.exe"] });
     expect(
@@ -56,18 +63,40 @@ describe("Devin ACP configuration", () => {
     ).toMatchObject({ executable: "C:\\Program Files\\Devin\\devin.exe" });
 
     const unixEnv = devinConfigFromEnvironment({
-      MEGURIBI_DEVIN_EXECUTABLE: "/my dir/bin/devin",
+      MEGURIBI_DEVIN_EXECUTABLE: '["/my dir/bin/devin"]',
     });
     expect(resolveDevinConfig({ environment: unixEnv })).toMatchObject({
       executable: "/my dir/bin/devin",
     });
   });
 
-  it("rejects command templates and secret flags in MEGURIBI_DEVIN_EXECUTABLE", () => {
+  it("rejects plain spaced and command-template values in MEGURIBI_DEVIN_EXECUTABLE", () => {
+    // Plain strings with spaces are not auto-converted to a tuple.
+    expect(() =>
+      resolveDevinConfig({
+        environment: devinConfigFromEnvironment({
+          MEGURIBI_DEVIN_EXECUTABLE: "C:\\Program Files\\Devin\\devin.exe",
+        }),
+      }),
+    ).toThrow(/executable/);
     expect(() =>
       resolveDevinConfig({
         environment: devinConfigFromEnvironment({
           MEGURIBI_DEVIN_EXECUTABLE: "devin acp",
+        }),
+      }),
+    ).toThrow(/executable/);
+    expect(() =>
+      resolveDevinConfig({
+        environment: devinConfigFromEnvironment({
+          MEGURIBI_DEVIN_EXECUTABLE: "/usr/local/bin/devin acp",
+        }),
+      }),
+    ).toThrow(/executable/);
+    expect(() =>
+      resolveDevinConfig({
+        environment: devinConfigFromEnvironment({
+          MEGURIBI_DEVIN_EXECUTABLE: "C:\\Program Files\\Devin\\devin acp",
         }),
       }),
     ).toThrow(/executable/);
@@ -97,6 +126,8 @@ describe("Devin ACP configuration", () => {
     expect(() => validateDevinConfig({ executable: [""] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: ["devin", "acp"] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ executable: ["/usr/local/bin/devin", "./acp"] })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: ["/usr/local/bin/devin acp"] })).toThrow(/executable/);
+    expect(() => validateDevinConfig({ executable: ["C:\\Program Files\\Devin\\devin acp"] })).toThrow(/executable/);
     expect(() => validateDevinConfig({ startupTimeoutMs: 0 })).toThrow(/startupTimeoutMs/);
     expect(() => validateDevinConfig({ startupTimeoutMs: 2_147_483_648 })).toThrow(/startupTimeoutMs/);
     expect(() => validateDevinConfig({ turnTimeoutMinutes: 35_792 })).toThrow(/turnTimeoutMinutes/);
