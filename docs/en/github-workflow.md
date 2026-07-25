@@ -288,6 +288,16 @@ Local verification and GitHub Actions serve different roles:
 - Local verification provides early feedback before push.
 - GitHub Actions is authoritative remote verification.
 
+This repository's `CI` workflow verifies `experiments/devin-acp` on every pull request and push with Node.js 24 and pnpm 11.1.2. Dependencies are installed with `pnpm install --frozen-lockfile`, and all of the following checks must pass in order:
+
+1. `pnpm lint`
+2. `pnpm typecheck`
+3. `pnpm test`
+4. `pnpm build`
+5. `pnpm smoke -- --fake`
+
+The CI workflow does not use real Devin authentication or connect to external MCP servers. It runs with read-only repository contents permission, and a newer run replaces an older in-progress run for the same pull request or branch.
+
 Meguribi may wait for checks but never merges automatically.
 
 ```bash
