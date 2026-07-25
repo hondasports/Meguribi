@@ -187,12 +187,25 @@ describe("ProcessRunner", () => {
     await expect(current.terminateTree({ graceMs: 100 })).resolves.toBeDefined();
   });
 
-  it("rejects with executable_not_found when executable is not found", async () => {
+  it("returns the same spawn error from every operation when executable is not found", async () => {
     current = runner.run("this-does-not-exist-executable", [], { cwd: process.cwd() });
-    await expect(current.waitForExit()).rejects.toBeInstanceOf(ProcessError);
-    await expect(current.waitForExit()).rejects.toMatchObject({
-      code: "executable_not_found",
+    expect(current.pid).toBeUndefined();
+    const results = await Promise.allSettled([
+      current.waitForExit(),
+      current.terminateTree(),
+      current.signal("SIGTERM"),
+      current.writeStdin("input"),
+      current.closeStdin(),
+    ]);
+    const errors = results.map((result) => {
+      expect(result.status).toBe("rejected");
+      return (result as PromiseRejectedResult).reason;
     });
+    expect(errors[0]).toBeInstanceOf(ProcessError);
+    expect(errors[0]).toMatchObject({ code: "executable_not_found" });
+    for (const error of errors.slice(1)) {
+      expect(error).toBe(errors[0]);
+    }
   });
 
   it("requires cwd", () => {
