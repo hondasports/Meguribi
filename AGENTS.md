@@ -287,3 +287,27 @@ pnpm build
 - 日本語・英語ドキュメントを必要に応じて更新した。
 - 危険操作を自動化していない。
 - 人間が差分と検証結果を確認できる状態にした。
+
+## Cursor Cloud specific instructions
+
+Cloud Agent 環境（VM）で Meguribi を開発・検証するための、非自明な注意点だけをまとめます。標準コマンドは §12（`pnpm lint` / `pnpm typecheck` / `pnpm test` / `pnpm build`）と各 `package.json` を正本とし、ここでは重複させません。
+
+### プロダクト構成（サービス）
+
+- これは **local-first の CLI**（pnpm monorepo）です。常駐サーバー、DB、Web UI は無く、起動しておくべきサービスはありません（README / §1・§6 参照）。
+- アプリ本体は `@meguribi/cli`。現時点で実装済みのコマンドは `doctor`（Devin CLI の実行可否診断）のみ。
+  - dev 実行: `pnpm exec tsx apps/cli/src/index.ts doctor`（`--json` / `--non-interactive` 可）
+  - build 済み実行: `pnpm build` 後に `node apps/cli/dist/index.js doctor`
+- `doctor` は Devin CLI が PATH に無いと `runnable: no` を出力し **exit code 1** で終了します。これは環境不具合ではなく **正常な診断結果** です（`executable_not_found` と nextAction を返す）。実際に runnable にしたい場合のみ Devin CLI を用意してください。
+
+### Node / pnpm のトーラン（最重要の非自明な点）
+
+- 必須 Node は `engines: ">=24 <25"`（`.node-version` = 24、CI も Node 24）。
+- ただし VM 既定の `node`（`/exec-daemon/node`）は **v22** で、これが PATH 先頭付近に注入され `nvm use` だけでは打ち消せません。
+- 対策として update script が次を毎回冪等に実施します: nvm で Node 24 を用意 → corepack で **pnpm@11.1.2**（CI と一致）→ `node`/`pnpm` 等を `/usr/local/cargo/bin`（PATH 最先頭）へ symlink。
+- このため通常は追加操作なしで `node -v` = v24、`pnpm -v` = 11.1.2 になります。もし `node -v` が v22 に見えたら update script が未実行なので、`corepack` 経由で symlink を張り直すか update script 相当を再実行してください（`/exec-daemon` は書き込み不可）。
+
+### 検証・実行の前提
+
+- 依存導入は update script（`pnpm install --frozen-lockfile`）で完了済み。lint は `oxlint`、format は `oxfmt`（`experiments/**` は lint/format 対象外）。
+- `experiments/devin-acp` は独自 `eslint`/`vitest` を持つ別パッケージ。ルート `pnpm test` の対象は `packages/*` と `apps/*` のみ（`vitest.config.ts` 参照）。
