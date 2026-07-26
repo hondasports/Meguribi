@@ -37,4 +37,17 @@ describe("buildDevinPrompt", () => {
   it("rejects oversized content", () => {
     expect(() => buildDevinPrompt({ ...context(), limits: { ...context().limits, maxPromptChars: 10 } })).toThrow(/exceeds/);
   });
+
+  it("keeps previous attempts and fix instructions untrusted", () => {
+    const result = buildDevinPrompt({
+      ...context(),
+      fixContext: {
+        previousAttempt: { source: "prior run", content: "previous result" },
+        fixInstruction: { source: "review", content: "fix this issue" },
+      },
+    });
+    expect(result.content).toContain("[UNTRUSTED PREVIOUS ATTEMPT]");
+    expect(result.content).toContain("[UNTRUSTED FIX INSTRUCTION]");
+    expect(result.content).toContain("<untrusted-content>\nprevious result");
+  });
 });

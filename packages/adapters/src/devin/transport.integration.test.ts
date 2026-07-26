@@ -57,7 +57,9 @@ async function start(mode: string, overrides: {
   startupTimeoutMs?: number;
   diagnosis?: DevinDiagnosis;
   postTurnLivenessMs?: number;
+  promptTimeoutMs?: number;
   permissionMediator?: PermissionMediator;
+  mcpPolicy?: { policy: "allow" | "warn" | "deny"; mode: "interactive" | "non-interactive"; explicitAllow: boolean };
 } = {}) {
   const cwd = await tempCwd();
   const transport = createDevinAcpTransport();
@@ -70,9 +72,11 @@ async function start(mode: string, overrides: {
     startupTimeoutMs: overrides.startupTimeoutMs ?? 5_000,
     // Keep happy-path tests fast; crash tests override this upward.
     postTurnLivenessMs: overrides.postTurnLivenessMs ?? 50,
+    promptTimeoutMs: overrides.promptTimeoutMs,
     diagnosis: overrides.diagnosis ?? runnableDiagnosis(),
     runner: new ProcessRunner(),
     permissionMediator: overrides.permissionMediator,
+    mcpPolicy: overrides.mcpPolicy,
   });
   return { connection, cwd };
 }
@@ -200,6 +204,44 @@ describe("DevinAcpTransport integration", () => {
     await expect(drainPrompt(connection)).rejects.toMatchObject({
       code: "process_crashed",
     });
+    await connection.terminate(500).catch(() => undefined);
+  });
+
+  it("blocks a detected MCP connection and exposes a redacted security alert", async () => {
+    const { connection } = await start("mcp-stderr", {
+      mcpPolicy: { policy: "deny", mode: "non-interactive", explicitAllow: false },
+    });
+    await expect(async () => {
+      for await (const _event of connection.prompt({ content: "implement fixture" })) {
+        // drain until policy termination
+      }
+    }).rejects.toMatchObject({ code: "policy_blocked" });
+    expect(connection.mcpSecurityAlert()).toContain("SECURITY_ALERT");
+    await connection.terminate(500).catch(() => undefined);
+  });
+
+  it("detects and redacts an MCP HTTP connection", async () => {
+    const { connection } = await start("mcp-http-stderr", {
+      mcpPolicy: { policy: "deny", mode: "non-interactive", explicitAllow: false },
+    });
+    await expect(async () => {
+      for await (const _event of connection.prompt({ content: "implement fixture" })) {
+        // drain until policy termination
+      }
+    }).rejects.toMatchObject({ code: "policy_blocked" });
+    const alert = connection.mcpSecurityAlert();
+    expect(alert).toContain("Transport: http");
+    expect(alert).not.toContain("fixture.invalid");
+    await connection.terminate(500).catch(() => undefined);
+  });
+
+  it("times out a hung ACP turn", async () => {
+    const { connection } = await start("prompt-hang", { promptTimeoutMs: 50 });
+    await expect(async () => {
+      for await (const _event of connection.prompt({ content: "implement fixture" })) {
+        // the fake server never completes
+      }
+    }).rejects.toMatchObject({ code: "turn_timeout" });
     await connection.terminate(500).catch(() => undefined);
   });
 

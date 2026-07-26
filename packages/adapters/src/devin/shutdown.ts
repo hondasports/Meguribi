@@ -33,6 +33,7 @@ export class DevinAcpShutdownController {
     let stdinClosed = false;
     let gracefulExit = false;
     let terminateSent = false;
+    let forceKillUsed = false;
     let cleanupError: AgentError | undefined;
     let exit: ProcessExit | undefined;
 
@@ -60,6 +61,7 @@ export class DevinAcpShutdownController {
       terminateSent = true;
       try {
         exit = await this.connection.terminate(options.terminateTimeoutMs);
+        forceKillUsed = exit.forceKillUsed ?? false;
       } catch (error) {
         cleanupError ??= safeError(error);
       }
@@ -72,7 +74,7 @@ export class DevinAcpShutdownController {
       cancelSent,
       gracefulExit,
       terminateSent,
-      forceKillUsed: terminateSent,
+      forceKillUsed,
       residualProcesses: exit ? 0 : 1,
       ...(cleanupError ? { cleanupError } : {}),
     };

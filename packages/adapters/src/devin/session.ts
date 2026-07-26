@@ -1,6 +1,7 @@
-import type { AgentEvent, AgentTerminationReason, AgentTerminationResult } from "@meguribi/core";
+import type { AgentEvent, AgentTerminationReason, AgentTerminationResult, ImplementationContext } from "@meguribi/core";
 import {
   DevinAgentArtifactStore,
+  type DevinPromptArtifact,
   type DevinAgentResultArtifact,
 } from "./artifact-store.js";
 import {
@@ -20,10 +21,24 @@ import {
 import { DevinAcpTransportError } from "./transport-error.js";
 import { DevinAcpShutdownController, type ShutdownOptions } from "./shutdown.js";
 import type { PermissionMediator } from "./permissions.js";
+import { buildDevinPrompt } from "./prompt.js";
+import {
+  captureGitWorktreeSnapshot,
+  compareGitWorktreeSnapshots,
+  type GitSafetyComparison,
+  type GitSafetyComparisonInput,
+  type GitWorktreeSnapshot,
+} from "../git-boundary.js";
+
+export type DevinGitBoundaryConfig = Omit<GitSafetyComparisonInput, "before" | "after"> & {
+  expectedRemoteIdentity: string;
+};
 
 export interface StartDevinAcpSessionInput extends StartDevinAcpInput {
   artifactRoot: string;
   transport?: DevinAcpTransport;
+  implementationContext?: ImplementationContext;
+  gitBoundary?: DevinGitBoundaryConfig;
 }
 
 export interface DevinAcpSession {
@@ -36,6 +51,7 @@ export interface DevinAcpSession {
   finish(result: DevinAgentResultArtifact): Promise<void>;
   shutdown(reason: AgentTerminationReason, options: ShutdownOptions): Promise<AgentTerminationResult>;
   terminate(graceMs?: number): Promise<void>;
+  validateGitBoundary(reportedFiles?: readonly string[]): Promise<GitSafetyComparison | undefined>;
 }
 
 async function* mapRawEvents(
@@ -67,6 +83,7 @@ async function* mapRawEvents(
         sessionId: raw.sessionId,
         requestId: raw.requestId,
         summary: raw.summary,
+        decision: raw.decision,
         at: raw.at,
       });
       const persisted = await artifacts.appendEvent(event, sequence, raw.at);
@@ -112,15 +129,23 @@ class DevinAcpSessionImpl implements DevinAcpSession {
     private readonly startedAt: string,
     private readonly shutdownController: DevinAcpShutdownController,
     private readonly permissionMediator?: PermissionMediator,
+    private readonly promptArtifact?: DevinPromptArtifact,
+    private readonly gitBoundaryConfig?: DevinGitBoundaryConfig,
+    private readonly gitBoundaryBefore?: GitWorktreeSnapshot,
   ) {}
+
+  private gitBoundaryResultPromise: Promise<GitSafetyComparison | undefined> | undefined;
 
   async *prompt(input: { content: string }): AsyncIterable<AgentEvent> {
     try {
-      yield* mapRawEvents(this.connection.prompt(input), this.artifacts, {
+      yield* mapRawEvents(this.connection.prompt({
+        content: this.promptArtifact?.content ?? input.content,
+      }), this.artifacts, {
         cwd: this.cwd,
         protocolVersion: this.protocolVersion,
         startedAt: this.startedAt,
       });
+      await this.shutdown("completed", { gracefulShutdownMs: 1, terminateTimeoutMs: 1_000 });
     } catch (error) {
       const agentError =
         error instanceof DevinAcpTransportError
@@ -138,13 +163,24 @@ class DevinAcpSessionImpl implements DevinAcpSession {
       };
       const sequence = this.artifacts.nextSequence();
       await this.artifacts.appendEvent(failed, sequence);
+      const mcpAlert = this.connection.mcpSecurityAlert();
+      if (mcpAlert) {
+        await this.artifacts.appendStderr(mcpAlert);
+      }
+      await this.shutdown(terminationReason(error), {
+        gracefulShutdownMs: 50,
+        terminateTimeoutMs: 1_000,
+      }).catch(() => undefined);
       await this.persistStderr();
       throw error;
+    } finally {
+      // Closing an async generator early must not leave the ACP process alive.
+      await this.shutdown("cancelled", { gracefulShutdownMs: 50, terminateTimeoutMs: 1_000 }).catch(() => undefined);
     }
   }
 
-  cancel(): Promise<void> {
-    return this.connection.cancel();
+  async cancel(): Promise<void> {
+    await this.shutdown("cancelled", { gracefulShutdownMs: 50, terminateTimeoutMs: 1_000 });
   }
 
   closeInput(): Promise<void> {
@@ -160,6 +196,18 @@ class DevinAcpSessionImpl implements DevinAcpSession {
       startedAt: this.startedAt,
       finishedAt: new Date().toISOString(),
     });
+    const boundary = await this.validateGitBoundary(result.reportedFiles);
+    if (boundary && !boundary.publishable) {
+      const blocked = {
+        ...result,
+        status: "blocked" as const,
+        errorCode: "policy_blocked",
+        errorMessage: "Git/worktree safety boundary blocked publishing",
+      };
+      await this.artifacts.writeResult(blocked);
+      await this.persistStderr();
+      throw new Error("Git/worktree safety boundary blocked publishing");
+    }
     await this.artifacts.writeResult(result);
     await this.persistStderr();
   }
@@ -174,9 +222,84 @@ class DevinAcpSessionImpl implements DevinAcpSession {
   async shutdown(reason: AgentTerminationReason, options: ShutdownOptions): Promise<AgentTerminationResult> {
     const result = await this.shutdownController.shutdown(reason, options);
     this.permissionMediator?.endSession(this.sessionId);
+    await this.validateGitBoundary();
     await this.artifacts.writeTermination(result);
     await this.persistStderr();
     return result;
+  }
+
+  async validateGitBoundary(reportedFiles?: readonly string[]): Promise<GitSafetyComparison | undefined> {
+    if (reportedFiles && this.gitBoundaryConfig && this.gitBoundaryBefore) {
+      try {
+        const after = await captureGitWorktreeSnapshot({
+          cwd: this.cwd,
+          outsidePaths: this.gitBoundaryConfig.outsidePaths,
+          baseSha: this.gitBoundaryConfig.expectedBaseSha,
+        });
+        const comparison = await compareGitWorktreeSnapshots({
+          ...this.gitBoundaryConfig,
+          before: this.gitBoundaryBefore,
+          after,
+          reportedFiles,
+        });
+        await this.artifacts.writeGitBoundary(comparison);
+        this.gitBoundaryResultPromise = Promise.resolve(comparison);
+        return comparison;
+      } catch {
+        const comparison: GitSafetyComparison = {
+          verdict: "suspicious",
+          publishable: false,
+          reasons: ["Git/worktree snapshot validation failed"],
+          warnings: [],
+          changedFiles: [],
+          preExistingDirty: this.gitBoundaryBefore.dirty,
+        };
+        await this.artifacts.writeGitBoundary(comparison);
+        this.gitBoundaryResultPromise = Promise.resolve(comparison);
+        return comparison;
+      }
+    }
+    if (!this.gitBoundaryResultPromise) {
+      if (!this.gitBoundaryConfig || !this.gitBoundaryBefore) {
+        this.gitBoundaryResultPromise = captureGitWorktreeSnapshot({ cwd: this.cwd }).then(async (snapshot) => {
+          const comparison: GitSafetyComparison = {
+            verdict: "suspicious",
+            publishable: false,
+            reasons: ["Git safety boundary configuration is required for repository execution"],
+            warnings: [],
+            changedFiles: snapshot.changedFiles,
+            preExistingDirty: snapshot.dirty,
+          };
+          await this.artifacts.writeGitBoundary(comparison);
+          return comparison;
+        }).catch(() => undefined);
+        return this.gitBoundaryResultPromise;
+      }
+      this.gitBoundaryResultPromise = captureGitWorktreeSnapshot({
+        cwd: this.cwd,
+        outsidePaths: this.gitBoundaryConfig.outsidePaths,
+        baseSha: this.gitBoundaryConfig.expectedBaseSha,
+      }).then((after) => compareGitWorktreeSnapshots({
+        ...this.gitBoundaryConfig!,
+        before: this.gitBoundaryBefore!,
+        after,
+      })).then(async (comparison) => {
+        await this.artifacts.writeGitBoundary(comparison);
+        return comparison;
+      }).catch(async () => {
+        const comparison: GitSafetyComparison = {
+          verdict: "suspicious",
+          publishable: false,
+          reasons: ["Git/worktree snapshot validation failed"],
+          warnings: [],
+          changedFiles: [],
+          preExistingDirty: this.gitBoundaryBefore?.dirty ?? true,
+        };
+        await this.artifacts.writeGitBoundary(comparison);
+        return comparison;
+      });
+    }
+    return this.gitBoundaryResultPromise;
   }
 
   private async persistStderr(): Promise<void> {
@@ -197,6 +320,19 @@ export async function startDevinAcpSession(
 ): Promise<DevinAcpSession> {
   const artifacts = new DevinAgentArtifactStore(input.artifactRoot);
   await artifacts.init();
+  const promptArtifact = input.implementationContext
+    ? buildDevinPrompt(input.implementationContext)
+    : undefined;
+  if (promptArtifact) {
+    await artifacts.writePrompt(promptArtifact);
+  }
+  const gitBoundaryBefore = input.gitBoundary
+    ? await captureGitWorktreeSnapshot({
+      cwd: input.cwd,
+      outsidePaths: input.gitBoundary.outsidePaths,
+      baseSha: input.gitBoundary.expectedBaseSha,
+    })
+    : undefined;
 
   const transport = input.transport ?? createDevinAcpTransport();
   const connection = await transport.start(input);
@@ -210,6 +346,10 @@ export async function startDevinAcpSession(
     protocolVersion: connection.protocolVersion,
     startedAt,
   });
+  const mcpWarning = connection.mcpWarning();
+  if (mcpWarning) {
+    await artifacts.appendStderr(`WARN: ${mcpWarning}\n`);
+  }
 
   return new DevinAcpSessionImpl(
     connection.sessionId,
@@ -220,5 +360,20 @@ export async function startDevinAcpSession(
     startedAt,
     new DevinAcpShutdownController(connection),
     input.permissionMediator,
+    promptArtifact,
+    input.gitBoundary,
+    gitBoundaryBefore,
   );
+}
+
+function terminationReason(error: unknown): AgentTerminationReason {
+  if (error instanceof DevinAcpTransportError) {
+    if (error.code === "cancelled") return "cancelled";
+    if (error.code === "startup_timeout" || error.code === "turn_timeout") return "timed_out";
+    if (error.code === "process_crashed" || error.code === "connection_closed") return "crashed";
+    if (error.code === "policy_blocked" || error.code === "malformed_message" || error.code === "protocol_violation") {
+      return "protocol_error";
+    }
+  }
+  return "protocol_error";
 }

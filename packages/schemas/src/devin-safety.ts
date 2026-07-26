@@ -37,6 +37,10 @@ export const ImplementationContextSchema = v.strictObject({
   limits: v.strictObject({ maxPromptChars: positiveInteger, maxChangedFiles: positiveInteger, maxDiffLines: positiveInteger }),
   expectedResult: v.array(v.string()),
   fixInstruction: v.optional(v.strictObject({ source: v.string(), content: v.string() })),
+  fixContext: v.optional(v.strictObject({
+    previousAttempt: v.optional(v.strictObject({ source: v.string(), content: v.string() })),
+    fixInstruction: v.strictObject({ source: v.string(), content: v.string() }),
+  })),
 }) satisfies v.GenericSchema<unknown, CoreImplementationContext>;
 
 export const AgentTerminationResultSchema = v.strictObject({
@@ -53,4 +57,5 @@ export const AgentTerminationResultSchema = v.strictObject({
 
 export type PermissionRequest = v.InferOutput<typeof PermissionRequestSchema>;
 export type ImplementationContext = v.InferOutput<typeof ImplementationContextSchema>;
+export type FixContext = v.InferOutput<typeof ImplementationContextSchema>["fixContext"];
 export type AgentTerminationResult = v.InferOutput<typeof AgentTerminationResultSchema>;

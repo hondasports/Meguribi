@@ -37,8 +37,10 @@ export {
   DevinArtifactWriteError,
 } from "./artifact-store.js";
 export type {
+  DevinGitBoundaryArtifact,
   DevinAgentResultArtifact,
   DevinAgentSessionMetadata,
+  DevinPromptArtifact,
   PersistedAgentEvent,
   PersistedRawEvent,
 } from "./artifact-store.js";
@@ -51,11 +53,12 @@ export {
 } from "./events.js";
 export type { AcpSessionNotificationPayload, AcpSessionUpdatePayload } from "./events.js";
 export { startDevinAcpSession } from "./session.js";
-export type { DevinAcpSession, StartDevinAcpSessionInput } from "./session.js";
+export type { DevinAcpSession, DevinGitBoundaryConfig, StartDevinAcpSessionInput } from "./session.js";
 export {
   createDevinAcpTransport,
   DevinAcpTransportImpl,
   DEFAULT_POST_TURN_LIVENESS_MS,
+  DEFAULT_PROMPT_TIMEOUT_MS,
   AcpProcessLifecycle,
 } from "./transport.js";
 export type {
@@ -87,9 +90,11 @@ export type {
   PermissionMediator,
 } from "./permissions.js";
 export {
+  createMcpPolicyMonitor,
   detectMcpConnection,
   evaluateMcpOutput,
   formatMcpSecurityAlert,
 } from "./mcp.js";
+export type { McpPolicyInput, McpPolicyMonitor } from "./mcp.js";
 export { DevinAcpShutdownController } from "./shutdown.js";
 export type { ShutdownOptions } from "./shutdown.js";

@@ -120,6 +120,7 @@ export function normalizePermissionRequest(input: {
   sessionId: string;
   requestId: string;
   summary: string;
+  decision?: { outcome: "approve" | "deny" | "confirm"; reason: string };
   at?: string;
 }): AgentEvent {
   return {
@@ -127,6 +128,7 @@ export function normalizePermissionRequest(input: {
     sessionId: input.sessionId,
     requestId: input.requestId,
     summary: input.summary,
+    ...(input.decision ? { decision: input.decision } : {}),
     at: nowIso(input.at),
   };
 }

@@ -11,6 +11,11 @@ import {
   toAcpPermissionResponse,
   type PermissionMediator,
 } from "./permissions.js";
+import {
+  createMcpPolicyMonitor,
+  type McpPolicyInput,
+  type McpPolicyMonitor,
+} from "./mcp.js";
 
 /**
  * How long a turn stays open against the session process lifecycle after ACP
@@ -21,6 +26,7 @@ import {
  * the same lifecycle watcher that runs from spawn until intentional terminate.
  */
 export const DEFAULT_POST_TURN_LIVENESS_MS = 500;
+export const DEFAULT_PROMPT_TIMEOUT_MS = 300_000;
 
 export interface StartDevinAcpInput {
   executable: string;
@@ -35,6 +41,7 @@ export interface StartDevinAcpInput {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   startupTimeoutMs: number;
+  promptTimeoutMs?: number;
   /**
    * Session-lifecycle observation window after prompt response before committing
    * `turn_completed`. Defaults to {@link DEFAULT_POST_TURN_LIVENESS_MS}.
@@ -45,6 +52,7 @@ export interface StartDevinAcpInput {
   clientInfo?: { name: string; version: string };
   permissionMediator?: PermissionMediator;
   protectedPaths?: string[];
+  mcpPolicy?: McpPolicyInput;
 }
 
 /**
@@ -80,6 +88,8 @@ export interface DevinAcpConnection {
   readonly sessionId: string;
   readonly protocolVersion: number;
   readonly stderrText: () => string;
+  readonly mcpSecurityAlert: () => string | undefined;
+  readonly mcpWarning: () => string | undefined;
   /**
    * Wait until stderr collection finishes or `timeoutMs` elapses.
    * Use before persisting stderr so late diagnostic lines are not lost.
@@ -256,11 +266,14 @@ function managedStdinToWritableStream(processHandle: ManagedProcess): WritableSt
 
 async function collectStderr(
   processHandle: ManagedProcess,
+  onChunk?: (chunk: string) => void,
 ): Promise<{ getText: () => string; done: Promise<void> }> {
   const chunks: string[] = [];
   const done = (async () => {
     for await (const chunk of processHandle.stderr) {
-      chunks.push(Buffer.from(chunk).toString("utf8"));
+      const text = Buffer.from(chunk).toString("utf8");
+      chunks.push(text);
+      onChunk?.(text);
     }
   })();
   void done.catch(() => undefined);
@@ -274,7 +287,12 @@ async function waitMs(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string,
+  code: "startup_timeout" | "turn_timeout" = "startup_timeout",
+): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
@@ -283,7 +301,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
         timer = setTimeout(() => {
           reject(
             new DevinAcpTransportError(
-              "startup_timeout",
+              code,
               `${label} timed out after ${timeoutMs}ms`,
               true,
             ),
@@ -311,13 +329,23 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
     private readonly handlers: LiveHandlers,
     private readonly lifecycle: AcpProcessLifecycle,
     private readonly postTurnLivenessMs: number,
+    private readonly promptTimeoutMs: number,
     private readonly cwd: string,
     private readonly permissionMediator?: PermissionMediator,
     private readonly protectedPaths: string[] = [],
+    private readonly mcpMonitor?: McpPolicyMonitor,
   ) {}
 
   stderrText(): string {
     return this.stderr.getText();
+  }
+
+  mcpSecurityAlert(): string | undefined {
+    return this.mcpMonitor?.securityAlert();
+  }
+
+  mcpWarning(): string | undefined {
+    return this.mcpMonitor?.warning();
   }
 
   async awaitStderrDrain(timeoutMs = 1_000): Promise<void> {
@@ -331,6 +359,10 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
 
   async *prompt(input: { content: string }): AsyncIterable<RawDevinAcpEvent> {
     this.lifecycle.throwIfDead();
+    const preflight = this.mcpMonitor ? await this.mcpMonitor.preflight() : undefined;
+    if (preflight && preflight.outcome !== "allow") {
+      throw new DevinAcpTransportError("policy_blocked", preflight.reason);
+    }
 
     const queue: Array<RawDevinAcpEvent | { kind: "error"; error: DevinAcpTransportError }> = [];
     let wake: (() => void) | undefined;
@@ -361,10 +393,16 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
     const unsubscribeExit = this.lifecycle.onUnexpectedExit((error) => {
       push({ kind: "error", error });
     });
+    const unsubscribeMcp = this.mcpMonitor?.onDecision((decision) => {
+      if (decision.outcome !== "allow") {
+        push({ kind: "error", error: new DevinAcpTransportError("policy_blocked", decision.reason) });
+      }
+    });
 
     this.handlers.onSessionUpdate = (notification) => {
       const at = new Date().toISOString();
       const update = notification.update as unknown as Record<string, unknown>;
+      this.mcpMonitor?.observe(JSON.stringify(update));
       push({
         kind: "session_update",
         sequence: this.nextSequence(),
@@ -383,6 +421,7 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
       const normalized = normalizeAcpPermissionRequest(params, {
         cwd: this.cwd,
         protectedPaths: this.protectedPaths,
+        rawArtifactRef: `raw-events.jsonl#${requestId}`,
       });
       const decision = this.permissionMediator
         ? await this.permissionMediator.decide(normalized)
@@ -400,11 +439,11 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
       return toAcpPermissionResponse(decision, params.options);
     };
 
-    const promptPromise = this.connection
-      .prompt({
+    const promptCall = this.connection.prompt({
         sessionId: this.sessionId,
         prompt: [{ type: "text", text: input.content }],
-      })
+      });
+    const promptPromise = withTimeout(promptCall, this.promptTimeoutMs, "ACP prompt", "turn_timeout")
       .then((response) => {
         stopReason = response.stopReason;
         settled = true;
@@ -445,6 +484,7 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
       throw toDevinAcpTransportError(error, "prompt_send_failure");
     } finally {
       unsubscribeExit();
+      unsubscribeMcp?.();
       this.handlers.onSessionUpdate = () => undefined;
       this.handlers.onPermission = () => ({ outcome: { outcome: "cancelled" } });
     }
@@ -505,7 +545,13 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
 
     const lifecycle = new AcpProcessLifecycle(processHandle);
     const postTurnLivenessMs = input.postTurnLivenessMs ?? DEFAULT_POST_TURN_LIVENESS_MS;
-    const stderr = await collectStderr(processHandle);
+    const promptTimeoutMs = input.promptTimeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS;
+    const mcpMonitor = createMcpPolicyMonitor(input.mcpPolicy ?? {
+      policy: input.diagnosis.inheritedMcpPolicy,
+      mode: "non-interactive",
+      explicitAllow: false,
+    });
+    const stderr = await collectStderr(processHandle, (chunk) => mcpMonitor?.observe(chunk));
     const handlers: LiveHandlers = {
       onSessionUpdate: () => undefined,
       onPermission: () => ({ outcome: { outcome: "cancelled" } }),
@@ -580,9 +626,11 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
         handlers,
         lifecycle,
         postTurnLivenessMs,
+        promptTimeoutMs,
         input.cwd,
         input.permissionMediator,
         input.protectedPaths ?? [],
+        mcpMonitor,
       );
     } catch (error) {
       lifecycle.markIntentionalShutdown();

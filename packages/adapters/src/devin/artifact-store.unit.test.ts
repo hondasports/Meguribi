@@ -1,8 +1,10 @@
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DevinAgentArtifactStore, DevinArtifactWriteError } from "./artifact-store.js";
+import { redactDiagnosticText } from "./redact.js";
 
 const tempDirs: string[] = [];
 
@@ -90,6 +92,27 @@ describe("DevinAgentArtifactStore", () => {
     expect(session.sessionId).toBe("s-1");
     expect(session.stopReason).toBe("end_turn");
     expect(result.status).toBe("completed");
+  });
+
+  it("persists a redacted prompt and its version/hash metadata", async () => {
+    const root = await tempRoot();
+    const store = new DevinAgentArtifactStore(root);
+    const content = "[SYSTEM]\n token=supersecrettoken123\n";
+    const redacted = redactDiagnosticText(content);
+    await store.writePrompt({
+      version: "meguribi-devin-prompt/v1",
+      hash: `sha256:${createHash("sha256").update(redacted, "utf8").digest("hex")}`,
+      content,
+    });
+
+    const prompt = await fs.readFile(store.promptPath, "utf8");
+    const metadata = JSON.parse(await fs.readFile(store.promptMetadataPath, "utf8")) as {
+      version: string;
+      hash: string;
+    };
+    expect(prompt).not.toContain("supersecrettoken123");
+    expect(metadata.version).toBe("meguribi-devin-prompt/v1");
+    expect(metadata.hash).toMatch(/^sha256:/);
   });
 
   it("fails closed when append target is not writable", async () => {

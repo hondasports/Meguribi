@@ -5,13 +5,13 @@ function connection(overrides: Partial<{
   cancel: () => Promise<void>;
   closeInput: () => Promise<void>;
   waitForProcessExit: (timeoutMs?: number) => Promise<{ code: number | null; signal: null; startedAt: string; finishedAt: string }>;
-  terminate: (graceMs?: number) => Promise<{ code: number | null; signal: null; startedAt: string; finishedAt: string }>;
+  terminate: (graceMs?: number) => Promise<{ code: number | null; signal: null; startedAt: string; finishedAt: string; forceKillUsed?: boolean }>;
 }> = {}) {
   return {
     cancel: vi.fn(async () => undefined),
     closeInput: vi.fn(async () => undefined),
     waitForProcessExit: vi.fn(async () => ({ code: 0, signal: null, startedAt: "a", finishedAt: "b" })),
-    terminate: vi.fn(async () => ({ code: 0, signal: null, startedAt: "a", finishedAt: "b" })),
+    terminate: vi.fn(async () => ({ code: 0, signal: null, startedAt: "a", finishedAt: "b", forceKillUsed: true })),
     ...overrides,
   };
 }

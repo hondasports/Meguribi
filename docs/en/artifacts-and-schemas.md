@@ -34,6 +34,8 @@ This provides responsibility separation, schema validation, reproducibility, hum
               +-- requirements.json
               +-- plan.json
               +-- devin-prompt.md
+              +-- prompt.json          # prompt version / hash
+              +-- git-boundary.json    # Git/worktree safety result
               +-- implementation-result.json
               +-- verification.json
               +-- diff.patch
@@ -263,6 +265,8 @@ Meguribi creates this from Devin output plus actual Git and process state.
 
 `git status` is authoritative for changed files.
 
+The prompt `FixContext` keeps the sourced previous attempt and fix instruction in separate untrusted blocks. `git-boundary.json` stores non-blocking warnings, including mismatches between Devin's `reportedFiles` and the Git diff.
+
 ## 10. `verification.json`
 
 ```json
@@ -446,6 +450,9 @@ Until RunStore lands, and afterward under the same relative paths, Devin ACP ses
 ├── events.jsonl       # normalized AgentEvent lines (same sequence)
 ├── stderr.log         # diagnostic stderr (redacted)
 ├── session.json       # sessionId / protocolVersion / stopReason
+├── devin-prompt.md    # redacted prompt sent to Devin
+├── prompt.json        # prompt version / hash
+├── git-boundary.json  # Git/worktree safety result
 ├── result.json        # minimal execution summary
 └── termination.json    # shutdown stages and residual processes
 ```

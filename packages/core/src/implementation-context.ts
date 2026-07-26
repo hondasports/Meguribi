@@ -3,6 +3,11 @@ export interface UntrustedSource {
   content: string;
 }
 
+export interface FixContext {
+  previousAttempt?: UntrustedSource;
+  fixInstruction: UntrustedSource;
+}
+
 export interface ImplementationContext {
   issue: UntrustedSource;
   comments: readonly UntrustedSource[];
@@ -17,4 +22,5 @@ export interface ImplementationContext {
   limits: { maxPromptChars: number; maxChangedFiles: number; maxDiffLines: number };
   expectedResult: readonly string[];
   fixInstruction?: UntrustedSource;
+  fixContext?: FixContext;
 }

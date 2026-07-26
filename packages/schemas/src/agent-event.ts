@@ -44,6 +44,10 @@ export const AgentEventSchema = v.variant("type", [
     sessionId: v.string(),
     requestId: v.string(),
     summary: v.string(),
+    decision: v.optional(v.strictObject({
+      outcome: v.picklist(["approve", "deny", "confirm"]),
+      reason: v.string(),
+    })),
     at: isoTimestamp,
   }),
   v.object({
