@@ -37,15 +37,34 @@ export interface DiagnoseDevinOptions {
   probeTimeoutMs?: number;
   /**
    * 最低対応 version。未指定時は {@link MINIMUM_SUPPORTED_DEVIN_CLI_VERSION}。
-   * 空文字を渡すと floor 判定を行わない（テスト用）。
+   * 空文字や不正値は拒否する（floor 無効化は許可しない）。
    */
   minimumSupportedVersion?: string;
   runner?: ProcessRunner;
 }
 
+export class InvalidMinimumSupportedVersionError extends Error {
+  constructor(value: string) {
+    super(`Invalid minimumSupportedVersion: ${value}`);
+    this.name = "InvalidMinimumSupportedVersionError";
+  }
+}
+
+function resolveMinimumSupportedVersion(input: string | undefined): string {
+  const source = input ?? MINIMUM_SUPPORTED_DEVIN_CLI_VERSION;
+  if (source.trim().length === 0) {
+    throw new InvalidMinimumSupportedVersionError(JSON.stringify(source));
+  }
+  const parsed = parseMinimumVersion(source);
+  if (!parsed) {
+    throw new InvalidMinimumSupportedVersionError(source);
+  }
+  return source.trim();
+}
+
 function resolveVersionStatus(
   rawStdout: string,
-  minimumSupportedVersion: string | undefined,
+  minimumSupportedVersion: string,
 ): DevinDiagnosis["version"] {
   const parsed = parseDevinVersionOutput(rawStdout);
   const safeRaw = parsed.raw
@@ -54,20 +73,17 @@ function resolveVersionStatus(
   if (!parsed.parseable || parsed.major === undefined) {
     return { status: "unknown", raw: safeRaw || undefined };
   }
-  const minimumSource = minimumSupportedVersion ?? MINIMUM_SUPPORTED_DEVIN_CLI_VERSION;
-  if (minimumSource.length > 0) {
-    const minimum = parseMinimumVersion(minimumSource);
-    if (
-      minimum &&
-      parsed.minor !== undefined &&
-      parsed.patch !== undefined &&
-      compareSemver(
-        { major: parsed.major, minor: parsed.minor, patch: parsed.patch },
-        minimum,
-      ) < 0
-    ) {
-      return { status: "unsupported", raw: safeRaw };
-    }
+  const minimum = parseMinimumVersion(minimumSupportedVersion);
+  if (
+    minimum &&
+    parsed.minor !== undefined &&
+    parsed.patch !== undefined &&
+    compareSemver(
+      { major: parsed.major, minor: parsed.minor, patch: parsed.patch },
+      minimum,
+    ) < 0
+  ) {
+    return { status: "unsupported", raw: safeRaw };
   }
   return { status: "supported", raw: safeRaw };
 }
@@ -111,6 +127,9 @@ export async function diagnoseDevin(
   const timeoutMs = options.probeTimeoutMs ?? 5000;
   const nonInteractive = options.nonInteractive ?? false;
   const prefix = options.executableArgs ?? [];
+  const minimumSupportedVersion = resolveMinimumSupportedVersion(
+    options.minimumSupportedVersion,
+  );
   const errors: DiagnosisError[] = [];
   const warnings: DiagnosisWarning[] = [];
 
@@ -152,8 +171,26 @@ export async function diagnoseDevin(
     path: options.executable,
   };
 
-  let version = resolveVersionStatus(versionProbe.stdout, options.minimumSupportedVersion);
+  let version = resolveVersionStatus(versionProbe.stdout, minimumSupportedVersion);
   let probeTimedOut = false;
+  let probeFailed = false;
+
+  if (versionProbe.outputTooLarge) {
+    errors.push({
+      code: "process_crashed",
+      message: "Devin version probe produced oversized output",
+    });
+    return {
+      executable,
+      version: { status: "unknown" },
+      authentication: { status: "unknown" },
+      acp: { status: "unknown" },
+      inheritedMcpPolicy: options.inheritedMcpPolicy,
+      runnable: false,
+      warnings,
+      errors,
+    };
+  }
 
   if (versionProbe.timedOut) {
     probeTimedOut = true;
@@ -202,7 +239,7 @@ export async function diagnoseDevin(
     errors.push({
       code: "unsupported_version",
       message: `Devin version is unsupported: ${version.raw ?? ""}`,
-      nextAction: `Upgrade Devin CLI to ${options.minimumSupportedVersion ?? MINIMUM_SUPPORTED_DEVIN_CLI_VERSION} or later`,
+      nextAction: `Upgrade Devin CLI to ${minimumSupportedVersion} or later`,
     });
   }
 
@@ -213,15 +250,22 @@ export async function diagnoseDevin(
     { cwd, env, timeoutMs },
   );
   // stdout/stderr は判定後に捨て、redacted 文言のみエラーへ載せる
-  const authentication = {
+  let authentication: DevinDiagnosis["authentication"] = {
     status: parseAuthStatus({
       exitCode: authProbe.exitCode,
       stdout: authProbe.stdout,
       stderr: authProbe.stderr,
-      timedOut: authProbe.timedOut,
+      timedOut: authProbe.timedOut || authProbe.outputTooLarge,
     }),
   };
-  if (authProbe.timedOut) {
+  if (authProbe.outputTooLarge) {
+    probeFailed = true;
+    authentication = { status: "unknown" };
+    errors.push({
+      code: "process_crashed",
+      message: "Devin authentication probe produced oversized output",
+    });
+  } else if (authProbe.timedOut) {
     probeTimedOut = true;
     errors.push({
       code: "timeout",
@@ -257,6 +301,20 @@ export async function diagnoseDevin(
     },
   );
 
+  const acpProbeDegraded =
+    acpHelpProbe.timedOut ||
+    rootHelpProbe.timedOut ||
+    acpHelpProbe.outputTooLarge ||
+    rootHelpProbe.outputTooLarge;
+
+  if (acpHelpProbe.outputTooLarge || rootHelpProbe.outputTooLarge) {
+    probeFailed = true;
+    errors.push({
+      code: "process_crashed",
+      message: "Devin ACP capability probe produced oversized output",
+    });
+  }
+
   if (acpHelpProbe.timedOut || rootHelpProbe.timedOut) {
     probeTimedOut = true;
     errors.push({
@@ -265,12 +323,26 @@ export async function diagnoseDevin(
     });
   }
 
+  // signal 終了（exitCode === null）は成功扱いにしない
+  if (
+    acpHelpProbe.exitCode === null &&
+    !acpHelpProbe.timedOut &&
+    !acpHelpProbe.outputTooLarge
+  ) {
+    probeFailed = true;
+    errors.push({
+      code: "process_crashed",
+      message: "Devin ACP capability probe terminated abnormally",
+    });
+  }
+
   const acp = {
     status: parseAcpCapability({
       rootHelp: rootHelpProbe.stdout,
+      rootHelpExitCode: rootHelpProbe.exitCode,
       acpHelp: acpHelpProbe.stdout || acpHelpProbe.stderr,
       acpExitCode: acpHelpProbe.exitCode,
-      timedOut: acpHelpProbe.timedOut || rootHelpProbe.timedOut,
+      timedOut: acpProbeDegraded,
     }),
   };
 
@@ -293,7 +365,8 @@ export async function diagnoseDevin(
     authentication.status === "authenticated" &&
     acp.status === "supported" &&
     !mcp.blocked &&
-    !probeTimedOut;
+    !probeTimedOut &&
+    !probeFailed;
 
   return {
     executable,

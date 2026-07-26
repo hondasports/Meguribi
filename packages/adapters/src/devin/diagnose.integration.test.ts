@@ -133,6 +133,40 @@ describe("diagnoseDevin integration with fake executable", () => {
     expect(result.runnable).toBe(true);
   });
 
+  it("does not treat ACP probe signal exit as supported", async () => {
+    const result = await diagnose("acp-signal");
+    expect(result.acp.status).not.toBe("supported");
+    expect(result.runnable).toBe(false);
+    expect(
+      result.errors.some(
+        (error) =>
+          error.code === "process_crashed" || error.code === "capability_missing",
+      ) || result.warnings.some((warning) => warning.code === "acp_unknown"),
+    ).toBe(true);
+  });
+
+  it("fails closed when version probe floods stdout", async () => {
+    const result = await diagnose("version-flood", { probeTimeoutMs: 5_000 });
+    expect(result.runnable).toBe(false);
+    expect(result.version.status).toBe("unknown");
+    expect(result.errors.some((error) => error.code === "process_crashed")).toBe(true);
+    expect(result.authentication.status).toBe("unknown");
+    expect(result.acp.status).toBe("unknown");
+  }, 15_000);
+
+  it("fails closed when ACP probe floods stdout", async () => {
+    const result = await diagnose("flood-output", { probeTimeoutMs: 5_000 });
+    expect(result.runnable).toBe(false);
+    expect(result.acp.status).not.toBe("supported");
+    expect(result.errors.some((error) => error.code === "process_crashed")).toBe(true);
+  }, 15_000);
+
+  it("rejects empty minimumSupportedVersion before probing", async () => {
+    await expect(diagnose("ok", { minimumSupportedVersion: "" })).rejects.toThrow(
+      /Invalid minimumSupportedVersion/,
+    );
+  });
+
   it("times out probes safely", async () => {
     const result = await diagnose("timeout", { probeTimeoutMs: 200 });
     expect(result.runnable).toBe(false);
@@ -160,6 +194,10 @@ describe("diagnoseDevin integration with fake executable", () => {
     expect(serialized).not.toContain("credential=abc");
     expect(serialized).not.toContain("client_secret=cs_123");
     expect(serialized).not.toContain("access_token=at_456");
+    expect(serialized).not.toContain("dcs_789");
+    expect(serialized).not.toContain("mat_012");
+    expect(serialized).not.toContain("DEVIN_CLIENT_SECRET=");
+    expect(serialized).not.toContain("MY_ACCESS_TOKEN=");
     expect(redactDiagnosticText(serialized)).toBe(serialized);
   });
 });

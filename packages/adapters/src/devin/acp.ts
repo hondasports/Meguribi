@@ -7,6 +7,7 @@ export type AcpStatus = "supported" | "unsupported" | "unknown";
 
 export function parseAcpCapability(input: {
   rootHelp?: string;
+  rootHelpExitCode?: number | null;
   acpHelp: string;
   acpExitCode: number | null;
   timedOut?: boolean;
@@ -14,7 +15,9 @@ export function parseAcpCapability(input: {
   if (input.timedOut) {
     return "unknown";
   }
-  if (input.acpExitCode !== null && input.acpExitCode !== 0) {
+
+  // exitCode === 0 のときだけ成功扱い。null（signal）や非ゼロは成功にしない。
+  if (input.acpExitCode !== 0) {
     const text = input.acpHelp.toLowerCase();
     if (
       /unknown\s+command/.test(text) ||
@@ -33,9 +36,10 @@ export function parseAcpCapability(input: {
     return "supported";
   }
 
-  if (input.rootHelp !== undefined) {
+  const rootOk = input.rootHelpExitCode === 0 && input.rootHelp !== undefined;
+  if (rootOk) {
     const rootMentionsAcp =
-      /\bacp\b/i.test(input.rootHelp) && /usage:\s*devin(?:\.exe)?\s+acp/i.test(input.rootHelp);
+      /\bacp\b/i.test(input.rootHelp!) && /usage:\s*devin(?:\.exe)?\s+acp/i.test(input.rootHelp!);
     if (rootMentionsAcp && mentionsAcp) {
       return "supported";
     }
