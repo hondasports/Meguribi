@@ -492,6 +492,47 @@ JSONL の各行は次の envelope を持つ。
 
 `termination.json` は `reason`、`stopReason`、`stdinClosed`、`cancelSent`、`gracefulExit`、`terminateSent`、`forceKillUsed`、`residualProcesses`、および分類済み `cleanupError` を保存します。残留 process が 0 と確認できない場合、実行を成功扱いにしません。
 
+### Devin ACP compatibility smoke 結果
+
+`experiments/devin-acp` の手動 smoke は `artifacts/devin-acp/<run-id>/compatibility-result.json` に machine-readable な結果を保存します。`artifactType` は `devin-acp-compatibility-smoke`、`schemaVersion` は `1` です。
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "devin-acp-compatibility-smoke",
+  "optIn": true,
+  "cliVersion": "3000.0.0-fake",
+  "acpCompatible": true,
+  "sessionStarted": true,
+  "promptCompleted": true,
+  "worktreeBoundaryOk": true,
+  "shutdownCompleted": true,
+  "status": "completed",
+  "warnings": [],
+  "changedFiles": ["README.md"],
+  "outsideChanges": [],
+  "residualProcesses": false,
+  "artifactDirectory": "artifacts/devin-acp/<run-id>",
+  "implementation": { ... }
+}
+```
+
+主要フィールド:
+
+- `optIn`: 実 Devin 起動の明示 opt-in があったか。
+- `cliVersion`: 診断または fake 実行で確認した Devin CLI version。
+- `acpCompatible`: ACP lifecycle、worktree 境界、shutdown、残留 process をすべて満たしたか。
+- `sessionStarted` / `promptCompleted` / `worktreeBoundaryOk` / `shutdownCompleted`: 各 gate の結果。
+- `status`: `completed` / `blocked` / `failed`。
+- `warnings`: MCP policy や adapter からの警告。
+- `error`: 失敗時の理由。
+- `changedFiles` / `outsideChanges`: Git authoritative changed files と worktree 外変更。
+- `residualProcesses`: 子/孫 process の残留有無。
+- `artifactDirectory`: 成果物保存先。
+- `implementation`: 本番 `DevinAcpAdapter` から返された `ImplementationResult`（opt-in なし・blocked 時は `null`）。
+
+secret、token、認証情報、全環境変数は含みません。partial/failure 時も `artifactDirectory`、`error`、`status` を保存し、成功扱いにしません。
+
 ### AgentError
 
 | code | 説明 |

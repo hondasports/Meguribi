@@ -5,7 +5,7 @@ const SECRET_PATTERNS: RegExp[] = [
 ];
 
 export function redactText(value: string): string {
-  return SECRET_PATTERNS.reduce((current, pattern) => current.replace(pattern, (match, name?: string) => {
+  return SECRET_PATTERNS.reduce((current, pattern) => current.replace(pattern, (_match, name?: string) => {
     if (name) {
       return `${name}=<REDACTED>`;
     }
