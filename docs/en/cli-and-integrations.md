@@ -470,6 +470,19 @@ Do not infer safety from the version string alone. Unparseable versions are `unk
 
 `meguribi run` / `resume` call `@meguribi/core` `runDelivery` / `resumeDelivery`. Devin preflight must use `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters`. The production facade is `createDevinAcpAdapter`, which exposes `implement` / `fix` as the `DevinAdapter` port. Codex `analyzeFailure` is not implemented yet; `buildFixInstruction` builds fix instructions from verification / review evidence.
 
+### 8.7 Fake Devin / ACP integration tests
+
+Normal CI never uses the real Devin CLI, GitHub, Codex SDK, external MCP, or production credentials. `packages/adapters/src/devin/fixtures/fake-devin.js` provides CLI-compatible entry points and selects ACP behavior through the following environment variable:
+
+```text
+MEGURIBI_FAKE_DEVIN_SCENARIO=success
+MEGURIBI_FAKE_DEVIN_SCENARIO=permission-denied
+MEGURIBI_FAKE_DEVIN_SCENARIO=mcp-detected
+MEGURIBI_FAKE_DEVIN_SCENARIO=timeout
+```
+
+The fake executable implements `--version`, `auth status`, `acp --help`, and `acp`. The existing `FAKE_DEVIN_MODE` and `FAKE_ACP_MODE` variables remain supported for lower-level component tests. When adding a scenario, update the fake Devin preflight/ACP mapping, fake ACP protocol/filesystem behavior, the relevant adapter integration test, and the process-boundary workflow test when the scenario crosses the workflow boundary. Each test uses an isolated temporary directory and verifies the residual process count in `termination.json` after shutdown.
+
 ## 9. GitHub integration
 
 The MVP uses `gh` CLI and checks version, authentication, and repository identity before work begins.

@@ -189,6 +189,10 @@ export interface FakeGitOptions {
     afterCalls: number;
     identity: { branch: string; headSha: string; remoteIdentity: string };
   };
+  diff?: {
+    changedFiles: readonly string[];
+    patch: string;
+  };
   now?: () => Date;
 }
 
@@ -229,7 +233,9 @@ export function createFakeGitAdapter(options: FakeGitOptions = {}): GitAdapter &
     },
     async getDiff() {
       calls.track("getDiff");
-      return { changedFiles: ["src/example.ts"], patch: "diff --git a/src/example.ts\n" };
+      return options.diff
+        ? { changedFiles: [...options.diff.changedFiles], patch: options.diff.patch }
+        : { changedFiles: ["src/example.ts"], patch: "diff --git a/src/example.ts\n" };
     },
     async commit(input) {
       calls.track("commit");

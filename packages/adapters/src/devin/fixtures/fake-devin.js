@@ -1,9 +1,48 @@
 #!/usr/bin/env node
 /**
- * Fake Devin CLI for diagnosis integration tests.
- * Controlled via FAKE_DEVIN_MODE. Does not start ACP sessions or network I/O.
+ * Scriptable fake Devin CLI for diagnosis and process-boundary integration tests.
+ *
+ * The public test contract is MEGURIBI_FAKE_DEVIN_SCENARIO. The older
+ * FAKE_DEVIN_MODE and FAKE_ACP_MODE variables remain supported by the existing
+ * component tests.
  */
-const mode = process.env.FAKE_DEVIN_MODE ?? "ok";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const requestedScenario = process.env.MEGURIBI_FAKE_DEVIN_SCENARIO;
+const scenarioToProbeMode = {
+  success: "ok",
+  "write-in-scope": "ok",
+  "write-untracked": "ok",
+  "write-protected": "ok",
+  "write-outside": "ok",
+  "symlink-escape": "ok",
+  "diff-limit": "ok",
+  "reported-files-mismatch": "ok",
+  "commit-created": "ok",
+  "branch-changed": "ok",
+  "secret-in-events": "ok",
+  "permission-denied": "ok",
+  "permission-timeout": "ok",
+  "mcp-detected": "ok",
+  "mcp-http-detected": "ok",
+  "unsupported-version": "version-unsupported",
+  "malformed-version": "version-unknown",
+  unauthenticated: "auth-unauthenticated",
+  "acp-missing": "no-acp",
+  "preflight-timeout": "timeout",
+  "version-exit-error": "version-exit-error",
+  "malformed-ndjson": "ok",
+  "capability-mismatch": "ok",
+  "session-fail": "ok",
+  cancel: "ok",
+  timeout: "ok",
+  "sigterm-ignore": "ok",
+  "process-tree": "ok",
+};
+const mode = requestedScenario
+  ? scenarioToProbeMode[requestedScenario] ?? requestedScenario
+  : process.env.FAKE_DEVIN_MODE ?? "ok";
 const args = process.argv.slice(2);
 
 function write(stream, text) {
@@ -21,7 +60,7 @@ if (mode === "missing") {
   process.exit(127);
 }
 
-if (mode === "timeout") {
+if (mode === "timeout" && args[0] !== "acp") {
   sleep(60_000);
   process.exit(0);
 }
@@ -129,10 +168,60 @@ if (args[0] === "acp" && args[1] === "--help") {
   }
 }
 
-if (mode === "version-flood" || mode === "flood-output") {
+if (args[0] === "acp") {
+  const acpServer = fileURLToPath(new URL("./fake-acp-server.js", import.meta.url));
+  const scenarioToAcpMode = {
+    success: "write-in-scope",
+    "write-in-scope": "write-in-scope",
+    "write-untracked": "write-untracked",
+    "write-protected": "write-protected",
+    "write-outside": "write-outside",
+    "symlink-escape": "symlink-escape",
+    "diff-limit": "diff-limit",
+    "reported-files-mismatch": "reported-files-mismatch",
+    "commit-created": "commit-created",
+    "branch-changed": "branch-changed",
+    "secret-in-events": "secret-in-message",
+    "permission-denied": "permission-denied",
+    "permission-timeout": "permission-timeout",
+    "mcp-detected": "mcp-stderr",
+    "mcp-http-detected": "mcp-http-stderr",
+    "malformed-ndjson": "malformed",
+    "capability-mismatch": "capability-mismatch",
+    "session-fail": "session-fail",
+    cancel: "prompt-hang",
+    timeout: "prompt-hang",
+    "sigterm-ignore": "ignore-sigterm",
+    "process-tree": "spawn-grandchildren",
+  };
+  const acpMode = requestedScenario
+    ? scenarioToAcpMode[requestedScenario] ?? requestedScenario
+    : process.env.FAKE_ACP_MODE ?? "success";
+  const child = spawn(process.execPath, [acpServer], {
+    cwd: process.cwd(),
+    env: { ...process.env, FAKE_ACP_MODE: acpMode },
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  let stopping = false;
+  const forwardSignal = (signal) => {
+    if (stopping) return;
+    stopping = true;
+    child.kill(signal);
+  };
+  process.once("SIGTERM", () => forwardSignal("SIGTERM"));
+  process.once("SIGINT", () => forwardSignal("SIGINT"));
+  child.once("error", () => process.exit(1));
+  child.once("exit", (code, signal) => {
+    if (signal) process.exit(1);
+    process.exit(code ?? 1);
+  });
+}
+
+if (args[0] !== "acp" && (mode === "version-flood" || mode === "flood-output")) {
   // 大量出力を flush してから自然終了させ、pipe の未送信データを捨てない。
   process.exitCode = 0;
-} else {
+} else if (args[0] !== "acp") {
   write(process.stderr, `unexpected args: ${args.join(" ")}\n`);
   process.exit(1);
 }
