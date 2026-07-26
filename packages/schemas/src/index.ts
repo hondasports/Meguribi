@@ -25,12 +25,24 @@ export type {
   ReviewContent,
 } from "./codex-artifact.js";
 export {
+  AcpDiagnosisSchema,
+  AgentDiagnosisSchema,
+  AuthenticationDiagnosisSchema,
   DiagnosisErrorCodeSchema,
   DiagnosisErrorSchema,
   DiagnosisWarningCodeSchema,
   DiagnosisWarningSchema,
-  DevinDiagnosisSchema,
+  ExecutableDiagnosisSchema,
   InheritedMcpPolicySchema,
+  VersionDiagnosisSchema,
+} from "./agent-diagnosis.js";
+export {
+  DiagnosisErrorCodeSchema as DevinDiagnosisErrorCodeSchema,
+  DiagnosisErrorSchema as DevinDiagnosisErrorSchema,
+  DiagnosisWarningCodeSchema as DevinDiagnosisWarningCodeSchema,
+  DiagnosisWarningSchema as DevinDiagnosisWarningSchema,
+  DevinDiagnosisSchema,
+  InheritedMcpPolicySchema as DevinInheritedMcpPolicySchema,
 } from "./devin-diagnosis.js";
 export {
   AgentTerminationResultSchema,

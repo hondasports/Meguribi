@@ -14,7 +14,7 @@ export type {
   UntrustedSource,
 } from "./implementation-context.js";
 export type {
-  DevinAdapter,
+  AgentAdapter,
   FixInput,
   ImplementationArtifactPaths,
   ImplementationGitBoundary,
@@ -22,6 +22,16 @@ export type {
   ImplementationPermissionDecision,
   ImplementationResult,
   ImplementationStatus,
+} from "./agent-adapter.js";
+export type {
+  DevinAdapter,
+  FixInput as DevinFixInput,
+  ImplementationArtifactPaths as DevinImplementationArtifactPaths,
+  ImplementationGitBoundary as DevinImplementationGitBoundary,
+  ImplementationInput as DevinImplementationInput,
+  ImplementationPermissionDecision as DevinImplementationPermissionDecision,
+  ImplementationResult as DevinImplementationResult,
+  ImplementationStatus as DevinImplementationStatus,
 } from "./devin-adapter.js";
 export type {
   DeliveryDependencies,
@@ -73,10 +83,17 @@ export type {
   ReviewStatus,
 } from "./codex-artifact.js";
 export type {
+  AgentDiagnosis,
+  AcpDiagnosis,
+  AuthenticationDiagnosis,
   DiagnosisError,
   DiagnosisErrorCode,
   DiagnosisWarning,
   DiagnosisWarningCode,
+  ExecutableDiagnosis,
+  VersionDiagnosis,
+} from "./agent-diagnosis.js";
+export type {
   DevinAcpDiagnosis,
   DevinAuthenticationDiagnosis,
   DevinDiagnosis,

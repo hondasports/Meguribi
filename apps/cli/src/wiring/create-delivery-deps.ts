@@ -140,10 +140,21 @@ export async function createDeliveryDeps(
       github: createFakeGitHubAdapter(),
       git: createFakeGitAdapter(),
       codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+      implementer: devin,
       devin,
       verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
       policy: createDefaultPolicyEngine(),
       runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+      async assertImplementerReady() {
+        await preflightDevin({
+          executable: config.config.executable,
+          inheritedMcpPolicy,
+          nonInteractive,
+          cwd,
+          probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+          minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+        });
+      },
       async assertDevinReady() {
         await preflightDevin({
           executable: config.config.executable,
