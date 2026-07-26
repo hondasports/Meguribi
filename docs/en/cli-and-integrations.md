@@ -483,6 +483,25 @@ MEGURIBI_FAKE_DEVIN_SCENARIO=timeout
 
 The fake executable implements `--version`, `auth status`, `acp --help`, and `acp`. The existing `FAKE_DEVIN_MODE` and `FAKE_ACP_MODE` variables remain supported for lower-level component tests. When adding a scenario, update the fake Devin preflight/ACP mapping, fake ACP protocol/filesystem behavior, the relevant adapter integration test, and the process-boundary workflow test when the scenario crosses the workflow boundary. Each test uses an isolated temporary directory and verifies the residual process count in `termination.json` after shutdown.
 
+## 8.7 Real Devin CLI compatibility smoke
+
+The Issue #24 compatibility smoke is a manual check separated from the normal delivery workflow, `pnpm test`, and CI. It uses the dedicated `experiments/devin-acp` script and exercises the existing `DevinAcpAdapter` facade, a temporary Git repository, and an Issue-like worktree through the ACP lifecycle.
+
+```powershell
+$env:MEGURIBI_RUN_REAL_DEVIN_SMOKE = "1"
+pnpm smoke:devin-acp
+```
+
+The smoke refuses to start the external agent or stops during the run when:
+
+- explicit opt-in is missing;
+- Devin CLI is unauthenticated, does not support ACP, or cannot be diagnosed;
+- inherited MCP handling is not explicit for non-interactive execution;
+- an outside-worktree write, protected-path change, or Git boundary violation is detected; or
+- stdin close, SIGTERM, force termination when required, or residual-process checks do not complete.
+
+Only a temporary fixture is used. The smoke does not commit, push, create PRs, update Issues, modify a real repository, or connect to external MCP servers. Devin configuration and authentication cannot be guaranteed to be isolated simultaneously, so credentials are never copied or stored and the smoke does not claim complete MCP isolation. `compatibility-result.json` and the raw/normalized event artifacts, together with their exit code, are the evidence for the result.
+
 ## 9. GitHub integration
 
 The MVP uses `gh` CLI and checks version, authentication, and repository identity before work begins.

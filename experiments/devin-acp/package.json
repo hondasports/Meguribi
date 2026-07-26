@@ -12,6 +12,8 @@
     "test": "vitest run",
     "lint": "eslint . --max-warnings=0",
     "smoke": "tsx src/cli.ts",
+    "smoke:devin-acp": "tsx src/compatibility-smoke.ts",
+    "smoke:devin-acp:fake": "tsx src/compatibility-smoke.ts --fake",
     "diagnose": "tsx src/diagnose-cli.ts"
   },
   "dependencies": {
