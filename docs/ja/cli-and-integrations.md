@@ -493,6 +493,25 @@ MEGURIBI_FAKE_DEVIN_SCENARIO=timeout
 
 fake executable は `--version`、`auth status`、`acp --help`、`acp` を実装します。既存の下位コンポーネントテストで使う `FAKE_DEVIN_MODE` と `FAKE_ACP_MODE` も互換のため利用できます。新しい scenario を追加する場合は、fake Devin の preflight/ACP マッピング、fake ACP の protocol・filesystem 動作、対象 adapter の integration test、workflow を横断する場合の process-boundary test を同じ変更で追加します。各 test は一時 directory を使い、終了後に `termination.json` の残留プロセス数を確認します。
 
+## 8.7 実 Devin CLI compatibility smoke
+
+Issue #24 の実機 compatibility smoke は、通常の delivery workflow・`pnpm test`・CI から分離した手動確認です。`experiments/devin-acp` の専用 script を使い、既存の `DevinAcpAdapter` facade、temporary Git repository、Issue 模擬 worktree を通して ACP lifecycle を確認します。
+
+```powershell
+$env:MEGURIBI_RUN_REAL_DEVIN_SMOKE = "1"
+pnpm smoke:devin-acp
+```
+
+次の場合は外部agentを起動せず、または途中で停止します。
+
+- 明示opt-inがない。
+- Devin CLIが未認証、ACP非対応、または診断不能である。
+- 非対話実行で継承MCPの扱いが明示されていない。
+- worktree外変更、protected path変更、Git境界違反を検出した。
+- stdin close、SIGTERM、必要時force termination、process残留確認が完了しない。
+
+実行対象は一時fixtureだけです。commit、push、PR、Issue更新、実在repositoryの変更、外部MCP接続は行いません。保存済みDevin設定と認証の完全な同時隔離は保証できないため、credentialをコピー・保存せず、MCP完全隔離とも表現しません。`compatibility-result.json` と raw/normalized event artifact の exit code・内容を結果の根拠にします。
+
 ## 9. GitHub 連携
 
 MVP は `gh` CLI を利用し、実行前に version、認証、対象リポジトリを確認します。

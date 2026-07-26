@@ -10,6 +10,8 @@
     "format:check": "oxfmt --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "smoke:devin-acp": "pnpm --dir experiments/devin-acp smoke:devin-acp",
+    "smoke:devin-acp:fake": "pnpm --dir experiments/devin-acp smoke:devin-acp:fake",
     "build": "pnpm -r build"
   },
   "devDependencies": {

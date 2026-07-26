@@ -36,10 +36,25 @@ pnpm smoke -- --fake --mcp-http --allow-fake-mcp
 
 設定探索元を切り替える場合は、`DEVIN_ACP_VARIANT` に `inherited`、`config-only`、`isolated`、`project`、`local`、`agent-config` のいずれかを指定します。実機 Devin smoke は保存済み設定を誤って利用しないため `isolated` variant だけを許可します。
 
-認証済み Devin CLI を使う実機 smoke:
+認証済み Devin CLI を使う既存PoC smoke:
 
 ```powershell
 pnpm smoke
+```
+
+本番 `DevinAcpAdapter` facadeを通る compatibility smoke:
+
+```powershell
+$env:MEGURIBI_RUN_REAL_DEVIN_SMOKE = "1"
+pnpm smoke:devin-acp
+```
+
+実機smokeは明示opt-inがない限り外部agentを起動せず、未認証・ACP非対応・MCP policy不許可・worktree境界違反・shutdown失敗のいずれかで安全側に停止します。実在プロダクトrepository、commit、push、PR、Issue更新、外部MCP接続は行いません。Devin利用料金、ネットワーク通信、保存済みMCP設定継承の可能性があるため、実行前に結果と注意点を確認してください。
+
+fake ACPを本番facade経由で確認する場合:
+
+```powershell
+pnpm smoke:devin-acp:fake
 ```
 
 CLI version / help と認証状態だけを機械診断する場合:
@@ -48,7 +63,7 @@ CLI version / help と認証状態だけを機械診断する場合:
 pnpm diagnose
 ```
 
-一時 fixture の `README.md` だけを編集対象として許可します。Git、terminal、network、secret 関連の permission request は拒否します。生成物はリポジトリルートの `artifacts/devin-acp/<run-id>/` に保存され、Git 管理対象外です。
+一時 fixture の `README.md` だけを編集対象として許可します。Git、terminal、network、secret 関連の permission request は拒否します。生成物はリポジトリルートの `artifacts/devin-acp/<run-id>/` に保存され、Git 管理対象外です。compatibility smokeでは `compatibility-result.json`、`raw-events.jsonl`、`events.jsonl`、`session.json`、`termination.json`、`git-boundary.json`、`stderr.log`、`devin-prompt.md` を確認できます。認証ファイル、token、cookie、全環境変数は保存しません。
 
 ## 通信と終了
 
