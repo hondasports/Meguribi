@@ -180,7 +180,7 @@ AI の自己申告とは独立して、設定されたコマンドを実行し�
 - test
 - build
 
-各コマンドの開始時刻、終了時刻、終了コード、ログファイルを保存します。
+各コマンドは `shell: false` で executable + argv として起動し、既定の per-command timeout（30分）を超えたら fail-closed で `timedOut` を記録します。Windows では PATH と `PATHEXT` 順で実行ファイルを解決し、拡張子なし名へ無条件に `.cmd` を付けません。開始時刻、終了時刻、終了コード、ログファイルを保存します。
 
 ### PolicyEngine
 

@@ -283,17 +283,17 @@ The prompt `FixContext` keeps the sourced previous attempt and fix instruction i
   "commands": [
     {
       "name": "test",
-      "command": ["pnpm", "test"],
       "exitCode": 0,
-      "durationMs": 12000,
-      "stdoutLog": "logs/verify-test.log",
-      "stderrLog": null
+      "startedAt": "...",
+      "finishedAt": "...",
+      "logPath": "logs/verify-test.log",
+      "timedOut": false
     }
-  ],
-  "startedAt": "...",
-  "completedAt": "..."
+  ]
 }
 ```
+
+`timedOut` is optional. When a command exceeds its per-command timeout it is `true`, `exitCode` is `null`, and overall `success` is `false`.
 
 ## 11. `review.json`
 

@@ -238,6 +238,7 @@ async function runVerifyReviewPublish(input: {
         worktreePath: state.worktreePath,
         commands: delivery.verifyCommands,
         abortSignal: delivery.abortSignal,
+        timeoutMs: delivery.verifyTimeoutMs,
       });
     } catch (error) {
       if (isCancelledError(error) || delivery.abortSignal?.aborted) {
@@ -595,6 +596,7 @@ async function maybeFix(input: {
         worktreePath: state.worktreePath,
         commands: delivery.verifyCommands,
         abortSignal: delivery.abortSignal,
+        timeoutMs: delivery.verifyTimeoutMs,
       });
     } catch (error) {
       if (isCancelledError(error) || delivery.abortSignal?.aborted) {
