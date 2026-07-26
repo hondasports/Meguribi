@@ -1,13 +1,21 @@
 import * as acp from "@agentclientprotocol/sdk";
 import type { DevinDiagnosis } from "@meguribi/core";
-import {
-  ProcessError,
-  ProcessRunner,
-  type ManagedProcess,
-  type ProcessExit,
-} from "@meguribi/process";
+import { ProcessRunner, type ManagedProcess, type ProcessExit } from "@meguribi/process";
 import { assertDevinRunnable } from "./diagnose.js";
-import { DevinAcpTransportError } from "./transport-error.js";
+import {
+  DevinAcpTransportError,
+  toDevinAcpTransportError,
+} from "./transport-error.js";
+
+/**
+ * How long a turn stays open against the session process lifecycle after ACP
+ * reports end_turn, before `turn_completed` is committed. Unexpected process
+ * exit during this window is `process_crashed` (fail-fast when exit is earlier).
+ *
+ * This is not shutdown grace; it binds turn completion to process liveness on
+ * the same lifecycle watcher that runs from spawn until intentional terminate.
+ */
+export const DEFAULT_POST_TURN_LIVENESS_MS = 500;
 
 export interface StartDevinAcpInput {
   executable: string;
@@ -22,6 +30,11 @@ export interface StartDevinAcpInput {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   startupTimeoutMs: number;
+  /**
+   * Session-lifecycle observation window after prompt response before committing
+   * `turn_completed`. Defaults to {@link DEFAULT_POST_TURN_LIVENESS_MS}.
+   */
+  postTurnLivenessMs?: number;
   diagnosis: DevinDiagnosis;
   runner?: ProcessRunner;
   clientInfo?: { name: string; version: string };
@@ -82,6 +95,108 @@ type LiveHandlers = {
   ) => acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse>;
 };
 
+/**
+ * Process exit state for one ACP connection, from spawn until intentional terminate.
+ */
+class AcpProcessLifecycle {
+  private intentionalShutdown = false;
+  private exitError: DevinAcpTransportError | undefined;
+  private readonly listeners = new Set<(error: DevinAcpTransportError) => void>();
+
+  constructor(processHandle: ManagedProcess) {
+    void processHandle.waitForExit().then(
+      (exit) => {
+        this.recordUnexpected(
+          new DevinAcpTransportError(
+            "process_crashed",
+            `ACP process exited unexpectedly (code=${exit.code}, signal=${exit.signal})`,
+          ),
+        );
+      },
+      (error: unknown) => {
+        this.recordUnexpected(toDevinAcpTransportError(error, "spawn_failure"));
+      },
+    );
+  }
+
+  markIntentionalShutdown(): void {
+    this.intentionalShutdown = true;
+  }
+
+  get unexpectedError(): DevinAcpTransportError | undefined {
+    return this.intentionalShutdown ? undefined : this.exitError;
+  }
+
+  throwIfDead(): void {
+    if (this.unexpectedError) {
+      throw this.unexpectedError;
+    }
+  }
+
+  onUnexpectedExit(listener: (error: DevinAcpTransportError) => void): () => void {
+    if (this.unexpectedError) {
+      listener(this.unexpectedError);
+      return () => undefined;
+    }
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Keep the active turn open against this session lifecycle until either the
+   * process exits unexpectedly or `aliveWindowMs` elapses while still alive.
+   * Crashes fail-fast (do not wait out the full window).
+   */
+  async awaitAliveOrCrash(aliveWindowMs: number): Promise<void> {
+    this.throwIfDead();
+    if (aliveWindowMs <= 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      this.throwIfDead();
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        fn();
+      };
+
+      const unsubscribe = this.onUnexpectedExit((error) => {
+        finish(() => reject(error));
+      });
+
+      const timer = setTimeout(() => {
+        finish(() => {
+          try {
+            this.throwIfDead();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }, aliveWindowMs);
+    });
+  }
+
+  private recordUnexpected(error: DevinAcpTransportError): void {
+    if (this.intentionalShutdown || this.exitError) {
+      return;
+    }
+    this.exitError = error;
+    for (const listener of this.listeners) {
+      listener(error);
+    }
+  }
+}
+
 function asyncIterableToReadableStream(
   source: AsyncIterable<Uint8Array>,
 ): ReadableStream<Uint8Array> {
@@ -141,61 +256,6 @@ async function waitMs(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Observe whether the ACP process exited shortly after a prompt response.
- * A healthy ACP server stays alive; an early exit means the turn must not be
- * treated as a successful completion.
- */
-async function observeUnexpectedExit(
-  processHandle: ManagedProcess,
-  graceMs: number,
-): Promise<ProcessExit | undefined> {
-  return Promise.race([
-    processHandle.waitForExit().then((exit) => exit),
-    waitMs(graceMs).then(() => undefined),
-  ]);
-}
-
-function toTransportError(
-  error: unknown,
-  fallback: DevinAcpTransportError["code"],
-): DevinAcpTransportError {
-  if (error instanceof DevinAcpTransportError) {
-    return error;
-  }
-  if (error instanceof ProcessError) {
-    if (error.code === "executable_not_found") {
-      return new DevinAcpTransportError("spawn_failure", error.message);
-    }
-    if (error.code === "timeout") {
-      return new DevinAcpTransportError("startup_timeout", error.message, true);
-    }
-    if (error.code === "cancelled") {
-      return new DevinAcpTransportError("cancelled", error.message);
-    }
-    if (error.code === "process_crashed") {
-      return new DevinAcpTransportError("process_crashed", error.message);
-    }
-  }
-  const message = error instanceof Error ? error.message : "Unknown ACP transport error";
-  if (/capability mismatch/i.test(message)) {
-    return new DevinAcpTransportError("capability_mismatch", message);
-  }
-  if (/session creation failed/i.test(message)) {
-    return new DevinAcpTransportError("session_creation_failure", message);
-  }
-  if (/timeout/i.test(message)) {
-    return new DevinAcpTransportError("startup_timeout", message, true);
-  }
-  if (/JSON|NDJSON|parse|malformed/i.test(message)) {
-    return new DevinAcpTransportError("malformed_message", message);
-  }
-  if (/initialize/i.test(message)) {
-    return new DevinAcpTransportError("initialize_failure", message);
-  }
-  return new DevinAcpTransportError(fallback, message);
-}
-
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   try {
@@ -231,6 +291,8 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
     private readonly processHandle: ManagedProcess,
     private readonly stderr: { getText: () => string; done: Promise<void> },
     private readonly handlers: LiveHandlers,
+    private readonly lifecycle: AcpProcessLifecycle,
+    private readonly postTurnLivenessMs: number,
   ) {}
 
   stderrText(): string {
@@ -247,6 +309,8 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
   }
 
   async *prompt(input: { content: string }): AsyncIterable<RawDevinAcpEvent> {
+    this.lifecycle.throwIfDead();
+
     const queue: Array<RawDevinAcpEvent | { kind: "error"; error: DevinAcpTransportError }> = [];
     let wake: (() => void) | undefined;
     let settled = false;
@@ -272,6 +336,10 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
         wake = undefined;
       }
     };
+
+    const unsubscribeExit = this.lifecycle.onUnexpectedExit((error) => {
+      push({ kind: "error", error });
+    });
 
     this.handlers.onSessionUpdate = (notification) => {
       const at = new Date().toISOString();
@@ -316,7 +384,7 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
       })
       .catch((error: unknown) => {
         settled = true;
-        push({ kind: "error", error: toTransportError(error, "prompt_send_failure") });
+        push({ kind: "error", error: toDevinAcpTransportError(error, "prompt_send_failure") });
         wake?.();
       });
 
@@ -333,16 +401,10 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
       }
       await promptPromise;
 
-      // ACP servers normally remain alive after a turn. An immediate exit after
-      // a successful prompt response (e.g. crash-mid-prompt) must not become
-      // turn.completed / end_turn success.
-      const unexpectedExit = await observeUnexpectedExit(this.processHandle, 150);
-      if (unexpectedExit) {
-        throw new DevinAcpTransportError(
-          "process_crashed",
-          `ACP process exited after prompt response (code=${unexpectedExit.code}, signal=${unexpectedExit.signal})`,
-        );
-      }
+      // Bind turn completion to the session process lifecycle: an unexpected
+      // exit after end_turn (immediate or delayed within the liveness window)
+      // must not become turn.completed.
+      await this.lifecycle.awaitAliveOrCrash(this.postTurnLivenessMs);
 
       yield {
         kind: "turn_completed",
@@ -352,8 +414,9 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
         ...(stopReason ? { stopReason } : {}),
       };
     } catch (error) {
-      throw toTransportError(error, "prompt_send_failure");
+      throw toDevinAcpTransportError(error, "prompt_send_failure");
     } finally {
+      unsubscribeExit();
       this.handlers.onSessionUpdate = () => undefined;
       this.handlers.onPermission = () => ({ outcome: { outcome: "cancelled" } });
     }
@@ -363,7 +426,7 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
     try {
       await this.connection.cancel({ sessionId: this.sessionId });
     } catch (error) {
-      throw toTransportError(error, "cancelled");
+      throw toDevinAcpTransportError(error, "cancelled");
     }
   }
 
@@ -383,6 +446,7 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
   }
 
   async terminate(graceMs = 1_000): Promise<ProcessExit> {
+    this.lifecycle.markIntentionalShutdown();
     return this.processHandle.terminateTree({ graceMs });
   }
 }
@@ -408,9 +472,11 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
         env: input.env ?? process.env,
       });
     } catch (error) {
-      throw toTransportError(error, "spawn_failure");
+      throw toDevinAcpTransportError(error, "spawn_failure");
     }
 
+    const lifecycle = new AcpProcessLifecycle(processHandle);
+    const postTurnLivenessMs = input.postTurnLivenessMs ?? DEFAULT_POST_TURN_LIVENESS_MS;
     const stderr = await collectStderr(processHandle);
     const handlers: LiveHandlers = {
       onSessionUpdate: () => undefined,
@@ -432,24 +498,9 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
       ),
     );
 
-    let processExitedEarly: DevinAcpTransportError | undefined;
-    void processHandle.waitForExit().then(
-      (exit) => {
-        processExitedEarly = new DevinAcpTransportError(
-          "process_crashed",
-          `ACP process exited before protocol was ready (code=${exit.code}, signal=${exit.signal})`,
-        );
-      },
-      (error: unknown) => {
-        processExitedEarly = toTransportError(error, "spawn_failure");
-      },
-    );
-
     const guard = async <T>(promise: Promise<T>): Promise<T> => {
       const result = await promise;
-      if (processExitedEarly) {
-        throw processExitedEarly;
-      }
+      lifecycle.throwIfDead();
       return result;
     };
 
@@ -499,10 +550,13 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
         processHandle,
         stderr,
         handlers,
+        lifecycle,
+        postTurnLivenessMs,
       );
     } catch (error) {
+      lifecycle.markIntentionalShutdown();
       await processHandle.terminateTree({ graceMs: 500 }).catch(() => undefined);
-      throw toTransportError(error, "initialize_failure");
+      throw toDevinAcpTransportError(error, "initialize_failure");
     }
   }
 }

@@ -52,12 +52,20 @@ export {
 export type { AcpSessionNotificationPayload, AcpSessionUpdatePayload } from "./events.js";
 export { startDevinAcpSession } from "./session.js";
 export type { DevinAcpSession, StartDevinAcpSessionInput } from "./session.js";
-export { createDevinAcpTransport, DevinAcpTransportImpl } from "./transport.js";
+export {
+  createDevinAcpTransport,
+  DevinAcpTransportImpl,
+  DEFAULT_POST_TURN_LIVENESS_MS,
+} from "./transport.js";
 export type {
   DevinAcpConnection,
   DevinAcpTransport,
   RawDevinAcpEvent,
   StartDevinAcpInput,
 } from "./transport.js";
-export { DevinAcpTransportError, isDevinAcpTransportError } from "./transport-error.js";
+export {
+  DevinAcpTransportError,
+  isDevinAcpTransportError,
+  toDevinAcpTransportError,
+} from "./transport-error.js";
 export type { DevinAcpTransportErrorCode } from "./transport-error.js";

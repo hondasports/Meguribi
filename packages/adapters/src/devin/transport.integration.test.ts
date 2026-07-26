@@ -52,7 +52,11 @@ async function tempCwd(): Promise<string> {
   return dir;
 }
 
-async function start(mode: string, overrides: { startupTimeoutMs?: number; diagnosis?: DevinDiagnosis } = {}) {
+async function start(mode: string, overrides: {
+  startupTimeoutMs?: number;
+  diagnosis?: DevinDiagnosis;
+  postTurnLivenessMs?: number;
+} = {}) {
   const cwd = await tempCwd();
   const transport = createDevinAcpTransport();
   const connection = await transport.start({
@@ -62,6 +66,8 @@ async function start(mode: string, overrides: { startupTimeoutMs?: number; diagn
     cwd,
     env: { ...process.env, FAKE_ACP_MODE: mode },
     startupTimeoutMs: overrides.startupTimeoutMs ?? 5_000,
+    // Keep happy-path tests fast; crash tests override this upward.
+    postTurnLivenessMs: overrides.postTurnLivenessMs ?? 50,
     diagnosis: overrides.diagnosis ?? runnableDiagnosis(),
     runner: new ProcessRunner(),
   });
@@ -144,13 +150,17 @@ describe("DevinAcpTransport integration", () => {
 
   it("classifies malformed NDJSON during startup", async () => {
     await expect(start("malformed")).rejects.toMatchObject({
-      code: expect.stringMatching(/malformed_message|process_crashed|initialize_failure/),
+      code: expect.stringMatching(
+        /malformed_message|process_crashed|initialize_failure|connection_closed/,
+      ),
     });
   });
 
-  it("surfaces connection close during prompt", async () => {
+  it("surfaces connection close during prompt as connection_closed", async () => {
     const { connection } = await start("connection-close-mid-prompt");
-    await expect(drainPrompt(connection)).rejects.toBeInstanceOf(DevinAcpTransportError);
+    await expect(drainPrompt(connection)).rejects.toMatchObject({
+      code: "connection_closed",
+    });
     await connection.terminate(500).catch(() => undefined);
   });
 
@@ -163,7 +173,17 @@ describe("DevinAcpTransport integration", () => {
   });
 
   it("does not treat crash-after-prompt-response as turn.completed", async () => {
-    const { connection } = await start("crash-mid-prompt");
+    const { connection } = await start("crash-mid-prompt", { postTurnLivenessMs: 300 });
+    await expect(drainPrompt(connection)).rejects.toMatchObject({
+      code: "process_crashed",
+    });
+    await connection.terminate(500).catch(() => undefined);
+  });
+
+  it("does not treat delayed post-prompt crash as turn.completed", async () => {
+    const { connection } = await start("crash-delayed-after-prompt", {
+      postTurnLivenessMs: 500,
+    });
     await expect(drainPrompt(connection)).rejects.toMatchObject({
       code: "process_crashed",
     });

@@ -55,6 +55,7 @@ async function collectEvents(
     cwd,
     env: { ...process.env, FAKE_ACP_MODE: mode },
     startupTimeoutMs: 5_000,
+    postTurnLivenessMs: 50,
     diagnosis: runnableDiagnosis(),
     runner: new ProcessRunner(),
     artifactRoot,

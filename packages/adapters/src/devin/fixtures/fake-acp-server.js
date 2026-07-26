@@ -77,6 +77,13 @@ async function handlePrompt(id, params) {
     process.exit(23);
   }
 
+  if (mode === "crash-delayed-after-prompt") {
+    writeStderr("diagnostic before delayed crash\n");
+    respond(id, { stopReason: "end_turn" });
+    await wait(250);
+    process.exit(27);
+  }
+
   if (mode === "connection-close-mid-prompt") {
     notify("session/update", {
       sessionId,

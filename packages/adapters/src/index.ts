@@ -1,6 +1,7 @@
 export {
   assertDevinRunnable,
   createDevinAcpTransport,
+  DEFAULT_POST_TURN_LIVENESS_MS,
   DevinAcpTransportError,
   DevinAcpTransportImpl,
   DevinAgentArtifactStore,
@@ -25,6 +26,7 @@ export {
   redactJsonValue,
   sanitizeDiagnosticDisplayText,
   startDevinAcpSession,
+  toDevinAcpTransportError,
 } from "./devin/index.js";
 export type {
   AcpSessionNotificationPayload,
