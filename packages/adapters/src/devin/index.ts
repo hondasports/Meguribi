@@ -13,8 +13,10 @@ export {
 export type { DiagnoseDevinOptions } from "./diagnose.js";
 export {
   captureCommand,
+  DEFAULT_OVERFLOW_STOP_TIMEOUT_MS,
   DEFAULT_PROBE_OUTPUT_MAX_BYTES,
   ProbeOutputTooLargeError,
+  ProbeStopFailedError,
 } from "./capture.js";
 export type { CapturedCommandResult } from "./capture.js";
 export { formatDevinDiagnosisHuman } from "./format.js";
