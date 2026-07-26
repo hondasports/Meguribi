@@ -535,7 +535,7 @@ JSONL の各行は次の envelope を持つ。
 - `executedAt`: smoke 実行開始時の ISO 8601 timestamp。
 - `implementation`: 本番 `DevinAcpAdapter` から返された `ImplementationResult`（opt-in なし・blocked 時は `null`）。
 
-secret、token、認証情報、全環境変数は含みません。partial/failure 時も `artifactDirectory`、`error`、`status` を保存し、成功扱いにしません。
+secret、token、認証情報、全環境変数は含みません。`runCompatibilitySmoke` の戻り値（および CLI stdout）にも同じ redaction を適用します。partial/failure 時も `artifactDirectory`、`error`、`status` を保存し、成功扱いにしません。
 
 ### AgentError
 
