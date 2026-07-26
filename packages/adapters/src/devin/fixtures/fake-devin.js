@@ -38,13 +38,20 @@ if (args[0] === "--version") {
   if (mode === "version-secret") {
     write(
       process.stdout,
-      "devin 3000.2.17 token=supersecrettoken123 credential=abc authorization=BearerX client_secret=cs_123 access_token=at_456 https://mcp.example.com/sse\n",
+      "devin 3000.2.17 token=supersecrettoken123 credential=abc authorization=BearerX client_secret=cs_123 access_token=at_456 DEVIN_CLIENT_SECRET=dcs_789 MY_ACCESS_TOKEN=mat_012 https://mcp.example.com/sse\n",
     );
     process.exit(0);
   }
   if (mode === "version-exit-error") {
     write(process.stdout, "devin 3000.2.17\n");
     process.exit(1);
+  }
+  if (mode === "version-flood") {
+    // 上限を超える出力を小チャンクで継続。親が terminate するまで書く。
+    const chunk = "A".repeat(8 * 1024);
+    for (;;) {
+      process.stdout.write(chunk);
+    }
   }
   write(process.stdout, "devin 3000.2.17\n");
   process.exit(0);
@@ -91,6 +98,26 @@ if (args[0] === "acp" && args[1] === "--help") {
   if (mode === "acp-help-changed") {
     write(process.stdout, "acp — agent client protocol over stdio\nOptions:\n  --cwd <path>\n");
     process.exit(0);
+  }
+  if (mode === "acp-signal") {
+    // help を出したあとに signal 終了させる（exitCode === null 相当）
+    write(
+      process.stdout,
+      "Usage: devin acp\n\nStart an ACP stdio session for agent clients.\n",
+    );
+    try {
+      process.kill(process.pid, "SIGTERM");
+    } catch {
+      process.exit(1);
+    }
+    sleep(5_000);
+    process.exit(1);
+  }
+  if (mode === "flood-output") {
+    const chunk = "A".repeat(8 * 1024);
+    for (;;) {
+      process.stdout.write(chunk);
+    }
   }
   write(
     process.stdout,

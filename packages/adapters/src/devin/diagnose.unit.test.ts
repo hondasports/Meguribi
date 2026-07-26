@@ -4,7 +4,12 @@ import { parseAuthStatus } from "./auth.js";
 import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
 import { parseDevinVersionOutput, compareSemver } from "./version.js";
 import { formatDevinDiagnosisHuman } from "./format.js";
-import { assertDevinRunnable, DevinNotRunnableError } from "./diagnose.js";
+import {
+  assertDevinRunnable,
+  diagnoseDevin,
+  DevinNotRunnableError,
+  InvalidMinimumSupportedVersionError,
+} from "./diagnose.js";
 import type { DevinDiagnosis } from "@meguribi/core";
 
 describe("parseDevinVersionOutput", () => {
@@ -115,6 +120,37 @@ describe("parseAcpCapability", () => {
       }),
     ).toBe("supported");
   });
+
+  it("does not treat signal exit (null) as supported even with usage text", () => {
+    expect(
+      parseAcpCapability({
+        acpHelp: "Usage: devin acp\nStart ACP stdio\n",
+        acpExitCode: null,
+      }),
+    ).toBe("unknown");
+  });
+
+  it("does not use root help when rootHelpExitCode is non-zero", () => {
+    expect(
+      parseAcpCapability({
+        rootHelp: "Usage: devin acp\nCommands:\n  acp\n",
+        rootHelpExitCode: 1,
+        acpHelp: "something mentioning acp without usage",
+        acpExitCode: 0,
+      }),
+    ).toBe("unknown");
+  });
+
+  it("uses root help only when rootHelpExitCode is 0", () => {
+    expect(
+      parseAcpCapability({
+        rootHelp: "Usage: devin acp\nCommands:\n  acp\n",
+        rootHelpExitCode: 0,
+        acpHelp: "mentions acp without clear usage",
+        acpExitCode: 0,
+      }),
+    ).toBe("supported");
+  });
 });
 
 describe("redactDiagnosticText", () => {
@@ -136,6 +172,17 @@ describe("redactDiagnosticText", () => {
     expect(redacted).not.toContain("authorization=BearerX");
     expect(redacted).not.toContain("client_secret=cs_123");
     expect(redacted).not.toContain("access_token=at_456");
+    expect(redacted).toContain("[REDACTED]");
+  });
+
+  it("redacts prefixed secret keys like DEVIN_CLIENT_SECRET and MY_ACCESS_TOKEN", () => {
+    const redacted = redactDiagnosticText(
+      "DEVIN_CLIENT_SECRET=dcs_789 MY_ACCESS_TOKEN=mat_012",
+    );
+    expect(redacted).not.toContain("dcs_789");
+    expect(redacted).not.toContain("mat_012");
+    expect(redacted).not.toContain("DEVIN_CLIENT_SECRET=dcs_789");
+    expect(redacted).not.toContain("MY_ACCESS_TOKEN=mat_012");
     expect(redacted).toContain("[REDACTED]");
   });
 });
@@ -216,5 +263,27 @@ describe("assertDevinRunnable", () => {
       errors: [{ code: "executable_not_found", message: "missing" }],
     };
     expect(() => assertDevinRunnable(diagnosis)).toThrow(DevinNotRunnableError);
+  });
+});
+
+describe("minimumSupportedVersion validation", () => {
+  it("rejects empty minimumSupportedVersion", async () => {
+    await expect(
+      diagnoseDevin({
+        executable: "devin",
+        inheritedMcpPolicy: "allow",
+        minimumSupportedVersion: "",
+      }),
+    ).rejects.toBeInstanceOf(InvalidMinimumSupportedVersionError);
+  });
+
+  it("rejects invalid minimumSupportedVersion", async () => {
+    await expect(
+      diagnoseDevin({
+        executable: "devin",
+        inheritedMcpPolicy: "allow",
+        minimumSupportedVersion: "not-a-version",
+      }),
+    ).rejects.toBeInstanceOf(InvalidMinimumSupportedVersionError);
   });
 });

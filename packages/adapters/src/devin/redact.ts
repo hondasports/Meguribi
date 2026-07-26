@@ -4,7 +4,8 @@
 
 const SECRET_PATTERNS: RegExp[] = [
   /\b(?:sk|pk|rk|api)[_-][A-Za-z0-9]{8,}\b/gi,
-  /\b(?:authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|client[_-]?id)\s*[:=]\s*\S+/gi,
+  // prefix 付きキー（DEVIN_CLIENT_SECRET / MY_ACCESS_TOKEN 等）も対象にする
+  /\b[A-Za-z0-9_]*?(?:authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|client[_-]?id)\b\s*[:=]\s*\S+/gi,
   /\bBearer\s+[A-Za-z0-9._\-+=/]+\b/gi,
   /https?:\/\/[^\s"'`]+/gi,
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,

@@ -3,6 +3,7 @@ export {
   diagnoseDevin,
   DevinNotRunnableError,
   formatDevinDiagnosisHuman,
+  InvalidMinimumSupportedVersionError,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   parseAcpCapability,
   parseAuthStatus,
