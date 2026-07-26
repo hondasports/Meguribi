@@ -453,7 +453,9 @@ Devin に担当させないもの:
 - `devin acp --help` による ACP capability probe
 - `inheritedMcpPolicy`
 
-バージョン文字列だけで安全性を断定しません。パース不能な version は `unknown` とし、ACP probe 成功を必須とします。ACP 欠如は `capability_missing`、version ポリシー違反は `unsupported_version` として区別します。未対応バージョン、未認証、ACP 非対応、非対話での曖昧な MCP ポリシー、予期しないプロセス終了では推測して継続しません。診断ログへは secret らしき文字列を残しません。
+バージョン文字列だけで安全性を断定しません。パース不能な version は `unknown` とし、ACP probe 成功を必須とします。パース可能な version は `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION`（既定 `3000.0.0`）未満なら `unsupported_version` とします。`--version` の非ゼロ終了や timeout は fail-closed です。ACP 欠如は `capability_missing` として区別します。未対応バージョン、未認証、ACP 非対応、非対話での曖昧な MCP ポリシー、予期しないプロセス終了では推測して継続しません。診断ログへは secret らしき文字列を残しません。
+
+`meguribi run` は Issue #22 で配線し、その preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須呼び出しとします。
 
 ## 9. GitHub 連携
 

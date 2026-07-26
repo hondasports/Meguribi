@@ -9,12 +9,18 @@ import { ProcessRunner as DefaultProcessRunner } from "@meguribi/process";
 import { parseAcpCapability } from "./acp.js";
 import { parseAuthStatus } from "./auth.js";
 import { captureCommand } from "./capture.js";
-import { redactDiagnosticText } from "./redact.js";
+import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
 import {
   compareSemver,
   parseDevinVersionOutput,
   parseMinimumVersion,
 } from "./version.js";
+
+/**
+ * doctor / run preflight が使う最低対応 Devin CLI version。
+ * ACP 対応が確認できた系統（PoC 時点の 3000.x）を下限とする。
+ */
+export const MINIMUM_SUPPORTED_DEVIN_CLI_VERSION = "3000.0.0";
 
 export interface DiagnoseDevinOptions {
   executable: string;
@@ -30,8 +36,8 @@ export interface DiagnoseDevinOptions {
   env?: NodeJS.ProcessEnv;
   probeTimeoutMs?: number;
   /**
-   * 任意の最低対応 version。未指定時は floor 判定を行わず、
-   * パース可否と capability probe で判定する。
+   * 最低対応 version。未指定時は {@link MINIMUM_SUPPORTED_DEVIN_CLI_VERSION}。
+   * 空文字を渡すと floor 判定を行わない（テスト用）。
    */
   minimumSupportedVersion?: string;
   runner?: ProcessRunner;
@@ -42,12 +48,15 @@ function resolveVersionStatus(
   minimumSupportedVersion: string | undefined,
 ): DevinDiagnosis["version"] {
   const parsed = parseDevinVersionOutput(rawStdout);
-  const safeRaw = parsed.raw ? redactDiagnosticText(parsed.raw) : undefined;
+  const safeRaw = parsed.raw
+    ? sanitizeDiagnosticDisplayText(redactDiagnosticText(parsed.raw))
+    : undefined;
   if (!parsed.parseable || parsed.major === undefined) {
     return { status: "unknown", raw: safeRaw || undefined };
   }
-  if (minimumSupportedVersion) {
-    const minimum = parseMinimumVersion(minimumSupportedVersion);
+  const minimumSource = minimumSupportedVersion ?? MINIMUM_SUPPORTED_DEVIN_CLI_VERSION;
+  if (minimumSource.length > 0) {
+    const minimum = parseMinimumVersion(minimumSource);
     if (
       minimum &&
       parsed.minor !== undefined &&
@@ -163,7 +172,28 @@ export async function diagnoseDevin(
       warnings,
       errors,
     };
-  } else if (version.status === "unknown") {
+  }
+
+  if (versionProbe.exitCode !== 0) {
+    version = { status: "unknown", raw: version.raw };
+    errors.push({
+      code: "process_crashed",
+      message: "Devin version probe exited unsuccessfully",
+      nextAction: "Verify the Devin CLI install and rerun `devin --version`",
+    });
+    return {
+      executable,
+      version,
+      authentication: { status: "unknown" },
+      acp: { status: "unknown" },
+      inheritedMcpPolicy: options.inheritedMcpPolicy,
+      runnable: false,
+      warnings,
+      errors,
+    };
+  }
+
+  if (version.status === "unknown") {
     warnings.push({
       code: "unknown_version",
       message: "Devin version string could not be parsed; requiring ACP capability probe",
@@ -171,8 +201,8 @@ export async function diagnoseDevin(
   } else if (version.status === "unsupported") {
     errors.push({
       code: "unsupported_version",
-      message: `Devin version is unsupported: ${redactDiagnosticText(version.raw ?? "")}`,
-      nextAction: "Upgrade Devin CLI to a supported version",
+      message: `Devin version is unsupported: ${version.raw ?? ""}`,
+      nextAction: `Upgrade Devin CLI to ${options.minimumSupportedVersion ?? MINIMUM_SUPPORTED_DEVIN_CLI_VERSION} or later`,
     });
   }
 
@@ -294,4 +324,17 @@ export function assertDevinRunnable(diagnosis: DevinDiagnosis): void {
   if (!diagnosis.runnable) {
     throw new DevinNotRunnableError(diagnosis);
   }
+}
+
+/**
+ * `meguribi run` が呼ぶ preflight 入口。
+ * 診断を実行し、runnable でなければ {@link DevinNotRunnableError} を投げる。
+ * CLI の `run` コマンド本体は Issue #22 で配線する。
+ */
+export async function preflightDevin(
+  options: DiagnoseDevinOptions,
+): Promise<DevinDiagnosis> {
+  const diagnosis = await diagnoseDevin(options);
+  assertDevinRunnable(diagnosis);
+  return diagnosis;
 }

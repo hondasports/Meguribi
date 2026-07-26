@@ -36,8 +36,15 @@ if (args[0] === "--version") {
     process.exit(0);
   }
   if (mode === "version-secret") {
-    write(process.stdout, "devin 3000.2.17 token=supersecrettoken123 https://mcp.example.com/sse\n");
+    write(
+      process.stdout,
+      "devin 3000.2.17 token=supersecrettoken123 credential=abc authorization=BearerX client_secret=cs_123 access_token=at_456 https://mcp.example.com/sse\n",
+    );
     process.exit(0);
+  }
+  if (mode === "version-exit-error") {
+    write(process.stdout, "devin 3000.2.17\n");
+    process.exit(1);
   }
   write(process.stdout, "devin 3000.2.17\n");
   process.exit(0);

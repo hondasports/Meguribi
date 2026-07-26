@@ -1,4 +1,5 @@
 import type { DevinDiagnosis } from "@meguribi/core";
+import { sanitizeDiagnosticDisplayText } from "./redact.js";
 
 /**
  * `meguribi doctor` 向けの人間可読表示。
@@ -15,7 +16,7 @@ export function formatDevinDiagnosisHuman(diagnosis: DevinDiagnosis): string {
         : diagnosis.version.status === "unknown"
           ? "!"
           : "✓";
-    lines.push(`${mark} Devin CLI: ${diagnosis.version.raw}`);
+    lines.push(`${mark} Devin CLI: ${sanitizeDiagnosticDisplayText(diagnosis.version.raw)}`);
   } else {
     lines.push("! Devin CLI: version unknown");
   }
@@ -38,14 +39,14 @@ export function formatDevinDiagnosisHuman(diagnosis: DevinDiagnosis): string {
 
   const mcpWarning = diagnosis.warnings.find((warning) => warning.code === "inherited_mcp");
   if (mcpWarning) {
-    lines.push(`! ${mcpWarning.message}`);
+    lines.push(`! ${sanitizeDiagnosticDisplayText(mcpWarning.message)}`);
     lines.push(`  Policy: ${diagnosis.inheritedMcpPolicy}`);
   }
 
   for (const error of diagnosis.errors) {
-    lines.push(`✗ ${error.message}`);
+    lines.push(`✗ ${sanitizeDiagnosticDisplayText(error.message)}`);
     if (error.nextAction) {
-      lines.push(`  Next: ${error.nextAction}`);
+      lines.push(`  Next: ${sanitizeDiagnosticDisplayText(error.nextAction)}`);
     }
   }
 
@@ -53,7 +54,7 @@ export function formatDevinDiagnosisHuman(diagnosis: DevinDiagnosis): string {
     if (warning.code === "inherited_mcp") {
       continue;
     }
-    lines.push(`! ${warning.message}`);
+    lines.push(`! ${sanitizeDiagnosticDisplayText(warning.message)}`);
   }
 
   lines.push(diagnosis.runnable ? "Runnable: yes" : "Runnable: no");

@@ -8,10 +8,12 @@ export {
   assertDevinRunnable,
   diagnoseDevin,
   DevinNotRunnableError,
+  MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+  preflightDevin,
 } from "./diagnose.js";
 export type { DiagnoseDevinOptions } from "./diagnose.js";
 export { formatDevinDiagnosisHuman } from "./format.js";
-export { redactDiagnosticText } from "./redact.js";
+export { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
 export {
   compareSemver,
   parseDevinVersionOutput,
