@@ -6,10 +6,12 @@
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
+    "sourceMap": true,
     "paths": {
+      "@meguribi/config": ["../config/src/index.ts"],
       "@meguribi/core": ["../core/src/index.ts"],
       "@meguribi/process": ["../process/src/index.ts"],
-      "@meguribi/config": ["../config/src/index.ts"]
+      "@meguribi/schemas": ["../schemas/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"],

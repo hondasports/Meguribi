@@ -9,6 +9,22 @@ export type { AgentExecutionResult } from "./agent-execution-result.js";
 export { AgentPromptSchema } from "./agent-prompt.js";
 export type { AgentPrompt } from "./agent-prompt.js";
 export {
+  CodexArtifactMetadataSchema,
+  CodexEventRecordSchema,
+  PlanArtifactSchema,
+  PlanContentSchema,
+  ReviewArtifactSchema,
+  ReviewContentSchema,
+} from "./codex-artifact.js";
+export type {
+  CodexArtifactMetadata,
+  CodexEventRecord,
+  PlanArtifact,
+  PlanContent,
+  ReviewArtifact,
+  ReviewContent,
+} from "./codex-artifact.js";
+export {
   DiagnosisErrorCodeSchema,
   DiagnosisErrorSchema,
   DiagnosisWarningCodeSchema,

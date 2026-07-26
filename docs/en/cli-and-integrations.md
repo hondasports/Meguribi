@@ -324,6 +324,19 @@ export interface CodexAdapter {
 
 Control-flow-relevant output must conform to a command-specific JSON Schema. Meguribi does not parse arbitrary prose to determine workflow state.
 
+### 7.4 Planning and review adapter rules
+
+`@meguribi/adapters` uses `@openai/codex-sdk` only inside the adapter and provides two read-only operations:
+
+- `createPlan`: creates `plan.json` from the Issue, completion criteria, out-of-scope items, and repository rules.
+- `review`: creates `review.json` from the Issue, plan, Git diff, and verification result.
+
+Planning and review run with `sandboxMode: read-only`, `approvalPolicy: never`, and network access disabled. If workspace snapshots differ before and after execution, the adapter stops with `policy_blocked`.
+
+Codex structured output is validated by both a runtime schema and a JSON Schema. Invalid JSON or schema output is retried at most once with a repair prompt containing only the validation summary; a second failure is never treated as success. Timeouts, cancellation, empty responses, stream interruption, and process failures are classified errors.
+
+The thread ID, source digests, duration, and redacted event log are stored as Meguribi-owned artifact metadata. Planning verifies the Issue digest, while review verifies canonical JSON digests for the Issue, plan, diff, and verification before starting Codex. A Codex review approval never authorizes publishing, removing Draft status, or merging.
+
 ## 8. Devin integration
 
 ### 8.1 Adopted transport
