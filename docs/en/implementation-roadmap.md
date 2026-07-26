@@ -345,7 +345,7 @@ Each Issue should be independently testable. Avoid combining a new adapter and t
 - Label policy
 - Risk classification
 - Prompt builder
-- Zod schemas
+- Valibot schemas
 - Configuration merge
 - Redaction
 - State transitions

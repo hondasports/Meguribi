@@ -357,7 +357,7 @@ packages/schemas/
   `-- measurement.ts
 ```
 
-- Zod schemas are the code source of truth.
+- Valibot schemas are the code source of truth.
 - Codex JSON Schemas are generated during build.
 - `schemaVersion` is required.
 - Breaking changes require migration or an explicit incompatibility error.

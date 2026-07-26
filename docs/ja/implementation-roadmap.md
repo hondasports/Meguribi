@@ -348,7 +348,7 @@ tests/fixtures/
 - label policy
 - risk classification
 - prompt builder
-- Zod schemas
+- Valibot schemas
 - config merge
 - redaction
 - state transition

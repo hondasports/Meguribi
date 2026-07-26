@@ -374,7 +374,7 @@ packages/schemas/
   `-- measurement.ts
 ```
 
-- Zod をコード上の正本とする。
+- Valibot をコード上の正本とする。
 - Codex 用 JSON Schema をビルド時に生成する。
 - `schemaVersion` を必須にする。
 - 破壊的変更時は migration または明示的な非互換エラーを用意する。
