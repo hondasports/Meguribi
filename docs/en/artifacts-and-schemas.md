@@ -439,6 +439,23 @@ Raw events from Devin ACP and similar sources are normalized inside each adapter
 
 `isRetryable` is a flag indicating whether the same input may be retried.
 
+### DevinDiagnosis
+
+Result of Devin CLI diagnosis used by `meguribi doctor` and `run` preflight. Types live in `@meguribi/core`; Valibot schemas live in `@meguribi/schemas`.
+
+| Field | Description |
+| --- | --- |
+| `executable` | `{ status: "ok" \| "missing"; path? }` |
+| `version` | `{ status: "supported" \| "unsupported" \| "unknown"; raw? }` |
+| `authentication` | `{ status: "authenticated" \| "unauthenticated" \| "unknown" }` |
+| `acp` | `{ status: "supported" \| "unsupported" \| "unknown" }` |
+| `inheritedMcpPolicy` | `"allow" \| "warn" \| "deny"` |
+| `runnable` | overall readiness decision |
+| `warnings` | `DiagnosisWarning[]` (e.g. `inherited_mcp`, `unknown_version`) |
+| `errors` | `DiagnosisError[]` |
+
+`DiagnosisError.code` extends `AgentErrorCode` with `capability_missing` for absent ACP support. Fields must not retain raw credentials, MCP URLs, or tokens.
+
 ## 17. ManagedProcess startup and failure contract
 
 `ProcessRunner.run()` in `@meguribi/process` returns a `ManagedProcess` synchronously. Child-process startup may still be pending when the object is returned.

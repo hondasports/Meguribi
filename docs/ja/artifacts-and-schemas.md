@@ -457,6 +457,23 @@ Devin ACP などの raw イベントは、各 adapter 内で正規化される�
 
 `isRetryable` は同じ入力でリトライ可能かを示すフラグとする。
 
+### DevinDiagnosis
+
+`meguribi doctor` と `run` preflight が返す Devin CLI 診断結果。`@meguribi/core` に型、`@meguribi/schemas` に Valibot スキーマを置く。
+
+| フィールド | 説明 |
+| --- | --- |
+| `executable` | `{ status: "ok" \| "missing"; path? }` |
+| `version` | `{ status: "supported" \| "unsupported" \| "unknown"; raw? }` |
+| `authentication` | `{ status: "authenticated" \| "unauthenticated" \| "unknown" }` |
+| `acp` | `{ status: "supported" \| "unsupported" \| "unknown" }` |
+| `inheritedMcpPolicy` | `"allow" \| "warn" \| "deny"` |
+| `runnable` | 実行してよいかの総合判定 |
+| `warnings` | `DiagnosisWarning[]`（例: `inherited_mcp`, `unknown_version`） |
+| `errors` | `DiagnosisError[]` |
+
+`DiagnosisError.code` は `AgentErrorCode` に加え、ACP 欠如を表す `capability_missing` を含む。認証情報、MCP URL、token などの生値をフィールドへ残してはならない。
+
 ## 17. ManagedProcess の起動・失敗契約
 
 `@meguribi/process` の `ProcessRunner.run()` は同期的に `ManagedProcess` を返す。返却時点では子プロセスの起動が保留中の場合がある。

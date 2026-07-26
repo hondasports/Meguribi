@@ -184,7 +184,7 @@ describe("AgentErrorCodeSchema", () => {
       "docs/en/artifacts-and-schemas.md",
     ]) {
       const content = readFileSync(join(repoRoot, docPath), "utf-8");
-      const sectionMatch = content.match(/### AgentError\s*\n([\s\S]*?)(?:\n## |$)/);
+      const sectionMatch = content.match(/### AgentError\s*\n([\s\S]*?)(?:\n### |\n## |$)/);
       expect(sectionMatch, `AgentError section not found in ${docPath}`).toBeTruthy();
       const rows = sectionMatch?.[1].match(/\| `([^`]+)` \|/g) ?? [];
       const codes = rows
