@@ -105,7 +105,8 @@ describe("Devin ACP probe", () => {
     const result = await runFake("mcp-stdio", {
       env: { FAKE_MCP_MARKER: marker },
       mcpPolicy: "allowlist",
-      allowedMcpNames: ["fake-stdio"]
+      allowedMcpNames: ["fake-stdio"],
+      timeoutMs: 5_000
     });
     expect(result.status).toBe("completed");
     expect(result.mcp.unexpected).toEqual([]);

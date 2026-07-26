@@ -13,6 +13,18 @@ async function wait(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForMarker(marker: string, timeoutMs: number): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await fs.access(marker);
+      return;
+    } catch {
+      await wait(50);
+    }
+  }
+}
+
 async function startFakeMcp(): Promise<void> {
   const mcpMode = mode === "mcp-http" ? "http" : "stdio";
   process.stderr.write(`Connecting to MCP server fake-${mcpMode} (${mcpMode}${mcpMode === "http" ? ` ${process.env.FAKE_MCP_HTTP_URL ?? ""}` : ""})\n`);
@@ -32,6 +44,9 @@ async function startFakeMcp(): Promise<void> {
       stdio: "ignore"
     });
     await wait(200);
+    if (process.env.FAKE_MCP_MARKER) {
+      await waitForMarker(process.env.FAKE_MCP_MARKER, 3_000);
+    }
   }
   if (mcpMode === "http" && process.env.FAKE_MCP_HTTP_URL) {
     await fetch(process.env.FAKE_MCP_HTTP_URL, { method: "POST", body: "{}" });
