@@ -11,12 +11,59 @@ const SECRET_PATTERNS: RegExp[] = [
   /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
 ];
 
+const SECRET_KEY_PATTERN =
+  /(?:^|[_.-])(?:authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|client[_-]?id)$/i;
+
+/**
+ * Object key が secret 候補かどうか。構造化 env / JSON の redaction に使う。
+ */
+export function isSecretKey(key: string): boolean {
+  const normalized = key.trim();
+  if (normalized.length === 0) {
+    return false;
+  }
+  if (SECRET_KEY_PATTERN.test(normalized)) {
+    return true;
+  }
+  // ENV 風の大文字キー（API_TOKEN / MY_ACCESS_TOKEN）
+  if (/^[A-Z][A-Z0-9_]*$/.test(normalized) && /(token|secret|password|credential|authorization|cookie|api[_-]?key)/i.test(normalized)) {
+    return true;
+  }
+  return /(?:authorization|cookie|credential|password|secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|client[_-]?id)/i.test(
+    normalized,
+  );
+}
+
 export function redactDiagnosticText(text: string): string {
   let result = text;
   for (const pattern of SECRET_PATTERNS) {
     result = result.replace(pattern, "[REDACTED]");
   }
   return result;
+}
+
+/**
+ * JSON 互換値を再帰的に redact する。
+ * secret らしいキー配下の値は文字列化せず丸ごと [REDACTED] にする（fail-closed）。
+ */
+export function redactJsonValue(value: unknown, key?: string): unknown {
+  if (key !== undefined && isSecretKey(key)) {
+    return "[REDACTED]";
+  }
+  if (typeof value === "string") {
+    return redactDiagnosticText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactJsonValue(item));
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).map(([childKey, child]) => [
+      childKey,
+      redactJsonValue(child, childKey),
+    ]);
+    return Object.fromEntries(entries);
+  }
+  return value;
 }
 
 const ESC = String.fromCharCode(0x1b);

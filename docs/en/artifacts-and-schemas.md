@@ -434,6 +434,28 @@ A discriminated union identified by the `type` field.
 
 Raw events from Devin ACP and similar sources are normalized inside each adapter. The adapter stores the redacted raw payload as JSONL / artifact and returns only normalized `AgentEvent` values to the core. This prevents vendor-specific information from leaking into the core contract.
 
+Unrecognized `sessionUpdate` values are kept as `type: "unknown"`. An `unknown` event alone must not advance workflow state.
+
+### Devin agent artifact layout
+
+Until RunStore lands, and afterward under the same relative paths, Devin ACP session artifacts use:
+
+```text
+<artifactRoot>/   # future: runs/<run-id>/agents/devin/
+├── raw-events.jsonl   # redacted raw payloads (with sequence)
+├── events.jsonl       # normalized AgentEvent lines (same sequence)
+├── stderr.log         # diagnostic stderr (redacted)
+├── session.json       # sessionId / protocolVersion / stopReason
+└── result.json        # minimal execution summary
+```
+
+Each JSONL line uses this envelope:
+
+- raw: `{ sequence, at, kind, raw }`
+- normalized: `{ sequence, at, event }`
+
+Secret redaction always runs before persistence. If redaction or writing fails, persistence stops (fail-closed).
+
 ### AgentError
 
 | code | description |
