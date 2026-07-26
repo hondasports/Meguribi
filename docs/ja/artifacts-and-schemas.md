@@ -226,36 +226,37 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 {
   "schemaVersion": 1,
   "artifactType": "implementation-plan",
+  "metadata": {
+    "schemaVersion": 1,
+    "artifactId": "artifact-plan-1",
+    "createdAt": "2026-07-26T00:00:00Z",
+    "durationMs": 1200,
+    "producer": {
+      "kind": "codex",
+      "role": "planner",
+      "threadId": "thread-plan-1"
+    },
+    "sourceDigests": { "issue": "sha256:...", "repository": "sha256:..." },
+    "eventLog": []
+  },
   "summary": "金額のみの支出仮登録を追加する",
-  "assumptions": [],
-  "affectedAreas": [
-    {
-      "area": "domain",
-      "files": ["src/domain/transaction.ts"],
-      "reason": "カテゴリ未指定状態を表現する"
-    }
-  ],
-  "steps": [
-    {
-      "id": "STEP-1",
-      "description": "ドメインモデルを変更する",
-      "dependsOn": [],
-      "mapsTo": ["REQ-1", "AC-1"]
-    }
-  ],
-  "tests": [],
-  "risks": [],
-  "protectedPathRequests": [],
-  "openQuestions": [],
-  "recommendation": "proceed"
+  "requirements": ["支出を金額だけで仮登録できる"],
+  "acceptanceCriteria": ["既存の検証コマンドが成功する"],
+  "outOfScope": ["リリース設定の変更"],
+  "proposedFiles": ["src/domain/transaction.ts"],
+  "steps": ["ドメインモデルを変更する", "テストを追加する"],
+  "tests": ["ドメインの unit test"],
+  "risks": ["既存 caller との互換性"],
+  "humanDecisions": ["リリース時期"],
+  "unresolvedItems": []
 }
 ```
 
-`recommendation`:
+`plan.json` の content は `summary`、`requirements`、`acceptanceCriteria`、`outOfScope`、`proposedFiles`、`steps`、`risks`、`tests`、`humanDecisions`、`unresolvedItems` を必須とします。`metadata.eventLog` は redaction 済みの JSON-safe event だけを保存します。
 
-- `proceed`
-- `needs_human_input`
-- `blocked`
+### 8.1 `plan.json` の validation
+
+Codex の応答は自然文を成功根拠にせず、runtime schema と JSON Schema の両方で検証します。未知フィールド、必須フィールド欠落、不正 JSON は最大1回だけ repair を許可し、再度不正なら Run を停止します。
 
 ## 9. `implementation-result.json`
 
@@ -307,6 +308,19 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
 {
   "schemaVersion": 1,
   "artifactType": "code-review",
+  "metadata": {
+    "schemaVersion": 1,
+    "artifactId": "artifact-review-1",
+    "createdAt": "2026-07-26T00:00:00Z",
+    "durationMs": 900,
+    "producer": {
+      "kind": "codex",
+      "role": "reviewer",
+      "threadId": "thread-review-1"
+    },
+    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:..." },
+    "eventLog": []
+  },
   "status": "changes_required",
   "summary": "主要要件は満たすが競合制御が不足している",
   "requirementCoverage": [

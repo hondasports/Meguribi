@@ -209,36 +209,37 @@ Every observation requires a source and confidence classification.
 {
   "schemaVersion": 1,
   "artifactType": "implementation-plan",
+  "metadata": {
+    "schemaVersion": 1,
+    "artifactId": "artifact-plan-1",
+    "createdAt": "2026-07-26T00:00:00Z",
+    "durationMs": 1200,
+    "producer": {
+      "kind": "codex",
+      "role": "planner",
+      "threadId": "thread-plan-1"
+    },
+    "sourceDigests": { "issue": "sha256:...", "repository": "sha256:..." },
+    "eventLog": []
+  },
   "summary": "Add amount-only provisional expense entry",
-  "assumptions": [],
-  "affectedAreas": [
-    {
-      "area": "domain",
-      "files": ["src/domain/transaction.ts"],
-      "reason": "Represent a missing category"
-    }
-  ],
-  "steps": [
-    {
-      "id": "STEP-1",
-      "description": "Update the domain model",
-      "dependsOn": [],
-      "mapsTo": ["REQ-1", "AC-1"]
-    }
-  ],
-  "tests": [],
-  "risks": [],
-  "protectedPathRequests": [],
-  "openQuestions": [],
-  "recommendation": "proceed"
+  "requirements": ["Allow provisional entry with amount only"],
+  "acceptanceCriteria": ["Existing verification commands succeed"],
+  "outOfScope": ["Release configuration changes"],
+  "proposedFiles": ["src/domain/transaction.ts"],
+  "steps": ["Update the domain model", "Add tests"],
+  "tests": ["Domain unit test"],
+  "risks": ["Compatibility with existing callers"],
+  "humanDecisions": ["Release timing"],
+  "unresolvedItems": []
 }
 ```
 
-Recommendation values:
+The `plan.json` content requires `summary`, `requirements`, `acceptanceCriteria`, `outOfScope`, `proposedFiles`, `steps`, `risks`, `tests`, `humanDecisions`, and `unresolvedItems`. `metadata.eventLog` contains only redacted, JSON-safe events.
 
-- `proceed`
-- `needs_human_input`
-- `blocked`
+### 8.1 `plan.json` validation
+
+Codex responses are validated by both a runtime schema and a JSON Schema rather than by treating natural language as evidence of success. Unknown fields, missing required fields, and invalid JSON may be repaired once; a second invalid response stops the Run.
 
 ## 9. `implementation-result.json`
 
@@ -290,6 +291,19 @@ Meguribi creates this from Devin output plus actual Git and process state.
 {
   "schemaVersion": 1,
   "artifactType": "code-review",
+  "metadata": {
+    "schemaVersion": 1,
+    "artifactId": "artifact-review-1",
+    "createdAt": "2026-07-26T00:00:00Z",
+    "durationMs": 900,
+    "producer": {
+      "kind": "codex",
+      "role": "reviewer",
+      "threadId": "thread-review-1"
+    },
+    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:..." },
+    "eventLog": []
+  },
   "status": "changes_required",
   "summary": "Core requirements are covered, but concurrency control is missing",
   "requirementCoverage": [
