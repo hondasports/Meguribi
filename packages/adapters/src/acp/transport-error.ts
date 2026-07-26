@@ -5,7 +5,7 @@ import { ProcessError } from "@meguribi/process";
  * Adapter-internal ACP transport errors.
  * SDK / Node errors must be converted before leaving this module.
  */
-export type DevinAcpTransportErrorCode =
+export type AcpTransportErrorCode =
   | "spawn_failure"
   | "permission_denied"
   | "startup_timeout"
@@ -23,19 +23,19 @@ export type DevinAcpTransportErrorCode =
   | "not_runnable"
   | "unknown";
 
-export class DevinAcpTransportError extends Error {
-  readonly code: DevinAcpTransportErrorCode;
+export class AcpTransportError extends Error {
+  readonly code: AcpTransportErrorCode;
   readonly isRetryable: boolean;
 
-  constructor(code: DevinAcpTransportErrorCode, message: string, isRetryable = false) {
+  constructor(code: AcpTransportErrorCode, message: string, isRetryable = false) {
     super(message);
-    this.name = "DevinAcpTransportError";
+    this.name = "AcpTransportError";
     this.code = code;
     this.isRetryable = isRetryable;
   }
 
   toAgentError(): AgentError {
-    const map: Record<DevinAcpTransportErrorCode, AgentError["code"]> = {
+    const map: Record<AcpTransportErrorCode, AgentError["code"]> = {
       spawn_failure: "executable_not_found",
       permission_denied: "permission_denied",
       startup_timeout: "timeout",
@@ -61,56 +61,56 @@ export class DevinAcpTransportError extends Error {
   }
 }
 
-export function isDevinAcpTransportError(error: unknown): error is DevinAcpTransportError {
-  return error instanceof DevinAcpTransportError;
+export function isAcpTransportError(error: unknown): error is AcpTransportError {
+  return error instanceof AcpTransportError;
 }
 
 /**
  * Convert SDK / Node / Process errors into adapter-domain transport errors.
  */
-export function toDevinAcpTransportError(
+export function toAcpTransportError(
   error: unknown,
-  fallback: DevinAcpTransportErrorCode,
-): DevinAcpTransportError {
-  if (error instanceof DevinAcpTransportError) {
+  fallback: AcpTransportErrorCode,
+): AcpTransportError {
+  if (error instanceof AcpTransportError) {
     return error;
   }
   if (error instanceof ProcessError) {
     if (error.code === "executable_not_found") {
-      return new DevinAcpTransportError("spawn_failure", error.message);
+      return new AcpTransportError("spawn_failure", error.message);
     }
     if (error.code === "permission_denied") {
-      return new DevinAcpTransportError("permission_denied", error.message);
+      return new AcpTransportError("permission_denied", error.message);
     }
     if (error.code === "timeout") {
-      return new DevinAcpTransportError("startup_timeout", error.message, true);
+      return new AcpTransportError("startup_timeout", error.message, true);
     }
     if (error.code === "cancelled") {
-      return new DevinAcpTransportError("cancelled", error.message);
+      return new AcpTransportError("cancelled", error.message);
     }
     if (error.code === "process_crashed") {
-      return new DevinAcpTransportError("process_crashed", error.message);
+      return new AcpTransportError("process_crashed", error.message);
     }
   }
   const message = error instanceof Error ? error.message : "Unknown ACP transport error";
   if (/capability mismatch/i.test(message)) {
-    return new DevinAcpTransportError("capability_mismatch", message);
+    return new AcpTransportError("capability_mismatch", message);
   }
   if (/session creation failed/i.test(message)) {
-    return new DevinAcpTransportError("session_creation_failure", message);
+    return new AcpTransportError("session_creation_failure", message);
   }
   if (/timeout/i.test(message)) {
-    return new DevinAcpTransportError("startup_timeout", message, true);
+    return new AcpTransportError("startup_timeout", message, true);
   }
   if (/JSON|NDJSON|parse|malformed/i.test(message)) {
-    return new DevinAcpTransportError("malformed_message", message);
+    return new AcpTransportError("malformed_message", message);
   }
   // Prefer connection_closed over prompt_send_failure / initialize_failure.
   if (/connection closed|ACP connection closed|ECONNRESET|socket hang up|stream.*(closed|ended)/i.test(message)) {
-    return new DevinAcpTransportError("connection_closed", message);
+    return new AcpTransportError("connection_closed", message);
   }
   if (/initialize/i.test(message)) {
-    return new DevinAcpTransportError("initialize_failure", message);
+    return new AcpTransportError("initialize_failure", message);
   }
-  return new DevinAcpTransportError(fallback, message);
+  return new AcpTransportError(fallback, message);
 }

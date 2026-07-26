@@ -50,8 +50,8 @@ export {
   normalizeSessionUpdate,
   normalizeTurnCompleted,
   pathsFromToolCall,
-} from "./events.js";
-export type { AcpSessionNotificationPayload, AcpSessionUpdatePayload } from "./events.js";
+} from "../acp/events.js";
+export type { AcpSessionNotificationPayload, AcpSessionUpdatePayload } from "../acp/events.js";
 export { startDevinAcpSession } from "./session.js";
 export type { DevinAcpSession, DevinGitBoundaryConfig, StartDevinAcpSessionInput } from "./session.js";
 export {
@@ -68,11 +68,11 @@ export type {
   StartDevinAcpInput,
 } from "./transport.js";
 export {
-  DevinAcpTransportError,
-  isDevinAcpTransportError,
-  toDevinAcpTransportError,
-} from "./transport-error.js";
-export type { DevinAcpTransportErrorCode } from "./transport-error.js";
+  AcpTransportError as DevinAcpTransportError,
+  isAcpTransportError as isDevinAcpTransportError,
+  toAcpTransportError as toDevinAcpTransportError,
+} from "../acp/transport-error.js";
+export type { AcpTransportErrorCode as DevinAcpTransportErrorCode } from "../acp/transport-error.js";
 export {
   buildDevinPrompt,
   DevinPromptBuildError,
@@ -83,21 +83,21 @@ export {
   createPermissionMediator,
   normalizeAcpPermissionRequest,
   toAcpPermissionResponse,
-} from "./permissions.js";
+} from "../acp/permissions.js";
 export type {
   NormalizePermissionOptions,
   PermissionDecisionRecord,
   PermissionMediator,
-} from "./permissions.js";
+} from "../acp/permissions.js";
 export {
   createMcpPolicyMonitor,
   detectMcpConnection,
   evaluateMcpOutput,
   formatMcpSecurityAlert,
-} from "./mcp.js";
-export type { McpPolicyInput, McpPolicyMonitor } from "./mcp.js";
-export { DevinAcpShutdownController } from "./shutdown.js";
-export type { ShutdownOptions } from "./shutdown.js";
+} from "../acp/mcp.js";
+export type { McpPolicyInput, McpPolicyMonitor } from "../acp/mcp.js";
+export { AcpShutdownController as DevinAcpShutdownController } from "../acp/shutdown.js";
+export type { ShutdownOptions } from "../acp/shutdown.js";
 export {
   createDevinAcpAdapter,
   DevinAcpAdapterError,

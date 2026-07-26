@@ -12,14 +12,15 @@ import {
 
 export {
   AcpProcessLifecycle,
-  AcpTransportImpl as DevinAcpTransportImpl,
-  createAcpTransport as createDevinAcpTransport,
+  AcpTransportImpl as CursorAcpTransportImpl,
+  createAcpTransport as createCursorAcpTransport,
   DEFAULT_POST_TURN_LIVENESS_MS,
   DEFAULT_PROMPT_TIMEOUT_MS,
 };
 export type {
-  AcpConnection as DevinAcpConnection,
-  AcpTransport as DevinAcpTransport,
-  RawAcpEvent as RawDevinAcpEvent,
-  StartAcpInput as StartDevinAcpInput,
+  AcpConnection as CursorAcpConnection,
+  AcpTransport as CursorAcpTransport,
+  RawAcpEvent as RawCursorAcpEvent,
+  StartAcpInput as StartCursorAcpInput,
 };
+export { assertCursorRunnable } from "./diagnose.js";

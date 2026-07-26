@@ -3,12 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { DevinDiagnosis } from "@meguribi/core";
+import type { AgentDiagnosis } from "@meguribi/core";
 import { ProcessRunner } from "@meguribi/process";
-import { createDevinAcpTransport } from "./transport.js";
-import { AcpTransportError as DevinAcpTransportError } from "../acp/transport-error.js";
+import { createCursorAcpTransport } from "./transport.js";
+import { AcpTransportError as CursorAcpTransportError } from "../acp/transport-error.js";
 import { createPermissionMediator, type PermissionMediator } from "../acp/permissions.js";
-import { assertDevinRunnable } from "./diagnose.js";
+import { assertCursorRunnable } from "./diagnose.js";
 
 const tempDirs: string[] = [];
 
@@ -23,13 +23,13 @@ function node(): string {
 }
 
 function fakeAcpServer(): string {
-  return fileURLToPath(new URL("./fixtures/fake-acp-server.js", import.meta.url));
+  return fileURLToPath(new URL("../devin/fixtures/fake-acp-server.js", import.meta.url));
 }
 
-function runnableDiagnosis(): DevinDiagnosis {
+function runnableDiagnosis(): AgentDiagnosis {
   return {
     executable: { status: "ok", path: node() },
-    version: { status: "supported", raw: "3000.2.17" },
+    version: { status: "supported", raw: "0.1.0" },
     authentication: { status: "authenticated" },
     acp: { status: "supported" },
     inheritedMcpPolicy: "allow",
@@ -39,7 +39,7 @@ function runnableDiagnosis(): DevinDiagnosis {
   };
 }
 
-function blockedDiagnosis(): DevinDiagnosis {
+function blockedDiagnosis(): AgentDiagnosis {
   return {
     ...runnableDiagnosis(),
     runnable: false,
@@ -48,7 +48,7 @@ function blockedDiagnosis(): DevinDiagnosis {
 }
 
 async function tempCwd(): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-devin-acp-"));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-cursor-acp-"));
   tempDirs.push(dir);
   await fs.writeFile(path.join(dir, "README.md"), "# fixture\n", "utf8");
   return dir;
@@ -56,14 +56,14 @@ async function tempCwd(): Promise<string> {
 
 async function start(mode: string, overrides: {
   startupTimeoutMs?: number;
-  diagnosis?: DevinDiagnosis;
+  diagnosis?: AgentDiagnosis;
   postTurnLivenessMs?: number;
   promptTimeoutMs?: number;
   permissionMediator?: PermissionMediator;
   mcpPolicy?: { policy: "allow" | "warn" | "deny"; mode: "interactive" | "non-interactive"; explicitAllow: boolean };
 } = {}) {
   const cwd = await tempCwd();
-  const transport = createDevinAcpTransport();
+  const transport = createCursorAcpTransport();
   const connection = await transport.start({
     executable: node(),
     executableArgs: [fakeAcpServer()],
@@ -75,7 +75,7 @@ async function start(mode: string, overrides: {
     postTurnLivenessMs: overrides.postTurnLivenessMs ?? 50,
     promptTimeoutMs: overrides.promptTimeoutMs,
     diagnosis: overrides.diagnosis ?? runnableDiagnosis(),
-    assertRunnable: assertDevinRunnable,
+    assertRunnable: assertCursorRunnable,
     runner: new ProcessRunner(),
     permissionMediator: overrides.permissionMediator,
     mcpPolicy: overrides.mcpPolicy,
@@ -91,7 +91,7 @@ async function drainPrompt(connection: Awaited<ReturnType<typeof start>>["connec
   return events;
 }
 
-describe("DevinAcpTransport integration", () => {
+describe("CursorAcpTransport integration", () => {
   it("initializes, creates a session, and streams prompt updates", async () => {
     const { connection, cwd } = await start("success");
     expect(connection.sessionId).toBe(`fake-${path.basename(cwd)}`);
@@ -117,7 +117,7 @@ describe("DevinAcpTransport integration", () => {
   });
 
   it("refuses to start when diagnosis is not runnable", async () => {
-    const transport = createDevinAcpTransport();
+    const transport = createCursorAcpTransport();
     const cwd = await tempCwd();
     await expect(
       transport.start({
@@ -128,13 +128,13 @@ describe("DevinAcpTransport integration", () => {
         env: { ...process.env, FAKE_ACP_MODE: "success" },
         startupTimeoutMs: 3_000,
         diagnosis: blockedDiagnosis(),
-        assertRunnable: assertDevinRunnable,
+        assertRunnable: assertCursorRunnable,
       }),
     ).rejects.toMatchObject({ code: "not_runnable" });
   });
 
   it("classifies capability mismatch", async () => {
-    await expect(start("capability-mismatch")).rejects.toBeInstanceOf(DevinAcpTransportError);
+    await expect(start("capability-mismatch")).rejects.toBeInstanceOf(CursorAcpTransportError);
     await expect(start("capability-mismatch")).rejects.toMatchObject({
       code: "capability_mismatch",
     });
@@ -249,7 +249,7 @@ describe("DevinAcpTransport integration", () => {
   });
 
   it("rejects missing executable without leaving unhandled rejections", async () => {
-    const transport = createDevinAcpTransport();
+    const transport = createCursorAcpTransport();
     const cwd = await tempCwd();
     const previous = process.listenerCount("unhandledRejection");
     const seen: unknown[] = [];
@@ -260,13 +260,13 @@ describe("DevinAcpTransport integration", () => {
     try {
       await expect(
         transport.start({
-          executable: path.join(cwd, "definitely-missing-devin-binary"),
+          executable: path.join(cwd, "definitely-missing-cursor-binary"),
           acpArgs: ["acp"],
           cwd,
           env: { ...process.env },
           startupTimeoutMs: 3_000,
           diagnosis: runnableDiagnosis(),
-          assertRunnable: assertDevinRunnable,
+          assertRunnable: assertCursorRunnable,
           runner: new ProcessRunner(),
         }),
       ).rejects.toMatchObject({

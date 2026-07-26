@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import type {
   DeliveryDependencies,
   DeliveryMcpConfirmation,
@@ -56,7 +58,7 @@ function baseImplementation(
     permissionDecisions: partial.permissionDecisions ?? [],
     mcpPolicyResult: partial.mcpPolicyResult,
     termination: partial.termination,
-    artifactPaths: partial.artifactPaths ?? { root: "/tmp/meguribi-fake" },
+    artifactPaths: partial.artifactPaths ?? { root: path.join(os.tmpdir(), "meguribi-fake") },
     promptVersion: partial.promptVersion ?? "1",
     promptHash: partial.promptHash ?? "hash",
     publishable: partial.publishable ?? partial.status === "completed",

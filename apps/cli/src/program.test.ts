@@ -17,6 +17,7 @@ const healthy: DevinDiagnosis = {
 };
 
 const configResult = {
+  kind: "devin" as const,
   config: {
     executable: "devin",
     transport: "acp" as const,
@@ -37,7 +38,7 @@ describe("runDoctor", () => {
       {},
       {
         loadConfig: async () => configResult,
-        diagnose: async () => healthy,
+        diagnoseDevin: async () => healthy,
         stdout: (text) => {
           chunks.push(text);
         },
@@ -53,7 +54,7 @@ describe("runDoctor", () => {
       { json: true },
       {
         loadConfig: async () => configResult,
-        diagnose: async () => ({ ...healthy, runnable: false }),
+        diagnoseDevin: async () => ({ ...healthy, runnable: false }),
         stdout: (text) => {
           chunks.push(text);
         },
@@ -100,7 +101,7 @@ describe("runDoctor", () => {
             config: { ...configResult.config, inheritedMcpPolicy: "warn" as const },
           };
         },
-        diagnose: async (options) => {
+        diagnoseDevin: async (options) => {
           sawNonInteractive = options.nonInteractive;
           sawMinimum = options.minimumSupportedVersion;
           return blocked;
