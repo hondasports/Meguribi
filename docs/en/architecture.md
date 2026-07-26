@@ -146,13 +146,12 @@ The Codex TypeScript SDK launches the Codex CLI and exchanges JSONL events. SDK-
 
 Responsibilities:
 
-- Build a Devin execution command.
-- Use the assigned worktree as the working directory.
-- Pass the implementation prompt.
-- Store stdout, stderr, exit code, and session metadata.
-- Resume a session for an approved fix attempt when supported.
+- Accept an approved `ImplementationContext` and run implement or fix inside the assigned worktree.
+- Keep the ACP lifecycle (initialize / session / prompt / shutdown) inside the adapter.
+- Normalize into `ImplementationResult`, with Git-authoritative `changedFiles` and artifact references.
+- Never commit, push, create PRs, or update Issues.
 
-Devin command-line flags are configuration- or driver-owned because they may vary by installed version. Core workflows must not hard-code a specific flag set. A future Devin API implementation should preserve the same adapter interface.
+The MVP production implementation is `createDevinAcpAdapter`. CLI / workflow depend only on the `DevinAdapter` port and never see ACP SDK types.
 
 #### Devin execution safety boundary
 
@@ -274,15 +273,27 @@ Final library choices are confirmed in implementation Issues. Prefer standard AP
 
 ## 9. Run status
 
+Meguribi does not build a generic state machine. A Run stores a coarse `status` plus fine-grained `currentStep` / `completedSteps` in `state.json`.
+
+Coarse status examples:
+
 ```text
-created
-  -> context_ready
-  -> planned
-  -> implementing
-  -> verifying
-  -> reviewing
-  -> pr_created
-  -> completed
+created -> planning -> planned -> implementing -> verifying
+  -> reviewing -> publishing -> awaiting_human
+```
+
+Fine-grained delivery steps:
+
+```text
+preflight
+awaiting_mcp_confirmation
+implementing
+implementation_completed
+implementation_blocked
+verifying
+reviewing
+fixing
+publishing
 ```
 
 Failure states:
@@ -291,9 +302,11 @@ Failure states:
 blocked
 failed
 cancelled
+timed_out
+interrupted
 ```
 
-Update `state.json` atomically by writing a temporary file and renaming it.
+`state.json` updates use temp-file + rename atomic writes. `FileSystemRunStore` owns atomic writes and per-Issue locks.
 
 ## 10. Concurrency
 

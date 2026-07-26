@@ -137,10 +137,11 @@ meguribi plan owner/repo#125
 
 ### `meguribi run`
 
-承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。
+承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`DevinAdapter` port（本番は `createDevinAcpAdapter`）へ実装を委譲します。
 
 ```bash
 meguribi run owner/repo#125
+meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 ```
 
 主要オプション:
@@ -150,10 +151,17 @@ meguribi run owner/repo#125
 - `--no-commit`
 - `--no-push`
 - `--no-pr`
+- `--non-interactive`
+- `--allow-inherited-mcp`
+- `--max-fix-attempts <number>`
+- `--json`
 - `--wait-checks`
 - `--allow-risk <level>`
-- `--max-fix-attempts <number>`
 - `--dry-run`
+
+`--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で Devin session の cancel / shutdown に伝播します。
+
+本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は `createDevinAcpAdapter` と `FileSystemRunStore`、`createDefaultPolicyEngine` を使い、GitHub/Git は専用アダプター実装までの暫定として fake を接続します。`MEGURIBI_DELIVERY_FAKES=1` では Codex/Verifier も fake になります。このフラグ無しで Codex SDK を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Devin は呼びません。
 
 ### `meguribi review`
 
@@ -166,13 +174,12 @@ meguribi review https://github.com/owner/repo/pull/456
 
 ### `meguribi resume`
 
-中断した Run を最後に完了したステップから再開します。
+中断した Run を最後に完了したステップから再開します。MVP では `implementation_completed` 以降（verify / review / publish）だけを再開対象とします。実装途中 session の resume は保証せず、identity（branch / worktree / HEAD / remote）不一致では停止します。
 
 ```bash
 meguribi resume owner/repo#125
+meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
-
-再開前に branch、worktree、HEAD、Issue、PR が保存状態と一致するか確認し、差異がある場合は停止します。
 
 ### `meguribi measure`
 
@@ -471,7 +478,7 @@ Devin に担当させないもの:
 
 バージョン文字列だけで安全性を断定しません。パース不能な version は `unknown` とし、ACP probe 成功を必須とします。パース可能な version は `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION`（既定 `3000.0.0`）未満なら `unsupported_version` とします。`--version` の非ゼロ終了や timeout は fail-closed です。ACP 欠如は `capability_missing` として区別します。未対応バージョン、未認証、ACP 非対応、非対話での曖昧な MCP ポリシー、予期しないプロセス終了では推測して継続しません。診断ログへは secret らしき文字列を残しません。
 
-`meguribi run` は Issue #22 で配線し、その preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須呼び出しとします。
+`meguribi run` / `resume` は `@meguribi/core` の `runDelivery` / `resumeDelivery` を呼び出します。Devin preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須とします。本番 facade は `createDevinAcpAdapter` で、`implement` / `fix` を `DevinAdapter` port として提供します。Codex の `analyzeFailure` は未実装のため、fix instruction は verification / review 証拠から `buildFixInstruction` が組み立てます。
 
 ## 9. GitHub 連携
 

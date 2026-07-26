@@ -98,3 +98,8 @@ export {
 export type { McpPolicyInput, McpPolicyMonitor } from "./mcp.js";
 export { DevinAcpShutdownController } from "./shutdown.js";
 export type { ShutdownOptions } from "./shutdown.js";
+export {
+  createDevinAcpAdapter,
+  DevinAcpAdapterError,
+} from "./acp-adapter.js";
+export type { DevinAcpAdapterOptions } from "./acp-adapter.js";

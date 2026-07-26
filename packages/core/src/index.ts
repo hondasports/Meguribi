@@ -13,6 +13,37 @@ export type {
   ImplementationContext,
   UntrustedSource,
 } from "./implementation-context.js";
+export type {
+  DevinAdapter,
+  FixInput,
+  ImplementationArtifactPaths,
+  ImplementationGitBoundary,
+  ImplementationInput,
+  ImplementationPermissionDecision,
+  ImplementationResult,
+  ImplementationStatus,
+} from "./devin-adapter.js";
+export type {
+  DeliveryDependencies,
+  DeliveryMcpConfirmation,
+  DeliveryResult,
+  DeliveryStep,
+  GitAdapter,
+  GitHubAdapter,
+  IssueRecord,
+  PolicyEngine,
+  PublishDecision,
+  ResumeDeliveryInput,
+  RunCommand,
+  RunDeliveryInput,
+  RunIdentity,
+  RunState,
+  RunStatus,
+  RunStore,
+  VerificationCommandResult,
+  VerificationResult,
+  Verifier,
+} from "./delivery.js";
 export {
   decideInheritedMcpPolicy,
   type McpDetection,
@@ -52,3 +83,11 @@ export type {
   DevinVersionDiagnosis,
 } from "./devin-diagnosis.js";
 export type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+export {
+  evaluatePublishGate,
+  resumeDelivery,
+  runDelivery,
+} from "./workflow/delivery.js";
+export type { PublishGateInput } from "./workflow/delivery.js";
+export { buildFixInstruction } from "./workflow/fix-instruction.js";
+export { matchesProtectedPath } from "./path-match.js";

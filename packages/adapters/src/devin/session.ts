@@ -45,7 +45,7 @@ export interface DevinAcpSession {
   readonly sessionId: string;
   readonly protocolVersion: number;
   readonly artifacts: DevinAgentArtifactStore;
-  prompt(input: { content: string }): AsyncIterable<AgentEvent>;
+  prompt(input?: { content?: string }): AsyncIterable<AgentEvent>;
   cancel(): Promise<void>;
   closeInput(): Promise<void>;
   finish(result: DevinAgentResultArtifact): Promise<void>;
@@ -136,10 +136,17 @@ class DevinAcpSessionImpl implements DevinAcpSession {
 
   private gitBoundaryResultPromise: Promise<GitSafetyComparison | undefined> | undefined;
 
-  async *prompt(input: { content: string }): AsyncIterable<AgentEvent> {
+  async *prompt(input: { content?: string } = {}): AsyncIterable<AgentEvent> {
+    const content = this.promptArtifact?.content ?? input.content;
+    if (!content || content.trim().length === 0) {
+      throw new DevinAcpTransportError(
+        "protocol_violation",
+        "ACP prompt requires built implementationContext or explicit content",
+      );
+    }
     try {
       yield* mapRawEvents(this.connection.prompt({
-        content: this.promptArtifact?.content ?? input.content,
+        content,
       }), this.artifacts, {
         cwd: this.cwd,
         protocolVersion: this.protocolVersion,

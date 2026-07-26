@@ -14,8 +14,10 @@ export type {
 } from "./git-boundary.js";
 export {
   assertDevinRunnable,
+  createDevinAcpAdapter,
   createDevinAcpTransport,
   DEFAULT_POST_TURN_LIVENESS_MS,
+  DevinAcpAdapterError,
   DevinAcpTransportError,
   DevinAcpTransportImpl,
   DevinAgentArtifactStore,
@@ -53,6 +55,7 @@ export {
 export type {
   AcpSessionNotificationPayload,
   AcpSessionUpdatePayload,
+  DevinAcpAdapterOptions,
   DevinAcpConnection,
   DevinAcpSession,
   DevinAcpTransport,
@@ -72,3 +75,27 @@ export type {
   StartDevinAcpInput,
   StartDevinAcpSessionInput,
 } from "./devin/index.js";
+export { FileSystemRunStore, createRunId } from "./run-store/index.js";
+export type { FileSystemRunStoreOptions } from "./run-store/index.js";
+export { createDefaultPolicyEngine } from "./policy/default-policy.js";
+export { createCommandVerifier } from "./verifier/command-verifier.js";
+export {
+  createFakeCodexForDelivery,
+  createFakeDeliveryDeps,
+  createFakeDevinAdapter,
+  createFakeGitAdapter,
+  createFakeGitHubAdapter,
+  createFakePolicyEngine,
+  createFakeVerifier,
+  createMemoryRunStore,
+} from "./fakes/index.js";
+export type {
+  CallCounter,
+  FakeCodexOptions,
+  FakeDeliveryBundleOptions,
+  FakeDevinOptions,
+  FakeGitHubOptions,
+  FakeGitOptions,
+  FakePolicyOptions,
+  FakeVerifierOptions,
+} from "./fakes/index.js";

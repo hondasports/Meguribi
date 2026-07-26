@@ -155,13 +155,12 @@ Codex TypeScript SDK は Codex CLI を子プロセスとして起動し、JSONL 
 
 責務:
 
-- Devin の実行コマンドを構築する。
-- 指定 worktree を作業ディレクトリにする。
-- プロンプトファイルを渡す。
-- 標準出力・標準エラー・終了コードを保存する。
-- 利用可能ならセッション ID を保存し、修正時に再開する。
+- 承認済み `ImplementationContext` を受け取り、指定 worktree で実装または修正を実行する。
+- ACP lifecycle（initialize / session / prompt / shutdown）を adapter 内に閉じ込める。
+- `ImplementationResult` へ正規化し、Git 権威の `changedFiles` と artifact 参照を返す。
+- commit / push / PR / Issue 更新を行わない。
 
-Devin CLI の引数はバージョン差異を吸収できるよう設定駆動にします。コア層に特定フラグをハードコードしません。
+MVP の本番実装は `createDevinAcpAdapter` です。CLI / workflow は `DevinAdapter` port だけに依存し、ACP SDK 型を知りません。
 
 #### Devin 実行安全境界
 
@@ -290,17 +289,27 @@ CLI -> Workflows -> Ports <- Adapters
 
 ## 8. 状態モデル
 
-汎用状態機械は作りませんが、Run は次の状態を持ちます。
+汎用状態機械は作りませんが、Run は粗い `status` と細かい `currentStep` / `completedSteps` を `state.json` に持ちます。
+
+粗い status 例:
 
 ```text
-created
-  -> context_ready
-  -> planned
-  -> implementing
-  -> verifying
-  -> reviewing
-  -> pr_created
-  -> completed
+created -> planning -> planned -> implementing -> verifying
+  -> reviewing -> publishing -> awaiting_human
+```
+
+細かい step 例（ACP / delivery）:
+
+```text
+preflight
+awaiting_mcp_confirmation
+implementing
+implementation_completed
+implementation_blocked
+verifying
+reviewing
+fixing
+publishing
 ```
 
 異常系:
@@ -309,9 +318,11 @@ created
 blocked
 failed
 cancelled
+timed_out
+interrupted
 ```
 
-状態更新は `state.json` を一時ファイルへ書いてから rename し、途中書き込みを避けます。
+状態更新は `state.json` を一時ファイルへ書いてから rename し、途中書き込みを避けます。`FileSystemRunStore` が atomic write と Issue 単位 lock を担当します。
 
 ## 9. 同時実行
 
