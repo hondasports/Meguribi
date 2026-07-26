@@ -50,13 +50,13 @@ if (args[0] === "--version") {
     // 上限 (256KiB) を超える有限出力。無限ループだと Linux で terminate が
     // force_failed になりやすく、診断のサイズ上限検証にも不要。
     const chunk = "A".repeat(8 * 1024);
-    for (let i = 0; i < 40; i += 1) {
-      process.stdout.write(chunk);
-    }
+    process.stdout.write(chunk.repeat(40));
+    process.exitCode = 0;
+  }
+  if (mode !== "version-flood") {
+    write(process.stdout, "devin 3000.2.17\n");
     process.exit(0);
   }
-  write(process.stdout, "devin 3000.2.17\n");
-  process.exit(0);
 }
 
 if (args[0] === "--help") {
@@ -117,17 +117,22 @@ if (args[0] === "acp" && args[1] === "--help") {
   }
   if (mode === "flood-output") {
     const chunk = "A".repeat(8 * 1024);
-    for (let i = 0; i < 40; i += 1) {
-      process.stdout.write(chunk);
-    }
+    process.stdout.write(chunk.repeat(40));
+    process.exitCode = 0;
+  }
+  if (mode !== "flood-output") {
+    write(
+      process.stdout,
+      "Usage: devin acp\n\nStart an ACP stdio session for agent clients.\n",
+    );
     process.exit(0);
   }
-  write(
-    process.stdout,
-    "Usage: devin acp\n\nStart an ACP stdio session for agent clients.\n",
-  );
-  process.exit(0);
 }
 
-write(process.stderr, `unexpected args: ${args.join(" ")}\n`);
-process.exit(1);
+if (mode === "version-flood" || mode === "flood-output") {
+  // 大量出力を flush してから自然終了させ、pipe の未送信データを捨てない。
+  process.exitCode = 0;
+} else {
+  write(process.stderr, `unexpected args: ${args.join(" ")}\n`);
+  process.exit(1);
+}
