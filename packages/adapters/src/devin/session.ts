@@ -140,6 +140,7 @@ class DevinAcpSessionImpl implements DevinAcpSession {
   ) {}
 
   private gitBoundaryResultPromise: Promise<GitSafetyComparison | undefined> | undefined;
+  private shutdownPromise: Promise<AgentTerminationResult> | undefined;
 
   async *prompt(input: { content?: string } = {}): AsyncIterable<AgentEvent> {
     const content = this.promptArtifact?.content ?? input.content;
@@ -232,6 +233,16 @@ class DevinAcpSessionImpl implements DevinAcpSession {
   }
 
   async shutdown(reason: AgentTerminationReason, options: ShutdownOptions): Promise<AgentTerminationResult> {
+    if (!this.shutdownPromise) {
+      this.shutdownPromise = this.performShutdown(reason, options);
+    }
+    return this.shutdownPromise;
+  }
+
+  private async performShutdown(
+    reason: AgentTerminationReason,
+    options: ShutdownOptions,
+  ): Promise<AgentTerminationResult> {
     const result = await this.shutdownController.shutdown(reason, options);
     this.permissionMediator?.endSession(this.sessionId);
     await this.validateGitBoundary();
