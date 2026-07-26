@@ -8,3 +8,19 @@ export { AgentExecutionResultSchema } from "./agent-execution-result.js";
 export type { AgentExecutionResult } from "./agent-execution-result.js";
 export { AgentPromptSchema } from "./agent-prompt.js";
 export type { AgentPrompt } from "./agent-prompt.js";
+export {
+  DiagnosisErrorCodeSchema,
+  DiagnosisErrorSchema,
+  DiagnosisWarningCodeSchema,
+  DiagnosisWarningSchema,
+  DevinDiagnosisSchema,
+  InheritedMcpPolicySchema,
+} from "./devin-diagnosis.js";
+export type {
+  DiagnosisError,
+  DiagnosisErrorCode,
+  DiagnosisWarning,
+  DiagnosisWarningCode,
+  DevinDiagnosis,
+  InheritedMcpPolicy,
+} from "./devin-diagnosis.js";
