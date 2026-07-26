@@ -36,6 +36,13 @@ export {
   InheritedMcpPolicySchema,
   VersionDiagnosisSchema,
 } from "./agent-diagnosis.js";
+export type {
+  AgentDiagnosis,
+  AcpDiagnosis,
+  AuthenticationDiagnosis,
+  ExecutableDiagnosis,
+  VersionDiagnosis,
+} from "./agent-diagnosis.js";
 export {
   DiagnosisErrorCodeSchema as DevinDiagnosisErrorCodeSchema,
   DiagnosisErrorSchema as DevinDiagnosisErrorSchema,
