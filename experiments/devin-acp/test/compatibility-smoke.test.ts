@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { DevinDiagnosis } from "@meguribi/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCompatibilitySmoke } from "../src/compatibility-smoke.js";
 
@@ -41,7 +42,78 @@ describe("Devin compatibility smoke", () => {
     expect(result.changedFiles).toEqual(["README.md"]);
     expect(result.outsideChanges).toEqual([]);
     expect(result.residualProcesses).toBe(false);
+    expect(result.executedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.minimumSupportedVersion).toMatch(/^\d+\.\d+\.\d+/);
     await expect(fs.readFile(path.join(artifactDirectory, "raw-events.jsonl"), "utf8")).resolves.toContain("session_update");
     await expect(fs.readFile(path.join(artifactDirectory, "events.jsonl"), "utf8")).resolves.toContain("turn.completed");
+  });
+
+  it("blocks when Devin diagnosis is not runnable", async () => {
+    const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-diagnosis-"));
+    artifactDirectories.push(artifactDirectory);
+    const diagnosis: DevinDiagnosis = {
+      executable: { status: "ok", path: "devin" },
+      version: { status: "supported", raw: "3000.0.0" },
+      authentication: { status: "unauthenticated" },
+      acp: { status: "supported" },
+      inheritedMcpPolicy: "deny",
+      runnable: false,
+      warnings: [],
+      errors: [
+        { code: "unauthenticated", message: "Devin CLI is not authenticated", nextAction: "Run: devin auth login" },
+      ],
+    };
+    const result = await runCompatibilitySmoke({ artifactDirectory, optIn: true, diagnosis });
+
+    expect(result.status).toBe("blocked");
+    expect(result.implementation).toBeNull();
+    expect(result.error).toContain("not authenticated");
+  });
+
+  it("records worktree boundary violation and outside changes", async () => {
+    const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-outside-"));
+    artifactDirectories.push(artifactDirectory);
+    const result = await runCompatibilitySmoke({
+      artifactDirectory,
+      fake: true,
+      optIn: true,
+      fakeMode: "write-outside",
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.worktreeBoundaryOk).toBe(false);
+    expect(result.outsideChanges.length).toBeGreaterThan(0);
+    expect(result.implementation).not.toBeNull();
+  });
+
+  it("blocks unexpected inherited MCP under deny policy", async () => {
+    const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-mcp-deny-"));
+    artifactDirectories.push(artifactDirectory);
+    const result = await runCompatibilitySmoke({
+      artifactDirectory,
+      fake: true,
+      optIn: true,
+      fakeMode: "mcp-stderr",
+      inheritedMcpPolicy: "deny",
+    });
+
+    expect(result.status).toBe("blocked");
+    expect(result.implementation).not.toBeNull();
+    expect(result.error ?? "").toMatch(/unexpected.*stdio.*MCP|detected unexpected stdio MCP/);
+  });
+
+  it("force-terminates a SIGTERM-ignoring fake ACP without residual processes", async () => {
+    const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-sigterm-"));
+    artifactDirectories.push(artifactDirectory);
+    const result = await runCompatibilitySmoke({
+      artifactDirectory,
+      fake: true,
+      optIn: true,
+      fakeMode: "ignore-sigterm",
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.residualProcesses).toBe(false);
+    expect(result.shutdownCompleted).toBe(true);
   });
 });
