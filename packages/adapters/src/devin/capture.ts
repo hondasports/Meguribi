@@ -20,6 +20,17 @@ export class ProbeOutputTooLargeError extends Error {
   }
 }
 
+function oversizedResult(maxOutputBytes: number): CapturedCommandResult {
+  return {
+    exitCode: null,
+    stdout: "",
+    stderr: `Probe output exceeded ${maxOutputBytes} bytes`,
+    timedOut: false,
+    executableMissing: false,
+    outputTooLarge: true,
+  };
+}
+
 /**
  * ProcessRunner 経由で短命コマンドを実行し、stdout/stderr を収集する。
  * 合計バイトが上限を超えたらプロセスを停止して fail-closed にする。
@@ -27,6 +38,7 @@ export class ProbeOutputTooLargeError extends Error {
  * 注意: ストリーム読み取り中に terminateTree を await すると、
  * Windows などで close 待ちと読み取りがデッドロックするため、
  * 上限超過時は terminate を fire-and-forget し、EOF まで読み捨てる。
+ * Linux では terminate が force_failed でも、上限超過なら fail-closed として扱う。
  */
 export async function captureCommand(
   runner: ProcessRunner,
@@ -89,25 +101,29 @@ export async function captureCommand(
       return new TextDecoder().decode(merged);
     };
 
-    const [stdout, stderr, exit] = await Promise.all([
+    // terminate 失敗（force_failed 等）で waitForExit が reject しても、
+    // 上限超過済みなら fail-closed として扱う。
+    const exitPromise = managed.waitForExit().then(
+      (exit) => ({ ok: true as const, exit }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+
+    const [stdout, stderr, exitOutcome] = await Promise.all([
       collectBounded(managed.stdout),
       collectBounded(managed.stderr),
-      managed.waitForExit(),
+      exitPromise,
     ]);
 
     if (outputTooLarge) {
-      return {
-        exitCode: null,
-        stdout: "",
-        stderr: `Probe output exceeded ${maxOutputBytes} bytes`,
-        timedOut: false,
-        executableMissing: false,
-        outputTooLarge: true,
-      };
+      return oversizedResult(maxOutputBytes);
+    }
+
+    if (!exitOutcome.ok) {
+      throw exitOutcome.error;
     }
 
     return {
-      exitCode: exit.code,
+      exitCode: exitOutcome.exit.code,
       stdout,
       stderr,
       timedOut: false,

@@ -47,11 +47,13 @@ if (args[0] === "--version") {
     process.exit(1);
   }
   if (mode === "version-flood") {
-    // 上限を超える出力を小チャンクで継続。親が terminate するまで書く。
+    // 上限 (256KiB) を超える有限出力。無限ループだと Linux で terminate が
+    // force_failed になりやすく、診断のサイズ上限検証にも不要。
     const chunk = "A".repeat(8 * 1024);
-    for (;;) {
+    for (let i = 0; i < 40; i += 1) {
       process.stdout.write(chunk);
     }
+    process.exit(0);
   }
   write(process.stdout, "devin 3000.2.17\n");
   process.exit(0);
@@ -115,9 +117,10 @@ if (args[0] === "acp" && args[1] === "--help") {
   }
   if (mode === "flood-output") {
     const chunk = "A".repeat(8 * 1024);
-    for (;;) {
+    for (let i = 0; i < 40; i += 1) {
       process.stdout.write(chunk);
     }
+    process.exit(0);
   }
   write(
     process.stdout,
