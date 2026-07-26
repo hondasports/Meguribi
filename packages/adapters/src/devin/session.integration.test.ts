@@ -122,13 +122,24 @@ describe("startDevinAcpSession integration", () => {
     expect(result.status).toBe("completed");
   });
 
-  it("redacts secrets in persisted message artifacts", async () => {
-    const { artifactRoot } = await collectEvents("secret-in-message");
+  it("redacts secrets in persisted message artifacts and yielded events", async () => {
+    const { artifactRoot, events } = await collectEvents("secret-in-message");
     const raw = await fs.readFile(path.join(artifactRoot, "raw-events.jsonl"), "utf8");
-    const events = await fs.readFile(path.join(artifactRoot, "events.jsonl"), "utf8");
+    const eventLog = await fs.readFile(path.join(artifactRoot, "events.jsonl"), "utf8");
     expect(raw.includes("supersecrettoken123")).toBe(false);
-    expect(events.includes("supersecrettoken123")).toBe(false);
-    expect(raw.includes("[REDACTED]") || events.includes("[REDACTED]")).toBe(true);
+    expect(eventLog.includes("supersecrettoken123")).toBe(false);
+    expect(raw.includes("[REDACTED]") || eventLog.includes("[REDACTED]")).toBe(true);
+
+    const deltas = events.filter(
+      (event): event is Extract<AgentEvent, { type: "message.delta" }> =>
+        event.type === "message.delta",
+    );
+    expect(deltas.length).toBeGreaterThan(0);
+    for (const delta of deltas) {
+      expect(delta.text.includes("supersecrettoken123")).toBe(false);
+      expect(delta.text.includes("Bearer abc.def.ghi")).toBe(false);
+    }
+    expect(deltas.some((delta) => delta.text.includes("[REDACTED]"))).toBe(true);
   });
 
   it("maps thought chunks to unknown without treating them as turn completion", async () => {
@@ -140,5 +151,32 @@ describe("startDevinAcpSession integration", () => {
   it("persists approval.required for permission requests", async () => {
     const { events } = await collectEvents("permission");
     expect(events.some((event) => event.type === "approval.required")).toBe(true);
+  });
+
+  it("persists stderr.log when prompt fails", async () => {
+    const { cwd, artifactRoot } = await tempPair();
+    const session = await startDevinAcpSession({
+      executable: node(),
+      executableArgs: [fakeAcpServer()],
+      acpArgs: [],
+      cwd,
+      env: { ...process.env, FAKE_ACP_MODE: "connection-close-mid-prompt" },
+      startupTimeoutMs: 5_000,
+      diagnosis: runnableDiagnosis(),
+      runner: new ProcessRunner(),
+      artifactRoot,
+    });
+
+    await expect(async () => {
+      for await (const _event of session.prompt({ content: "implement fixture" })) {
+        // drain until transport failure
+      }
+    }).rejects.toBeTruthy();
+
+    const stderr = await fs.readFile(path.join(artifactRoot, "stderr.log"), "utf8");
+    expect(stderr).toContain(`cwd=${cwd}`);
+    const eventLog = await fs.readFile(path.join(artifactRoot, "events.jsonl"), "utf8");
+    expect(eventLog).toContain("session.failed");
+    await session.terminate(500).catch(() => undefined);
   });
 });

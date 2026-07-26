@@ -52,8 +52,8 @@ async function* mapRawEvents(
         raw.at,
       );
       for (const event of normalized) {
-        await artifacts.appendEvent(event, sequence, raw.at);
-        yield event;
+        const persisted = await artifacts.appendEvent(event, sequence, raw.at);
+        yield persisted.event;
       }
       continue;
     }
@@ -66,8 +66,8 @@ async function* mapRawEvents(
         summary: raw.summary,
         at: raw.at,
       });
-      await artifacts.appendEvent(event, sequence, raw.at);
-      yield event;
+      const persisted = await artifacts.appendEvent(event, sequence, raw.at);
+      yield persisted.event;
       continue;
     }
 
@@ -83,7 +83,7 @@ async function* mapRawEvents(
         stopReason: raw.stopReason,
         at: raw.at,
       });
-      await artifacts.appendEvent(event, sequence, raw.at);
+      const persisted = await artifacts.appendEvent(event, sequence, raw.at);
       await artifacts.writeSession({
         sessionId: raw.sessionId,
         cwd: sessionMeta.cwd,
@@ -92,12 +92,14 @@ async function* mapRawEvents(
         startedAt: sessionMeta.startedAt,
         finishedAt: raw.at,
       });
-      yield event;
+      yield persisted.event;
     }
   }
 }
 
 class DevinAcpSessionImpl implements DevinAcpSession {
+  private stderrPersisted = false;
+
   constructor(
     readonly sessionId: string,
     readonly protocolVersion: number,
@@ -131,6 +133,7 @@ class DevinAcpSessionImpl implements DevinAcpSession {
       };
       const sequence = this.artifacts.nextSequence();
       await this.artifacts.appendEvent(failed, sequence);
+      await this.persistStderr();
       throw error;
     }
   }
@@ -153,14 +156,22 @@ class DevinAcpSessionImpl implements DevinAcpSession {
       finishedAt: new Date().toISOString(),
     });
     await this.artifacts.writeResult(result);
-    const stderr = this.connection.stderrText();
-    if (stderr.length > 0) {
-      await this.artifacts.appendStderr(stderr);
-    }
+    await this.persistStderr();
   }
 
   async terminate(graceMs?: number): Promise<void> {
     await this.connection.terminate(graceMs);
+  }
+
+  private async persistStderr(): Promise<void> {
+    if (this.stderrPersisted) {
+      return;
+    }
+    this.stderrPersisted = true;
+    const stderr = this.connection.stderrText();
+    if (stderr.length > 0) {
+      await this.artifacts.appendStderr(stderr);
+    }
   }
 }
 
