@@ -1,10 +1,11 @@
 import type { PlanArtifact, PlanContent, ReviewArtifact } from "./codex-artifact.js";
 import type {
-  DevinAdapter,
+  AgentAdapter,
   FixInput,
   ImplementationInput,
   ImplementationResult,
-} from "./devin-adapter.js";
+} from "./agent-adapter.js";
+import type { DevinAdapter } from "./devin-adapter.js";
 import type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
 
 export type RunCommand = "run" | "resume";
@@ -247,12 +248,16 @@ export interface DeliveryDependencies {
       repositoryRules: string;
     }): Promise<ReviewArtifact>;
   };
+  implementer: AgentAdapter;
+  /** @deprecated Use {@link implementer} instead. */
   devin: DevinAdapter;
   verifier: Verifier;
   policy: PolicyEngine;
   runStore: RunStore;
   mcpConfirmation?: DeliveryMcpConfirmation;
-  /** Optional Devin CLI readiness check before implementation. */
+  /** Optional agent readiness check before implementation. */
+  assertImplementerReady?: () => Promise<void>;
+  /** @deprecated Use {@link assertImplementerReady} instead. */
   assertDevinReady?: () => Promise<void>;
   now?: () => Date;
 }

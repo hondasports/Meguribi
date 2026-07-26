@@ -590,7 +590,7 @@ async function maybeFix(input: {
     },
   });
 
-  const implementation = await deps.devin.fix({
+  const implementation = await deps.implementer.fix({
     context,
     artifactRoot: `${delivery.artifactRootForDevin}-fix-${state.fixAttempts}`,
     gitBoundary: {
@@ -819,7 +819,7 @@ export async function runDelivery(
       completionCriteria: input.completionCriteria,
       repositoryRules: input.repositoryRules,
     });
-    const implementation = await deps.devin.implement({
+    const implementation = await deps.implementer.implement({
       context,
       artifactRoot: input.artifactRootForDevin,
       gitBoundary: {

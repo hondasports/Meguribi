@@ -1,5 +1,27 @@
-export { loadDevinConfig } from "./config-loader.js";
-export type { DevinConfigResult, LoadDevinConfigOptions } from "./config-loader.js";
+export {
+  loadCursorConfig,
+  loadDevinConfig,
+  loadImplementerConfig,
+} from "./config-loader.js";
+export type {
+  CursorConfigResult,
+  DevinConfigResult,
+  ImplementerConfigResult,
+  LoadDevinConfigOptions,
+} from "./config-loader.js";
+export {
+  CursorConfigSchema,
+  cursorConfigFromEnvironment,
+  resolveCursorConfig,
+  toRedactedCursorConfigSnapshot,
+  validateCursorConfig,
+} from "./cursor-config.js";
+export type {
+  CursorConfig,
+  CursorConfigInput,
+  CursorConfigSources,
+  InheritedMcpPolicy as CursorInheritedMcpPolicy,
+} from "./cursor-config.js";
 export {
   DevinConfigSchema,
   devinConfigFromEnvironment,
@@ -11,5 +33,5 @@ export type {
   DevinConfig,
   DevinConfigInput,
   DevinConfigSources,
-  InheritedMcpPolicy,
+  InheritedMcpPolicy as DevinInheritedMcpPolicy,
 } from "./devin-config.js";

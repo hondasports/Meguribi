@@ -641,12 +641,16 @@ export function createFakeDeliveryDeps(options: FakeDeliveryBundleOptions = {}):
       github,
       git,
       codex,
+      implementer: devin,
       devin,
       verifier,
       policy,
       runStore,
       mcpConfirmation,
       now,
+      async assertImplementerReady() {
+        // Fake bundle assumes implementer preflight already succeeded.
+      },
       async assertDevinReady() {
         // Fake bundle assumes Devin preflight already succeeded.
       },
