@@ -30,7 +30,7 @@ export function parseAcpCapability(input: {
   }
 
   const acpHelp = input.acpHelp;
-  const hasUsage = /usage:\s*cursor(?:\.exe)?\s+acp\b/i.test(acpHelp);
+  const hasUsage = /usage:\s*\S+(?:\.exe)?\s+acp\b/i.test(acpHelp);
   const mentionsAcp = /\bacp\b/i.test(acpHelp);
   if (hasUsage || (mentionsAcp && /stdio|agent\s*client|initialize/i.test(acpHelp))) {
     return "supported";
@@ -39,7 +39,7 @@ export function parseAcpCapability(input: {
   const rootOk = input.rootHelpExitCode === 0 && input.rootHelp !== undefined;
   if (rootOk) {
     const rootMentionsAcp =
-      /\bacp\b/i.test(input.rootHelp!) && /usage:\s*cursor(?:\.exe)?\s+acp/i.test(input.rootHelp!);
+      /\bacp\b/i.test(input.rootHelp!) && /usage:\s*\S+(?:\.exe)?\s+acp/i.test(input.rootHelp!);
     if (rootMentionsAcp && mentionsAcp) {
       return "supported";
     }

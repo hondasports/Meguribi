@@ -286,7 +286,7 @@ A user must be able to determine:
 
 Run artifacts and GitHub history provide this traceability without a custom audit database.
 
-## 19. Devin ACP permissions
+## 19. ACP permissions
 
 ACP permission requests are normalized at the adapter boundary into `PermissionRequest` values and evaluated by PolicyEngine. Worktree-outside paths, protected paths, Git writes, production operations, secret access, external network use, and unknown operations are denied. Test, lint, and build commands are allowed only when they match an explicit allowlist.
 
@@ -294,13 +294,13 @@ Interactive confirmation expires to deny. Non-interactive mode fails closed for 
 
 ## 20. Inherited MCP configuration
 
-Meguribi must not claim complete isolation from Devin's saved MCP configuration. `warn` requires interactive confirmation and stops non-interactive runs without explicit permission. `deny` blocks detectable stdio or HTTP MCP connections and records a redacted SECURITY_ALERT before or immediately after detection. Endpoints, credentials, and tokens are never persisted before redaction.
+Meguribi must not claim complete isolation from the agent's saved MCP configuration. `warn` requires interactive confirmation and stops non-interactive runs without explicit permission. `deny` blocks detectable stdio or HTTP MCP connections and records a redacted SECURITY_ALERT before or immediately after detection. Endpoints, credentials, and tokens are never persisted before redaction.
 
 ## 21. Prompt and Git safety boundaries
 
 Issue text, comments, previous attempts, and fix instructions are untrusted content and are explicitly delimited inside the implementation prompt. Repository rules, the primary skill, the approved plan, protected paths, and limits are separate trusted-contract blocks. Control characters, zero-width characters, delimiter escapes, secret patterns, and paths outside the worktree are normalized or rejected. The prompt version and hash are stored.
 
-Meguribi compares Git snapshots before and after Devin execution for the repository root, common directory, HEAD, approved base SHA, branch, approved remote identity, remote, local config, reflog, protected paths, pre-existing dirty state, symlink escapes, changed-file count, diff lines, binary files, and outside-worktree changes. A violation or suspicious snapshot cannot proceed to verification, commit, push, or PR creation. A repository session without Git boundary configuration fails closed. Git diff is authoritative for changed files; agent reports are advisory. Mismatches between `reportedFiles` and the Git diff are stored as warnings in `git-boundary.json` and never override the Git result.
+Meguribi compares Git snapshots before and after agent execution for the repository root, common directory, HEAD, approved base SHA, branch, approved remote identity, remote, local config, reflog, protected paths, pre-existing dirty state, symlink escapes, changed-file count, diff lines, binary files, and outside-worktree changes. A violation or suspicious snapshot cannot proceed to verification, commit, push, or PR creation. A repository session without Git boundary configuration fails closed. Git diff is authoritative for changed files; agent reports are advisory. Mismatches between `reportedFiles` and the Git diff are stored as warnings in `git-boundary.json` and never override the Git result.
 
 ## 22. ACP shutdown and artifacts
 

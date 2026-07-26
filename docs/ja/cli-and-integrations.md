@@ -44,34 +44,35 @@ meguribi init ./path/to/repository
 
 ### `meguribi doctor`
 
-Devin CLI の実行可否を機械的に診断します。`meguribi run` の preflight からも同じ診断 API（`diagnoseDevin`）を利用します。
+実装エージェント CLI（Devin または Cursor）の実行可否を機械的に診断します。`meguribi run` の preflight からも同じ診断 API（`diagnoseCursor` / `diagnoseDevin`）を利用します。
 
 ```bash
 meguribi doctor
 meguribi doctor --json
 meguribi doctor --non-interactive
+meguribi doctor --implementer cursor
 ```
 
 確認内容:
 
-- 設定された Devin executable の解決
-- `devin --version` の取得と parse（未知 version は無条件許可しない）
-- `devin auth status` による認証状態（認証情報そのものは読み取らない）
-- `devin acp --help` による ACP capability probe（session やネットワーク接続は開始しない）
+- 設定された実装エージェント executable（Devin / Cursor / cursor-agent / agent）の解決
+- `<executable> --version` の取得と parse（未知 version は無条件許可しない）
+- `<executable> auth status` または `<executable> status` による認証状態（認証情報そのものは読み取らない）
+- `<executable> acp --help` による ACP capability probe（session やネットワーク接続は開始しない）
 - `inheritedMcpPolicy`（MCP を完全隔離できるとは表示しない）
 
 人間向け表示例:
 
 ```text
-✓ Devin CLI: 3000.2.17
+✓ Agent CLI: 3000.2.17
 ✓ Authentication: authenticated
 ✓ ACP: supported
-! Saved Devin settings may include MCP servers. Meguribi cannot fully isolate MCP.
+! Saved agent settings may include MCP servers. Meguribi cannot fully isolate MCP.
   Policy: warn
 Runnable: yes
 ```
 
-`--json` では `DevinDiagnosis` の安定 schema のみを stdout へ出力します。`runnable` が false のとき終了コードは非 0 です。`--non-interactive` かつ `inheritedMcpPolicy: warn` の場合は fail-closed で停止します。
+`--json` では `AgentDiagnosis` の安定 schema のみを stdout へ出力します。`runnable` が false のとき終了コードは非 0 です。`--non-interactive` かつ `inheritedMcpPolicy: warn` の場合は fail-closed で停止します。
 
 ### `meguribi discover`
 
@@ -137,7 +138,7 @@ meguribi plan owner/repo#125
 
 ### `meguribi run`
 
-承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`DevinAdapter` port（本番は `createDevinAcpAdapter`）へ実装を委譲します。
+承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`AgentAdapter` port（本番は `createDevinAcpAdapter` または `createCursorAcpAdapter`）へ実装を委譲します。
 
 ```bash
 meguribi run owner/repo#125
@@ -147,6 +148,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 主要オプション:
 
 - `--repo-path <path>`
+- `--implementer <devin|cursor>`
 - `--base <branch>`
 - `--no-commit`
 - `--no-push`
@@ -233,6 +235,8 @@ meguribi cleanup owner/repo#125
 ```yaml
 version: 1
 
+implementer: devin
+
 repository:
   baseBranch: main
 
@@ -284,15 +288,21 @@ devin:
   startupTimeoutMs: 10000
   turnTimeoutMinutes: 45
   inheritedMcpPolicy: warn
+
+cursor:
+  executable: cursor
+  startupTimeoutMs: 10000
+  turnTimeoutMinutes: 45
+  inheritedMcpPolicy: warn
 ```
 
 `transport: acp` が MVP の標準です。秘密情報やトークンは設定ファイルへ記述しません。
 
-`inheritedMcpPolicy` は、Devin CLI が利用者の保存済み MCP 設定を継承する可能性をどう扱うかを表します。
+`inheritedMcpPolicy` は、実装エージェント CLI が利用者の保存済み MCP 設定を継承する可能性をどう扱うかを表します。
 
 - `warn`: 対話実行では警告を表示し、利用者へ確認する
 - `deny`: MCP 接続を検知した場合に停止する
-- `allow`: 利用者の Devin 設定を明示的に受け入れる
+- `allow`: 利用者の agent 設定を明示的に受け入れる
 
 MVP の既定値は `warn` とします。非対話実行では `warn` を許可せず、`allow` または `deny` を明示しない限り安全側へ停止します。MCP を完全に隔離できると表現してはいけません。
 
@@ -308,7 +318,7 @@ MVP の既定値は `warn` とします。非対話実行では `warn` を許可
 4. 環境変数
 5. CLI オプション
 
-環境変数では、`MEGURIBI_DEVIN_EXECUTABLE`、`MEGURIBI_DEVIN_TRANSPORT`、`MEGURIBI_DEVIN_INHERITED_MCP_POLICY`、および各 timeout に対応する `MEGURIBI_DEVIN_*` だけを受け付けます。任意の環境変数、token、cookie は設定へ取り込みません。
+環境変数では、`MEGURIBI_IMPLEMENTER`、`MEGURIBI_DEVIN_EXECUTABLE`、`MEGURIBI_DEVIN_TRANSPORT`、`MEGURIBI_DEVIN_INHERITED_MCP_POLICY`、各 timeout に対応する `MEGURIBI_DEVIN_*`、`MEGURIBI_CURSOR_EXECUTABLE`、`MEGURIBI_CURSOR_INHERITED_MCP_POLICY`、および各 timeout に対応する `MEGURIBI_CURSOR_*` だけを受け付けます。任意の環境変数、token、cookie は設定へ取り込みません。
 
 各 Run の `state.json` には、秘密情報を除いた解決済み設定を保存します。
 

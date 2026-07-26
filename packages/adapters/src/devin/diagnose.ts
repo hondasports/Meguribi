@@ -344,6 +344,7 @@ export async function diagnoseDevin(
       acpExitCode: acpHelpProbe.exitCode,
       timedOut: acpProbeDegraded,
     }),
+    supportsSessionLoad: false,
   };
 
   if (acp.status === "unsupported") {

@@ -142,7 +142,7 @@ Responsibilities:
 
 The Codex TypeScript SDK launches the Codex CLI and exchanges JSONL events. SDK-specific shapes remain inside the adapter.
 
-### `DevinAdapter`
+### `AgentAdapter`
 
 Responsibilities:
 
@@ -151,13 +151,13 @@ Responsibilities:
 - Normalize into `ImplementationResult`, with Git-authoritative `changedFiles` and artifact references.
 - Never commit, push, create PRs, or update Issues.
 
-The MVP production implementation is `createDevinAcpAdapter`. CLI / workflow depend only on the `DevinAdapter` port and never see ACP SDK types.
+The MVP production implementations are `createDevinAcpAdapter` (Devin) and `createCursorAcpAdapter` (Cursor). CLI / workflow depend only on the `AgentAdapter` port and never see ACP SDK types or CLI-specific output. The implementer must be selected explicitly via `MEGURIBI_IMPLEMENTER`, `implementer` in `.meguribi.yml`, or `--implementer`; otherwise Meguribi fails closed.
 
-#### Devin execution safety boundary
+#### Agent execution safety boundary
 
-`PermissionRequest`, inherited-MCP decisions, implementation prompts, Git/worktree snapshots, and shutdown are normalized and checked inside the Devin ACP adapter. ACP SDK request/response types and CLI-specific output do not leak into core workflows. Issue text, comments, and fix instructions are delimited as untrusted content by the prompt builder; permission and Git decisions are enforced independently by PolicyEngine.
+`PermissionRequest`, inherited-MCP decisions, implementation prompts, Git/worktree snapshots, and shutdown are normalized and checked inside the ACP adapter (shared by Devin and Cursor). ACP SDK request/response types and CLI-specific output do not leak into core workflows. Issue text, comments, and fix instructions are delimited as untrusted content by the prompt builder; permission and Git decisions are enforced independently by PolicyEngine.
 
-`DevinAcpShutdownController` performs cancel, stdin close, grace period, termination, and force escalation at most once and stores the result in `termination.json`. Git snapshot changes to HEAD, branch, remote, local config, protected paths, symlinks, or diff limits feed the publish gate. Git diff remains authoritative over agent-reported changed files.
+`AcpShutdownController` performs cancel, stdin close, grace period, termination, and force escalation at most once and stores the result in `termination.json`. Git snapshot changes to HEAD, branch, remote, local config, protected paths, symlinks, or diff limits feed the publish gate. Git diff remains authoritative over agent-reported changed files.
 
 ### `Verifier`
 

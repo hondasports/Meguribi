@@ -151,7 +151,7 @@ async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
 
 Codex TypeScript SDK は Codex CLI を子プロセスとして起動し、JSONL イベントを交換します。Meguribi は SDK 固有型をアダプター内に閉じ込めます。
 
-### DevinAdapter
+### AgentAdapter
 
 責務:
 
@@ -160,15 +160,15 @@ Codex TypeScript SDK は Codex CLI を子プロセスとして起動し、JSONL 
 - `ImplementationResult` へ正規化し、Git 権威の `changedFiles` と artifact 参照を返す。
 - commit / push / PR / Issue 更新を行わない。
 
-MVP の本番実装は `createDevinAcpAdapter` です。CLI / workflow は `DevinAdapter` port だけに依存し、ACP SDK 型を知りません。
+MVP の本番実装は `createDevinAcpAdapter`（Devin）と `createCursorAcpAdapter`（Cursor）です。CLI / workflow は `AgentAdapter` port だけに依存し、ACP SDK 型や CLI 固有の出力を知りません。implementer は `MEGURIBI_IMPLEMENTER`、`.meguribi.yml` の `implementer`、または `--implementer` で明示的に選択します。選択しない場合は fail-closed します。
 
-#### Devin 実行安全境界
+#### エージェント実行安全境界
 
-`PermissionRequest`、MCP 継承判定、実装 prompt、Git/worktree snapshot、shutdown は Devin ACP adapter の内側で正規化・検証します。ACP SDK の request / response 型や CLI 固有の出力を core workflow へ漏らしません。Issue、comment、fix instruction は untrusted として prompt builder が区切り、permission と Git の判定は prompt とは独立した PolicyEngine が行います。
+`PermissionRequest`、MCP 継承判定、実装 prompt、Git/worktree snapshot、shutdown は ACP adapter（Devin / Cursor 共通）の内側で正規化・検証します。ACP SDK の request / response 型や CLI 固有の出力を core workflow へ漏らしません。Issue、comment、fix instruction は untrusted として prompt builder が区切り、permission と Git の判定は prompt とは独立した PolicyEngine が行います。
 
-`DevinAcpShutdownController` は cancel、stdin close、grace period、terminate、force escalation を一度だけ実行し、`termination.json` へ結果を保存します。Git snapshot の HEAD、branch、remote、local config、protected path、symlink、diff limit の違反は publish gate の入力となり、Agent が申告した changed files より Git diff を優先します。
+`AcpShutdownController` は cancel、stdin close、grace period、terminate、force escalation を一度だけ実行し、`termination.json` へ結果を保存します。Git snapshot の HEAD、branch、remote、local config、protected path、symlink、diff limit の違反は publish gate の入力となり、Agent が申告した changed files より Git diff を優先します。
 
-将来 API 連携へ変更しても、`DevinAdapter` のインターフェースは維持します。
+将来 API 連携へ変更しても、`AgentAdapter` のインターフェースは維持します。
 
 ### Verifier
 

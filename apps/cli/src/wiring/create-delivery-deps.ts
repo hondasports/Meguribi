@@ -25,6 +25,7 @@ import type { DeliveryDependencies, InheritedMcpPolicy } from "@meguribi/core";
 export interface CreateDeliveryDepsOptions {
   cwd?: string;
   nonInteractive?: boolean;
+  implementer?: string;
   allowInheritedMcp?: boolean;
   /**
    * Prefer local fakes for GitHub/Git/Codex/Verifier.
@@ -117,6 +118,7 @@ export async function createDeliveryDeps(
   const config = await loadImplementerConfig({
     repositoryPath: cwd,
     nonInteractive: false,
+    cli: options.implementer !== undefined ? { implementer: options.implementer } : {},
   });
 
   if (config.kind === "cursor") {

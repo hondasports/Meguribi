@@ -58,6 +58,7 @@ export const AuthenticationDiagnosisSchema = v.object({
 
 export const AcpDiagnosisSchema = v.object({
   status: v.picklist(["supported", "unsupported", "unknown"]),
+  supportsSessionLoad: v.optional(v.boolean()),
 }) satisfies v.GenericSchema<unknown, CoreAcpDiagnosis>;
 
 export const AgentDiagnosisSchema = v.object({

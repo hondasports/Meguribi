@@ -295,7 +295,7 @@ Meguribi は個人ツールですが、後から次を確認できるように�
 
 独自の監査 DB は作らず、Run 成果物と GitHub 履歴で実現します。
 
-## 19. Devin ACP permission
+## 19. ACP permission
 
 ACP の permission request は adapter 境界で `PermissionRequest` へ正規化し、PolicyEngine の判定を通します。worktree 外、protected path、Git の書き込み、production、secret、external network、unknown operation は deny します。test / lint / build などの command は明示的な allowlist に一致した場合だけ許可します。
 
@@ -303,13 +303,13 @@ ACP の permission request は adapter 境界で `PermissionRequest` へ正規�
 
 ## 20. MCP 継承
 
-Devin CLI の保存済み MCP 設定を完全に隔離できるとは表現しません。`warn` は対話時に確認し、非対話時は明示許可なしで停止します。`deny` は検知可能な stdio / HTTP MCP 接続を SECURITY_ALERT として記録し、prompt 前または検知直後に停止します。接続先、credential、token は redaction 前の値を成果物へ保存しません。
+agent CLI の保存済み MCP 設定を完全に隔離できるとは表現しません。`warn` は対話時に確認し、非対話時は明示許可なしで停止します。`deny` は検知可能な stdio / HTTP MCP 接続を SECURITY_ALERT として記録し、prompt 前または検知直後に停止します。接続先、credential、token は redaction 前の値を成果物へ保存しません。
 
 ## 21. prompt と Git の安全境界
 
 Issue、comment、previous attempt、fix instruction は untrusted content として prompt 内で明示的に区切ります。repository rules、主 skill、approved plan、protected paths、limits は trusted contract として別ブロックに置きます。control character、zero-width character、delimiter の脱出、secret pattern、worktree 外 path を正規化・拒否し、prompt version と hash を保存します。
 
-Devin 実行前後の Git snapshot を比較し、repository root、common dir、HEAD、承認済み base SHA、branch、承認済み remote identity、remote、local config、reflog、protected path、pre-existing dirty state、symlink、changed file 数、diff 行数、binary file、worktree 外変更を検査します。違反または suspicious な snapshot は Verifier、commit、push、PR へ進めません。Git の diff が changed files の正本であり、Agent の申告は参考値です。repository 上で Git boundary 設定がない session は fail-closed です。
+Agent 実行前後の Git snapshot を比較し、repository root、common dir、HEAD、承認済み base SHA、branch、承認済み remote identity、remote、local config、reflog、protected path、pre-existing dirty state、symlink、changed file 数、diff 行数、binary file、worktree 外変更を検査します。違反または suspicious な snapshot は Verifier、commit、push、PR へ進めません。Git の diff が changed files の正本であり、Agent の申告は参考値です。repository 上で Git boundary 設定がない session は fail-closed です。
 Agent の `reportedFiles` と Git diff が一致しない場合は warning として `git-boundary.json` に保存しますが、Git diff の判定を上書きしません。
 
 ## 22. ACP 終了と成果物

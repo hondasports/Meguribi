@@ -566,6 +566,11 @@ async function maybeFix(input: {
     fixAttempts: state.fixAttempts + 1,
   });
 
+  const preflight = deps.assertImplementerReady ?? deps.assertDevinReady;
+  if (preflight) {
+    await preflight();
+  }
+
   const fixInstruction = buildFixInstruction({
     verification: input.verification,
     review: input.review,
@@ -716,8 +721,9 @@ export async function runDelivery(
       currentStep: "preflight",
       completedSteps: appendStep(state, "context"),
     });
-    if (deps.assertDevinReady) {
-      await deps.assertDevinReady();
+    const preflight = deps.assertImplementerReady ?? deps.assertDevinReady;
+    if (preflight) {
+      await preflight();
     }
     current = await mark(deps, current.runId, {
       completedSteps: appendStep(current, "preflight"),
