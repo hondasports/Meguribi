@@ -110,18 +110,22 @@ export async function captureCommand(
   const overflowStopTimeoutMs =
     options.overflowStopTimeoutMs ?? DEFAULT_OVERFLOW_STOP_TIMEOUT_MS;
 
+  const runAbort = new AbortController();
+
   try {
     const managed = runner.run(executable, args, {
       cwd: options.cwd,
       env: options.env,
       timeoutMs: options.timeoutMs,
       terminationGraceMs: 200,
+      abortSignal: runAbort.signal,
     });
 
     let totalBytes = 0;
     let outputTooLarge = false;
     let stopFailed = false;
     let overflowTimer: NodeJS.Timeout | undefined;
+    let deadlineHandled: Promise<void> | undefined;
     const overflowAbort = new AbortController();
 
     const clearOverflowTimer = (): void => {
@@ -131,15 +135,49 @@ export async function captureCommand(
       }
     };
 
-    const forceStopBestEffort = async (): Promise<void> => {
+    const unblockReaders = (): void => {
+      if (!overflowAbort.signal.aborted) {
+        overflowAbort.abort();
+      }
+    };
+
+    const withBudget = async (
+      operation: Promise<unknown>,
+      budgetMs: number,
+    ): Promise<"ok" | "failed"> => {
       try {
-        await managed.signal("SIGKILL");
+        const outcome = await Promise.race([
+          operation.then(() => "ok" as const),
+          new Promise<"failed">((resolve) => {
+            setTimeout(() => resolve("failed"), budgetMs);
+          }),
+        ]);
+        return outcome;
       } catch {
+        return "failed";
+      }
+    };
+
+    /**
+     * 残留プロセスを残さないための停止シーケンス。
+     * 各操作は短時間 budget 付き。永久待ちしない。
+     */
+    const forceStopAndWait = async (): Promise<void> => {
+      if (!runAbort.signal.aborted) {
+        try {
+          runAbort.abort();
+        } catch {
+          stopFailed = true;
+        }
+      }
+      const stopBudgetMs = Math.min(500, Math.max(50, overflowStopTimeoutMs));
+      if ((await withBudget(managed.signal("SIGKILL"), stopBudgetMs)) === "failed") {
         stopFailed = true;
       }
-      try {
-        await managed.terminateTree({ graceMs: 0 });
-      } catch {
+      if (
+        (await withBudget(managed.terminateTree({ graceMs: 0 }), stopBudgetMs)) ===
+        "failed"
+      ) {
         stopFailed = true;
       }
     };
@@ -149,9 +187,11 @@ export async function captureCommand(
         return;
       }
       overflowTimer = setTimeout(() => {
-        stopFailed = true;
-        overflowAbort.abort();
-        void forceStopBestEffort();
+        deadlineHandled = (async () => {
+          stopFailed = true;
+          await forceStopAndWait();
+          unblockReaders();
+        })();
       }, overflowStopTimeoutMs);
     };
 
@@ -164,10 +204,12 @@ export async function captureCommand(
       // 読み取りループ内で terminate を await しない（close 待ちデッドロック回避）
       void managed.terminateTree({ graceMs: 0 }).then(
         () => {
-          // 停止成功
+          // 停止成功 → ストリーム EOF / waitForExit で完了する
         },
         () => {
           stopFailed = true;
+          // terminate が即失敗したら deadline を待たず読み取りを打ち切る
+          unblockReaders();
         },
       );
     };
@@ -231,6 +273,7 @@ export async function captureCommand(
           overflowAbort.signal.removeEventListener("abort", onAbort);
           if (outputTooLarge) {
             stopFailed = true;
+            unblockReaders();
           }
           resolve({ ok: false, error });
         },
@@ -244,9 +287,17 @@ export async function captureCommand(
     ]);
 
     clearOverflowTimer();
+    if (deadlineHandled) {
+      await deadlineHandled;
+    }
 
     if (outputTooLarge) {
-      return oversizedResult(maxOutputBytes, stopFailed || overflowAbort.signal.aborted);
+      // 戻り前にもう一度停止を待ち、残留を最小化
+      await forceStopAndWait();
+      return oversizedResult(
+        maxOutputBytes,
+        stopFailed || overflowAbort.signal.aborted,
+      );
     }
 
     if (!exitOutcome.ok) {
@@ -284,6 +335,17 @@ export async function captureCommand(
           executableMissing: false,
           outputTooLarge: false,
           stopFailed: false,
+        };
+      }
+      if (error.code === "cancelled") {
+        return {
+          exitCode: null,
+          stdout: "",
+          stderr: error.message,
+          timedOut: false,
+          executableMissing: false,
+          outputTooLarge: false,
+          stopFailed: true,
         };
       }
     }

@@ -32,7 +32,7 @@ async function* floodStdout(): AsyncGenerator<Uint8Array> {
   });
 }
 
-function createUnkilledFloodRunner(): ProcessRunner {
+function createFloodRunner(overrides: Partial<ManagedProcess>): ProcessRunner {
   const managed: ManagedProcess = {
     pid: 4242,
     startedAt: new Date().toISOString(),
@@ -54,6 +54,7 @@ function createUnkilledFloodRunner(): ProcessRunner {
         false,
       );
     },
+    ...overrides,
   };
 
   return {
@@ -62,10 +63,43 @@ function createUnkilledFloodRunner(): ProcessRunner {
 }
 
 describe("captureCommand overflow stop deadline", () => {
-  it("returns fail-closed when terminate fails and process never exits", async () => {
+  it("returns fail-closed quickly when terminate fails and process never exits", async () => {
     const started = Date.now();
     const result = await captureCommand(
-      createUnkilledFloodRunner(),
+      createFloodRunner({}),
+      "fake-devin",
+      ["--version"],
+      {
+        cwd: process.cwd(),
+        timeoutMs: 30_000,
+        maxOutputBytes: 1024,
+        overflowStopTimeoutMs: 2_000,
+      },
+    );
+    const elapsed = Date.now() - started;
+
+    expect(result.outputTooLarge).toBe(true);
+    expect(result.timedOut).toBe(false);
+    expect(result.executableMissing).toBe(false);
+    expect(result.stopFailed).toBe(true);
+    expect(result.stderr).toMatch(/stop failed|stop timed out/i);
+    // terminate 即失敗時は probe timeout / overflow deadline まで待たない
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  it("returns within overflow deadline when terminate itself hangs", async () => {
+    const started = Date.now();
+    const result = await captureCommand(
+      createFloodRunner({
+        terminateTree: () =>
+          new Promise(() => {
+            // terminate never settles
+          }),
+        signal: () =>
+          new Promise(() => {
+            // signal never settles
+          }),
+      }),
       "fake-devin",
       ["--version"],
       {
@@ -78,11 +112,7 @@ describe("captureCommand overflow stop deadline", () => {
     const elapsed = Date.now() - started;
 
     expect(result.outputTooLarge).toBe(true);
-    expect(result.timedOut).toBe(false);
-    expect(result.executableMissing).toBe(false);
     expect(result.stopFailed).toBe(true);
-    expect(result.stderr).toMatch(/stop failed|stop timed out/i);
-    // probe timeout (30s) まで待たず、overflow deadline 付近で戻る
     expect(elapsed).toBeLessThan(5_000);
     expect(elapsed).toBeGreaterThanOrEqual(50);
   });
