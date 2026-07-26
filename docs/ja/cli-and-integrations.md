@@ -343,8 +343,9 @@ MVP は `DevinAcpAdapter` を採用し、Meguribi が `devin acp` を Issue 専�
 ```text
 Meguribi
   -> DevinAcpAdapter
-      -> ACP client
-          -> devin acp subprocess
+      -> DevinAcpTransport / session
+          -> @agentclientprotocol/sdk (adapter 内のみ)
+          -> ManagedProcess (`devin acp`)
 ```
 
 ```ts
@@ -353,6 +354,8 @@ export interface DevinAdapter {
   fix(input: FixInput): Promise<ImplementationResult>;
 }
 ```
+
+`@agentclientprotocol/sdk` は `@meguribi/adapters` の依存としてのみ使用する。SDK の request / event / error 型を core・CLI・RunStore へ漏らさない。transport は `ManagedProcess` で `devin acp` を起動し、`initialize` / `session/new` / `session/prompt` / `session/update` を扱う。stdout は ACP 通信専用、stderr は診断ログとして分離する。permission の PolicyEngine 仲介と完全な shutdown シーケンスは後続 Issue で完成させる。
 
 ACP 固有の request / event / error 型は adapter 内に閉じ込め、コア層では正規化した `AgentEvent` とドメイン型だけを扱います。
 

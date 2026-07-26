@@ -436,6 +436,28 @@ Codex SDK と Devin ACP などの外部エージェントを抽象化するた�
 
 Devin ACP などの raw イベントは、各 adapter 内で正規化される。adapter は redaction 後の raw payload を JSONL / artifact へ保存し、core には正規化済みの `AgentEvent` だけを返す。これにより vendor 固有の情報が core 契約に漏れない。
 
+未知の `sessionUpdate` は握りつぶさず `type: "unknown"` として保持する。`unknown` だけでは workflow の状態を進めてはならない。
+
+### Devin agent artifact レイアウト
+
+RunStore 導入前も含め、Devin ACP session の成果物は次の配置を標準とする。
+
+```text
+<artifactRoot>/   # 将来: runs/<run-id>/agents/devin/
+├── raw-events.jsonl   # redaction 後の raw payload（sequence 付き）
+├── events.jsonl       # 正規化 AgentEvent（同一 sequence で対応付け）
+├── stderr.log         # 診断用 stderr（redaction 後）
+├── session.json       # sessionId / protocolVersion / stopReason など
+└── result.json        # 最小の実行結果サマリ
+```
+
+JSONL の各行は次の envelope を持つ。
+
+- raw: `{ sequence, at, kind, raw }`
+- normalized: `{ sequence, at, event }`
+
+永続化前に secret redaction を必ず通す。redaction または書き込みに失敗した場合は保存を中止する（fail-closed）。
+
 ### AgentError
 
 | code | 説明 |

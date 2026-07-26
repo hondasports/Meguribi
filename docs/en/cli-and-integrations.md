@@ -333,8 +333,9 @@ The MVP adopts `DevinAcpAdapter`. Meguribi launches `devin acp` as a child proce
 ```text
 Meguribi
   -> DevinAcpAdapter
-      -> ACP client
-          -> devin acp subprocess
+      -> DevinAcpTransport / session
+          -> @agentclientprotocol/sdk (adapters package only)
+          -> ManagedProcess (`devin acp`)
 ```
 
 ```ts
@@ -343,6 +344,8 @@ export interface DevinAdapter {
   fix(input: FixInput): Promise<ImplementationResult>;
 }
 ```
+
+`@agentclientprotocol/sdk` is a dependency of `@meguribi/adapters` only. SDK request / event / error types must not leak into core, CLI, or RunStore. Transport starts `devin acp` through `ManagedProcess` and handles `initialize` / `session/new` / `session/prompt` / `session/update`. stdout is reserved for ACP traffic; stderr is diagnostic-only. PolicyEngine permission mediation and the full shutdown sequence are completed in later issues.
 
 ACP-specific requests, events, and errors remain inside the adapter. Core workflows consume normalized `AgentEvent` and domain types.
 

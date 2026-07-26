@@ -14,9 +14,11 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.3.0",
     "@meguribi/config": "workspace:*",
     "@meguribi/core": "workspace:*",
-    "@meguribi/process": "workspace:*"
+    "@meguribi/process": "workspace:*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@meguribi/schemas": "workspace:*",

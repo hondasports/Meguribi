@@ -27,3 +27,32 @@ export {
   parseMinimumVersion,
 } from "./version.js";
 export type { ParsedDevinVersion } from "./version.js";
+export {
+  DevinAgentArtifactStore,
+  DevinArtifactWriteError,
+} from "./artifact-store.js";
+export type {
+  DevinAgentResultArtifact,
+  DevinAgentSessionMetadata,
+  PersistedAgentEvent,
+  PersistedRawEvent,
+} from "./artifact-store.js";
+export {
+  normalizePermissionRequest,
+  normalizeSessionStarted,
+  normalizeSessionUpdate,
+  normalizeTurnCompleted,
+  pathsFromToolCall,
+} from "./events.js";
+export type { AcpSessionNotificationPayload, AcpSessionUpdatePayload } from "./events.js";
+export { startDevinAcpSession } from "./session.js";
+export type { DevinAcpSession, StartDevinAcpSessionInput } from "./session.js";
+export { createDevinAcpTransport, DevinAcpTransportImpl } from "./transport.js";
+export type {
+  DevinAcpConnection,
+  DevinAcpTransport,
+  RawDevinAcpEvent,
+  StartDevinAcpInput,
+} from "./transport.js";
+export { DevinAcpTransportError, isDevinAcpTransportError } from "./transport-error.js";
+export type { DevinAcpTransportErrorCode } from "./transport-error.js";
