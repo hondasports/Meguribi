@@ -1,8 +1,14 @@
-import type { ProcessRunner } from "@meguribi/process";
+import type { ProcessExit, ProcessRunner } from "@meguribi/process";
 import { ProcessError } from "@meguribi/process";
 
 /** probe 1 本あたりの stdout+stderr 合計上限（バイト）。 */
 export const DEFAULT_PROBE_OUTPUT_MAX_BYTES = 256 * 1024;
+
+/**
+ * 出力上限超過後に停止完了を待つ最大時間。
+ * probe timeout 全体を使い切らず、残留プロセス待ちで永久待機しない。
+ */
+export const DEFAULT_OVERFLOW_STOP_TIMEOUT_MS = 2_000;
 
 export interface CapturedCommandResult {
   exitCode: number | null;
@@ -11,6 +17,8 @@ export interface CapturedCommandResult {
   timedOut: boolean;
   executableMissing: boolean;
   outputTooLarge: boolean;
+  /** 上限超過後の停止に失敗した、または stop deadline に達した。 */
+  stopFailed: boolean;
 }
 
 export class ProbeOutputTooLargeError extends Error {
@@ -20,25 +28,70 @@ export class ProbeOutputTooLargeError extends Error {
   }
 }
 
-function oversizedResult(maxOutputBytes: number): CapturedCommandResult {
+export class ProbeStopFailedError extends Error {
+  constructor(
+    message = "Failed to stop probe process after output size limit",
+  ) {
+    super(message);
+    this.name = "ProbeStopFailedError";
+  }
+}
+
+function oversizedResult(
+  maxOutputBytes: number,
+  stopFailed: boolean,
+): CapturedCommandResult {
+  const reason = stopFailed
+    ? `Probe output exceeded ${maxOutputBytes} bytes; process stop failed or timed out`
+    : `Probe output exceeded ${maxOutputBytes} bytes`;
   return {
     exitCode: null,
     stdout: "",
-    stderr: `Probe output exceeded ${maxOutputBytes} bytes`,
+    stderr: reason,
     timedOut: false,
     executableMissing: false,
     outputTooLarge: true,
+    stopFailed,
   };
 }
 
 /**
+ * AbortSignal で打ち切れる AsyncIterable 読み取り。
+ * 子プロセスが生き残って EOF しない場合でも、deadline でループを抜けられる。
+ */
+async function* iterateUntilAbort(
+  stream: AsyncIterable<Uint8Array>,
+  signal: AbortSignal,
+): AsyncGenerator<Uint8Array> {
+  const iterator = stream[Symbol.asyncIterator]();
+  while (!signal.aborted) {
+    const next = await Promise.race([
+      iterator.next(),
+      new Promise<{ done: true; value: undefined }>((resolve) => {
+        if (signal.aborted) {
+          resolve({ done: true, value: undefined });
+          return;
+        }
+        const onAbort = (): void => {
+          signal.removeEventListener("abort", onAbort);
+          resolve({ done: true, value: undefined });
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+    if (next.done) {
+      break;
+    }
+    yield next.value;
+  }
+  // iterator.return() は呼ばない。永遠に pending な await 上で return すると
+  // 環境によっては cleanup 自体が完了しなくなるため、abandon する。
+}
+
+/**
  * ProcessRunner 経由で短命コマンドを実行し、stdout/stderr を収集する。
- * 合計バイトが上限を超えたらプロセスを停止して fail-closed にする。
- *
- * 注意: ストリーム読み取り中に terminateTree を await すると、
- * Windows などで close 待ちと読み取りがデッドロックするため、
- * 上限超過時は terminate を fire-and-forget し、EOF まで読み捨てる。
- * Linux では terminate が force_failed でも、上限超過なら fail-closed として扱う。
+ * 合計バイトが上限を超えたらプロセス停止を試み、bounded deadline 内に
+ * 完了しなければ fail-closed で戻る（永久待機しない）。
  */
 export async function captureCommand(
   runner: ProcessRunner,
@@ -49,9 +102,14 @@ export async function captureCommand(
     env?: NodeJS.ProcessEnv;
     timeoutMs: number;
     maxOutputBytes?: number;
+    /** 上限超過後の停止待ち上限。未指定時は {@link DEFAULT_OVERFLOW_STOP_TIMEOUT_MS}。 */
+    overflowStopTimeoutMs?: number;
   },
 ): Promise<CapturedCommandResult> {
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_PROBE_OUTPUT_MAX_BYTES;
+  const overflowStopTimeoutMs =
+    options.overflowStopTimeoutMs ?? DEFAULT_OVERFLOW_STOP_TIMEOUT_MS;
+
   try {
     const managed = runner.run(executable, args, {
       cwd: options.cwd,
@@ -62,14 +120,56 @@ export async function captureCommand(
 
     let totalBytes = 0;
     let outputTooLarge = false;
+    let stopFailed = false;
+    let overflowTimer: NodeJS.Timeout | undefined;
+    const overflowAbort = new AbortController();
+
+    const clearOverflowTimer = (): void => {
+      if (overflowTimer !== undefined) {
+        clearTimeout(overflowTimer);
+        overflowTimer = undefined;
+      }
+    };
+
+    const forceStopBestEffort = async (): Promise<void> => {
+      try {
+        await managed.signal("SIGKILL");
+      } catch {
+        stopFailed = true;
+      }
+      try {
+        await managed.terminateTree({ graceMs: 0 });
+      } catch {
+        stopFailed = true;
+      }
+    };
+
+    const armOverflowDeadline = (): void => {
+      if (overflowTimer !== undefined || overflowAbort.signal.aborted) {
+        return;
+      }
+      overflowTimer = setTimeout(() => {
+        stopFailed = true;
+        overflowAbort.abort();
+        void forceStopBestEffort();
+      }, overflowStopTimeoutMs);
+    };
 
     const requestStopOnLimit = (): void => {
       if (outputTooLarge) {
         return;
       }
       outputTooLarge = true;
-      // await しない（読み取りループ内での close 待ちデッドロック回避）
-      void managed.terminateTree({ graceMs: 0 }).catch(() => {});
+      armOverflowDeadline();
+      // 読み取りループ内で terminate を await しない（close 待ちデッドロック回避）
+      void managed.terminateTree({ graceMs: 0 }).then(
+        () => {
+          // 停止成功
+        },
+        () => {
+          stopFailed = true;
+        },
+      );
     };
 
     const collectBounded = async (
@@ -77,7 +177,7 @@ export async function captureCommand(
     ): Promise<string> => {
       const chunks: Uint8Array[] = [];
       let streamTotal = 0;
-      for await (const chunk of stream) {
+      for await (const chunk of iterateUntilAbort(stream, overflowAbort.signal)) {
         if (outputTooLarge) {
           continue;
         }
@@ -101,12 +201,41 @@ export async function captureCommand(
       return new TextDecoder().decode(merged);
     };
 
-    // terminate 失敗（force_failed 等）で waitForExit が reject しても、
-    // 上限超過済みなら fail-closed として扱う。
-    const exitPromise = managed.waitForExit().then(
-      (exit) => ({ ok: true as const, exit }),
-      (error: unknown) => ({ ok: false as const, error }),
-    );
+    const exitPromise = new Promise<{
+      ok: boolean;
+      exit?: ProcessExit;
+      error?: unknown;
+    }>((resolve) => {
+      const onAbort = (): void => {
+        resolve({
+          ok: false,
+          error: new ProbeStopFailedError(
+            `Probe stop timed out after ${overflowStopTimeoutMs}ms`,
+          ),
+        });
+      };
+      if (overflowAbort.signal.aborted) {
+        onAbort();
+        return;
+      }
+      overflowAbort.signal.addEventListener("abort", onAbort, { once: true });
+
+      void managed.waitForExit().then(
+        (exit) => {
+          clearOverflowTimer();
+          overflowAbort.signal.removeEventListener("abort", onAbort);
+          resolve({ ok: true, exit });
+        },
+        (error: unknown) => {
+          clearOverflowTimer();
+          overflowAbort.signal.removeEventListener("abort", onAbort);
+          if (outputTooLarge) {
+            stopFailed = true;
+          }
+          resolve({ ok: false, error });
+        },
+      );
+    });
 
     const [stdout, stderr, exitOutcome] = await Promise.all([
       collectBounded(managed.stdout),
@@ -114,8 +243,10 @@ export async function captureCommand(
       exitPromise,
     ]);
 
+    clearOverflowTimer();
+
     if (outputTooLarge) {
-      return oversizedResult(maxOutputBytes);
+      return oversizedResult(maxOutputBytes, stopFailed || overflowAbort.signal.aborted);
     }
 
     if (!exitOutcome.ok) {
@@ -123,12 +254,13 @@ export async function captureCommand(
     }
 
     return {
-      exitCode: exitOutcome.exit.code,
+      exitCode: exitOutcome.exit?.code ?? null,
       stdout,
       stderr,
       timedOut: false,
       executableMissing: false,
       outputTooLarge: false,
+      stopFailed: false,
     };
   } catch (error) {
     if (error instanceof ProcessError) {
@@ -140,6 +272,7 @@ export async function captureCommand(
           timedOut: false,
           executableMissing: true,
           outputTooLarge: false,
+          stopFailed: false,
         };
       }
       if (error.code === "timeout") {
@@ -150,6 +283,7 @@ export async function captureCommand(
           timedOut: true,
           executableMissing: false,
           outputTooLarge: false,
+          stopFailed: false,
         };
       }
     }
