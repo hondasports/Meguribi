@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ManagedProcess, ProcessExit } from "@meguribi/process";
 import { AcpProcessLifecycle } from "./transport.js";
-import { DevinAcpTransportError } from "./transport-error.js";
+import { AcpTransportError } from "../acp/transport-error.js";
 
 function alreadyExitedProcess(exit: ProcessExit): Pick<ManagedProcess, "waitForExit"> {
   return {
@@ -23,11 +23,11 @@ describe("AcpProcessLifecycle", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(lifecycle.unexpectedError).toBeInstanceOf(DevinAcpTransportError);
+    expect(lifecycle.unexpectedError).toBeInstanceOf(AcpTransportError);
 
     await expect(lifecycle.awaitAliveOrCrash(500)).rejects.toMatchObject({
       code: "process_crashed",
-      name: "DevinAcpTransportError",
+      name: "AcpTransportError",
     });
   });
 

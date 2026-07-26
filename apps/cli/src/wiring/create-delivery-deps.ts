@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   createCodexAdapter,
   createCommandVerifier,
+  createCursorAcpAdapter,
   createDefaultPolicyEngine,
   createDevinAcpAdapter,
   createFakeCodexForDelivery,
@@ -10,9 +11,12 @@ import {
   createFakeGitHubAdapter,
   createFakeVerifier,
   CodexSdkClient,
+  diagnoseCursor,
   diagnoseDevin,
   FileSystemRunStore,
+  MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+  preflightCursor,
   preflightDevin,
 } from "@meguribi/adapters";
 import { loadImplementerConfig } from "@meguribi/config";
@@ -114,11 +118,63 @@ export async function createDeliveryDeps(
     repositoryPath: cwd,
     nonInteractive: false,
   });
+
   if (config.kind === "cursor") {
-    throw new Error(
-      "Cursor ACP adapter for `meguribi run` is not implemented yet; use `meguribi doctor` for Cursor.",
-    );
+    const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
+    const diagnosis = await diagnoseCursor({
+      executable: config.config.executable,
+      inheritedMcpPolicy,
+      nonInteractive,
+      cwd,
+      probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+      minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+    });
+
+    const implementer = createCursorAcpAdapter({
+      executable: config.config.executable,
+      diagnosis,
+      inheritedMcpPolicy,
+      mode: nonInteractive ? "non-interactive" : "interactive",
+      explicitAllowInheritedMcp: allowInheritedMcp,
+      startupTimeoutMs: config.config.startupTimeoutMs,
+      promptTimeoutMs: config.config.turnTimeoutMinutes * 60_000,
+    });
+
+    return {
+      inheritedMcpPolicy,
+      deps: {
+        github: createFakeGitHubAdapter(),
+        git: createFakeGitAdapter(),
+        codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+        implementer,
+        devin: implementer,
+        verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
+        policy: createDefaultPolicyEngine(),
+        runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+        async assertImplementerReady() {
+          await preflightCursor({
+            executable: config.config.executable,
+            inheritedMcpPolicy,
+            nonInteractive,
+            cwd,
+            probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+            minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+          });
+        },
+        async assertDevinReady() {
+          await preflightCursor({
+            executable: config.config.executable,
+            inheritedMcpPolicy,
+            nonInteractive,
+            cwd,
+            probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+            minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+          });
+        },
+      },
+    };
   }
+
   const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
   const diagnosis = await diagnoseDevin({
     executable: config.config.executable,
@@ -129,7 +185,7 @@ export async function createDeliveryDeps(
     minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   });
 
-  const devin = createDevinAcpAdapter({
+  const implementer = createDevinAcpAdapter({
     executable: config.config.executable,
     diagnosis,
     inheritedMcpPolicy,
@@ -145,8 +201,8 @@ export async function createDeliveryDeps(
       github: createFakeGitHubAdapter(),
       git: createFakeGitAdapter(),
       codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
-      implementer: devin,
-      devin,
+      implementer,
+      devin: implementer,
       verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
       policy: createDefaultPolicyEngine(),
       runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),

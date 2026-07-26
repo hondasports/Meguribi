@@ -1,7 +1,7 @@
 import type {
   AgentError,
-  DevinAdapter,
-  DevinDiagnosis,
+  AgentAdapter,
+  AgentDiagnosis,
   FixInput,
   ImplementationInput,
   ImplementationPermissionDecision,
@@ -14,19 +14,19 @@ import { decideInheritedMcpPolicy } from "@meguribi/core";
 import { ImplementationContextSchema, ImplementationResultSchema } from "@meguribi/schemas";
 import type { ProcessRunner } from "@meguribi/process";
 import * as v from "valibot";
-import { DevinArtifactWriteError } from "./artifact-store.js";
-import { assertDevinRunnable, DevinNotRunnableError } from "./diagnose.js";
-import { createPermissionMediator, type PermissionDecisionRecord } from "./permissions.js";
-import { DevinPromptBuildError } from "./prompt.js";
-import { startDevinAcpSession, type DevinAcpSession } from "./session.js";
-import type { DevinAcpTransport } from "./transport.js";
-import { AcpTransportError as DevinAcpTransportError } from "../acp/transport-error.js";
+import { CursorArtifactWriteError } from "./artifact-store.js";
+import { assertCursorRunnable, CursorNotRunnableError } from "./diagnose.js";
+import { createPermissionMediator, type PermissionDecisionRecord } from "../acp/permissions.js";
+import { CursorPromptBuildError } from "./prompt.js";
+import { startCursorAcpSession, type CursorAcpSession } from "./session.js";
+import type { CursorAcpTransport } from "./transport.js";
+import { AcpTransportError } from "../acp/transport-error.js";
 
-export interface DevinAcpAdapterOptions {
+export interface CursorAcpAdapterOptions {
   executable: string;
   executableArgs?: string[];
   acpArgs?: string[];
-  diagnosis: DevinDiagnosis;
+  diagnosis: AgentDiagnosis;
   inheritedMcpPolicy: InheritedMcpPolicy;
   mode: "interactive" | "non-interactive";
   explicitAllowInheritedMcp?: boolean;
@@ -35,12 +35,12 @@ export interface DevinAcpAdapterOptions {
   postTurnLivenessMs?: number;
   env?: NodeJS.ProcessEnv;
   runner?: ProcessRunner;
-  transport?: DevinAcpTransport;
+  transport?: CursorAcpTransport;
   confirmInheritedMcp?: () => Promise<boolean> | boolean;
   allowedCommands?: readonly string[];
 }
 
-export class DevinAcpAdapterError extends Error {
+export class CursorAcpAdapterError extends Error {
   constructor(
     public readonly code: AgentError["code"],
     message: string,
@@ -48,7 +48,7 @@ export class DevinAcpAdapterError extends Error {
     options?: { cause?: unknown },
   ) {
     super(message, options);
-    this.name = "DevinAcpAdapterError";
+    this.name = "CursorAcpAdapterError";
   }
 
   toAgentError(): AgentError {
@@ -83,27 +83,27 @@ function emptyResult(
 }
 
 function mapTransportError(error: unknown): AgentError {
-  if (error instanceof DevinAcpAdapterError) {
+  if (error instanceof CursorAcpAdapterError) {
     return error.toAgentError();
   }
-  if (error instanceof DevinAcpTransportError) {
+  if (error instanceof AcpTransportError) {
     return error.toAgentError();
   }
-  if (error instanceof DevinNotRunnableError) {
+  if (error instanceof CursorNotRunnableError) {
     return {
       code: "policy_blocked",
       message: error.message,
       isRetryable: false,
     };
   }
-  if (error instanceof DevinPromptBuildError) {
+  if (error instanceof CursorPromptBuildError) {
     return {
       code: "malformed_message",
       message: error.message,
       isRetryable: false,
     };
   }
-  if (error instanceof DevinArtifactWriteError) {
+  if (error instanceof CursorArtifactWriteError) {
     return {
       code: "cleanup_failed",
       message: error.message,
@@ -119,7 +119,7 @@ function mapTransportError(error: unknown): AgentError {
   }
   return {
     code: "unknown",
-    message: error instanceof Error ? error.message : "Devin ACP adapter failed",
+    message: error instanceof Error ? error.message : "Cursor ACP adapter failed",
     isRetryable: false,
   };
 }
@@ -157,14 +157,14 @@ function collectReportedFiles(events: readonly { type: string; path?: string }[]
   return [...files];
 }
 
-export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAdapter {
+export function createCursorAcpAdapter(options: CursorAcpAdapterOptions): AgentAdapter {
   const run = async (
     input: ImplementationInput | FixInput,
     mode: "implement" | "fix",
   ): Promise<ImplementationResult> => {
     const startedAt = new Date();
     const startedAtIso = startedAt.toISOString();
-    let session: DevinAcpSession | undefined;
+    let session: CursorAcpSession | undefined;
     let secondaryError: AgentError | undefined;
     let mcpPolicyResult: McpPolicyDecision | undefined;
     let permissionDecisions: ImplementationPermissionDecision[] = [];
@@ -208,13 +208,13 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
     try {
       const parsedContext = v.parse(ImplementationContextSchema, input.context);
       if (mode === "fix" && !parsedContext.fixInstruction && !parsedContext.fixContext) {
-        throw new DevinAcpAdapterError(
+        throw new CursorAcpAdapterError(
           "malformed_message",
           "fix requires fixInstruction or fixContext",
         );
       }
 
-      assertDevinRunnable(options.diagnosis);
+      assertCursorRunnable(options.diagnosis);
 
       mcpPolicyResult = decideInheritedMcpPolicy({
         policy: options.inheritedMcpPolicy,
@@ -259,7 +259,7 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
         allowedCommands: options.allowedCommands ?? parsedContext.verificationCommands,
       });
 
-      session = await startDevinAcpSession({
+      session = await startCursorAcpSession({
         executable: options.executable,
         executableArgs: options.executableArgs,
         acpArgs: options.acpArgs,
@@ -302,23 +302,23 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
       if (input.abortSignal) {
         if (input.abortSignal.aborted) {
           await session.cancel().catch(() => undefined);
-          throw new DevinAcpAdapterError("cancelled", "implementation aborted before prompt");
+          throw new CursorAcpAdapterError("cancelled", "implementation aborted before prompt");
         }
         input.abortSignal.addEventListener("abort", abort, { once: true });
       }
 
       try {
-        // startDevinAcpSession already built+persisted the constrained prompt from ImplementationContext.
+        // startCursorAcpSession already built+persisted the constrained prompt from ImplementationContext.
         for await (const event of session.prompt()) {
           if (input.abortSignal?.aborted) {
-            throw new DevinAcpAdapterError("cancelled", "implementation aborted");
+            throw new CursorAcpAdapterError("cancelled", "implementation aborted");
           }
           events.push(event as { type: string; path?: string; stopReason?: string });
           if (event.type === "turn.completed") {
             stopReason = event.stopReason;
           }
           if (event.type === "session.failed") {
-            throw new DevinAcpAdapterError(
+            throw new CursorAcpAdapterError(
               event.error.code,
               event.error.message,
               event.error.isRetryable,

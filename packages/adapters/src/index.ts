@@ -77,13 +77,34 @@ export type {
 } from "./devin/index.js";
 export {
   assertCursorRunnable,
+  createCursorAcpAdapter,
+  CursorAcpAdapterError,
   CursorNotRunnableError,
+  CursorAcpTransportImpl,
+  CursorAgentArtifactStore,
+  CursorArtifactWriteError,
   diagnoseCursor,
   formatCursorDiagnosisHuman,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   preflightCursor,
+  startCursorAcpSession,
+  buildCursorPrompt,
+  CURSOR_PROMPT_VERSION,
+  CursorPromptBuildError,
 } from "./cursor/index.js";
-export type { DiagnoseCursorOptions } from "./cursor/index.js";
+export type {
+  BuiltCursorPrompt,
+  CursorAcpAdapterOptions,
+  CursorAcpConnection,
+  CursorAcpSession,
+  CursorAcpTransport,
+  CursorGitBoundaryConfig,
+  CursorPromptArtifact,
+  DiagnoseCursorOptions,
+  RawCursorAcpEvent,
+  StartCursorAcpInput,
+  StartCursorAcpSessionInput,
+} from "./cursor/index.js";
 export { FileSystemRunStore, createRunId } from "./run-store/index.js";
 export type { FileSystemRunStoreOptions } from "./run-store/index.js";
 export { createDefaultPolicyEngine } from "./policy/default-policy.js";

@@ -137,7 +137,7 @@ async function processBoundaryBundle(
     env,
     runner: new ProcessRunner(),
   });
-  return { ...bundle, deps: { ...bundle.deps, devin } };
+  return { ...bundle, deps: { ...bundle.deps, implementer: devin, devin } };
 }
 
 async function waitForState(file: string, expected: string, timeoutMs = 3_000): Promise<void> {
