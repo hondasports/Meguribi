@@ -334,6 +334,19 @@ export interface CodexAdapter {
 
 Codex にはコマンドごとの JSON Schema を指定します。自然文の最終回答を解析して制御フローを決めません。
 
+### 7.4 planning / review adapter の実行規則
+
+`@meguribi/adapters` は `@openai/codex-sdk` を adapter 内だけで利用し、次の2つの read-only 操作を提供します。
+
+- `createPlan`: Issue、完了条件、対象外、repository rules から `plan.json` を生成する。
+- `review`: Issue、plan、Git diff、verification から `review.json` を生成する。
+
+planning と review は `sandboxMode: read-only`、`approvalPolicy: never`、network access 無効で起動します。実行前後の workspace snapshot が一致しない場合は `policy_blocked` として停止します。
+
+Codex の structured output は runtime schema と JSON Schema の両方で検証します。不正な JSON / schema は最大1回だけ validation error のみを含む repair prompt で再試行し、再度失敗した場合は成功扱いにしません。timeout、cancel、空レスポンス、stream interruption、process failure は分類済みエラーへ変換します。
+
+`thread ID`、source digest、実行時間、redaction 済み event log は Meguribi 所有の artifact metadata として保存します。planning は Issue の digest、review は Issue、plan、diff、verification の canonical JSON digest を検証し、不一致なら Codex を起動しません。Codex の review approval は publish、Draft 解除、merge の許可を意味しません。
+
 ## 8. Devin 連携
 
 ### 8.1 採用する接続方式

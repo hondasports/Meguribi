@@ -18,12 +18,14 @@
     "@meguribi/config": "workspace:*",
     "@meguribi/core": "workspace:*",
     "@meguribi/process": "workspace:*",
+    "@meguribi/schemas": "workspace:*",
+    "@openai/codex-sdk": "0.145.0",
+    "ajv": "^8.20.0",
+    "valibot": "^1.4.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@meguribi/schemas": "workspace:*",
-    "typescript": "^5.8.3",
-    "valibot": "^1.4.2"
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=24 <25"

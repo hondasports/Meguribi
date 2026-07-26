@@ -5,6 +5,20 @@ export type { AgentExecutionResult } from "./agent-execution-result.js";
 export type { AgentPrompt } from "./agent-prompt.js";
 export type { AgentSession } from "./agent-session.js";
 export type {
+  CodexArtifactMetadata,
+  CodexArtifactRole,
+  CodexEventRecord,
+  PlanArtifact,
+  PlanContent,
+  ReviewArtifact,
+  ReviewContent,
+  ReviewCoverageStatus,
+  ReviewFinding,
+  ReviewFindingSeverity,
+  ReviewRequirementCoverage,
+  ReviewStatus,
+} from "./codex-artifact.js";
+export type {
   DiagnosisError,
   DiagnosisErrorCode,
   DiagnosisWarning,
