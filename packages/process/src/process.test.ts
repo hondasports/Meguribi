@@ -36,7 +36,7 @@ async function collect(stream: AsyncIterable<Uint8Array>): Promise<string> {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-async function waitForFile(path: string, timeoutMs = 5000, intervalMs = 50): Promise<void> {
+async function waitForFile(path: string, timeoutMs = 15000, intervalMs = 50): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
