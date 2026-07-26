@@ -10,6 +10,7 @@ import type {
   RunState,
   RunStatus,
   VerificationResult,
+  VerificationLogWriter,
 } from "../delivery.js";
 import type { ImplementationContext } from "../implementation-context.js";
 import type { PlanArtifact, ReviewArtifact } from "../codex-artifact.js";
@@ -61,6 +62,29 @@ export function evaluatePublishGate(input: PublishGateInput): PublishDecision {
     }
   }
   return { allowed: reasons.length === 0, reasons };
+}
+
+function createVerificationLogWriter(
+  deps: DeliveryDependencies,
+  runId: string,
+  prefix: string,
+): VerificationLogWriter {
+  return {
+    async write(input) {
+      const safeName = input.commandName.replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 64) || "command";
+      const fileName = `logs/${prefix}-${String(input.commandIndex + 1).padStart(2, "0")}-${safeName}.log`;
+      const truncation = input.truncated ? "\n[meguribi: output truncated]\n" : "";
+      const content = [
+        "[stdout]",
+        input.stdout,
+        "",
+        "[stderr]",
+        input.stderr,
+        truncation,
+      ].join("\n");
+      return deps.runStore.saveArtifact(runId, fileName, content);
+    },
+  };
 }
 
 function nowIso(deps: DeliveryDependencies): string {
@@ -239,6 +263,7 @@ async function runVerifyReviewPublish(input: {
         commands: delivery.verifyCommands,
         abortSignal: delivery.abortSignal,
         timeoutMs: delivery.verifyTimeoutMs,
+        logWriter: createVerificationLogWriter(deps, state.runId, "verify"),
       });
     } catch (error) {
       if (isCancelledError(error) || delivery.abortSignal?.aborted) {
@@ -597,6 +622,11 @@ async function maybeFix(input: {
         commands: delivery.verifyCommands,
         abortSignal: delivery.abortSignal,
         timeoutMs: delivery.verifyTimeoutMs,
+        logWriter: createVerificationLogWriter(
+          deps,
+          state.runId,
+          `verify-fix-${String(state.fixAttempts)}`,
+        ),
       });
     } catch (error) {
       if (isCancelledError(error) || delivery.abortSignal?.aborted) {

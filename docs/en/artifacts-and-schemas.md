@@ -295,6 +295,8 @@ The prompt `FixContext` keeps the sourced previous attempt and fix instruction i
 
 `timedOut` is optional. When a command exceeds its per-command timeout it is `true`, `exitCode` is `null`, and overall `success` is `false`.
 
+`logPath` points to the verification log under the RunStore. stdout and stderr are stored with section markers after secret-like values are redacted. Logs have a per-command size limit and record a truncation marker when the limit is exceeded.
+
 ## 11. `review.json`
 
 ```json

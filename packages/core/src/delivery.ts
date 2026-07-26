@@ -116,6 +116,16 @@ export interface VerificationResult {
   commands: VerificationCommandResult[];
 }
 
+export interface VerificationLogWriter {
+  write(input: {
+    commandName: string;
+    commandIndex: number;
+    stdout: string;
+    stderr: string;
+    truncated: boolean;
+  }): Promise<string>;
+}
+
 export interface PublishDecision {
   allowed: boolean;
   reasons: readonly string[];
@@ -170,6 +180,7 @@ export interface Verifier {
     abortSignal?: AbortSignal;
     /** Per-command timeout; adapters must fail closed when exceeded. */
     timeoutMs?: number;
+    logWriter?: VerificationLogWriter;
   }): Promise<VerificationResult>;
 }
 

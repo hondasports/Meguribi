@@ -85,6 +85,57 @@ describe("createCommandVerifier", () => {
   const resolveNode = (executable: string): string =>
     executable === "node" ? process.execPath : executable;
 
+  it("writes redacted and truncated output through the log writer", async () => {
+    let written:
+      | {
+          stdout: string;
+          stderr: string;
+          truncated: boolean;
+        }
+      | undefined;
+    const verifier = createCommandVerifier({
+      maxLogBytes: 64,
+      resolveExecutable: resolveNode,
+    });
+    const result = await verifier.verify({
+      worktreePath: fixtureDir,
+      commands: [{ name: "emit output", run: "node emit-output.js" }],
+      logWriter: {
+        async write(input) {
+          written = input;
+          return "logs/verify-01-emit-output.log";
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.commands[0]?.logPath).toBe("logs/verify-01-emit-output.log");
+    expect(written?.stdout).toContain("visible output");
+    expect(written?.stdout).not.toContain("fixture-token-value");
+    expect(written?.stderr).toContain("visible stderr");
+    expect(written?.truncated).toBe(true);
+  });
+
+  it("writes a log when a command exits non-zero", async () => {
+    let written: { stderr: string } | undefined;
+    const verifier = createCommandVerifier({ resolveExecutable: resolveNode });
+    const result = await verifier.verify({
+      worktreePath: fixtureDir,
+      commands: [{ name: "failing command", run: "node emit-output.js fail" }],
+      logWriter: {
+        async write(input) {
+          written = input;
+          return "logs/verify-01-failing-command.log";
+        },
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.commands[0]?.exitCode).not.toBe(0);
+    expect(result.commands[0]?.logPath).toBe("logs/verify-01-failing-command.log");
+    expect(written?.stderr).toContain("visible stderr");
+  });
+
   it("records timedOut when a hung command exceeds timeoutMs", async () => {
     const verifier = createCommandVerifier({
       timeoutMs: 200,
