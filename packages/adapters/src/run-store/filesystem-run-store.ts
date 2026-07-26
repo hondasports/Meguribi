@@ -221,11 +221,20 @@ export class FileSystemRunStore implements RunStore {
 
   private issueDir(repository: string, issueNumber: number): string {
     const { owner, repo } = splitRepository(repository);
-    return path.join(this.runsRoot(), owner, repo, `issue-${String(issueNumber)}`);
+    const issueDir = path.resolve(
+      this.runsRoot(),
+      owner,
+      repo,
+      `issue-${String(issueNumber)}`,
+    );
+    assertPathInside(this.runsRoot(), issueDir);
+    return issueDir;
   }
 
   private runDir(repository: string, issueNumber: number, runId: string): string {
-    return path.join(this.issueDir(repository, issueNumber), runId);
+    const runDir = path.resolve(this.issueDir(repository, issueNumber), sanitizeRunId(runId));
+    assertPathInside(this.runsRoot(), runDir);
+    return runDir;
   }
 
   private lockPath(repository: string, issueNumber: number): string {
@@ -233,7 +242,9 @@ export class FileSystemRunStore implements RunStore {
   }
 
   private indexPath(runId: string): string {
-    return path.join(this.runsRoot(), "_by-id", `${runId}.json`);
+    const indexPath = path.resolve(this.runsRoot(), "_by-id", `${sanitizeRunId(runId)}.json`);
+    assertPathInside(this.runsRoot(), indexPath);
+    return indexPath;
   }
 
   private async writeRunIndex(
@@ -302,11 +313,42 @@ export function createRunId(now: Date, randomId: string): string {
 }
 
 function splitRepository(repository: string): { owner: string; repo: string } {
-  const [owner, repo] = repository.split("/");
-  if (!owner || !repo || repository.split("/").length !== 2) {
+  const parts = repository.split("/");
+  if (parts.length !== 2) {
     throw new Error(`Invalid repository identity: ${repository}`);
   }
-  return { owner, repo };
+  const [owner, repo] = parts;
+  assertSafePathSegment(owner, "owner");
+  assertSafePathSegment(repo, "repo");
+  return { owner: owner!, repo: repo! };
+}
+
+function assertSafePathSegment(value: string | undefined, label: string): void {
+  if (!value || value === "." || value === ".." || value.includes("\\") || value.includes("\0")) {
+    throw new Error(`Invalid repository ${label} segment: ${value ?? "(empty)"}`);
+  }
+}
+
+function sanitizeRunId(runId: string): string {
+  if (
+    !runId ||
+    runId.includes("\0") ||
+    runId.includes("/") ||
+    runId.includes("\\") ||
+    runId.split(/[/\\]/).some((part) => part === ".." || part === ".")
+  ) {
+    throw new Error(`Invalid run id: ${runId}`);
+  }
+  return runId;
+}
+
+function assertPathInside(root: string, candidate: string): void {
+  const resolvedRoot = path.resolve(root);
+  const resolvedCandidate = path.resolve(candidate);
+  const relative = path.relative(resolvedRoot, resolvedCandidate);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Path escapes RunStore root: ${candidate}`);
+  }
 }
 
 function sanitizeArtifactName(name: string): string {
@@ -314,7 +356,7 @@ function sanitizeArtifactName(name: string): string {
   if (
     normalized.includes("\0") ||
     path.isAbsolute(normalized) ||
-    normalized.split("/").some((part) => part === "..")
+    normalized.split("/").some((part) => part === ".." || part === ".")
   ) {
     throw new Error(`Invalid artifact name: ${name}`);
   }

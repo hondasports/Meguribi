@@ -247,6 +247,7 @@ export interface FakeVerifierOptions {
   failFirstN?: number;
   alwaysFail?: boolean;
   now?: () => Date;
+  hangUntilAbort?: boolean;
 }
 
 export function createFakeVerifier(options: FakeVerifierOptions = {}): Verifier & {
@@ -258,8 +259,33 @@ export function createFakeVerifier(options: FakeVerifierOptions = {}): Verifier 
 
   return {
     calls,
-    async verify() {
+    async verify(input) {
       calls.track("verify");
+      if (input.abortSignal?.aborted) {
+        throw Object.assign(new Error("verification cancelled"), {
+          code: "cancelled",
+          message: "verification cancelled",
+          isRetryable: false,
+        });
+      }
+      if (options.hangUntilAbort) {
+        await new Promise<never>((_resolve, reject) => {
+          const onAbort = () => {
+            reject(
+              Object.assign(new Error("verification cancelled"), {
+                code: "cancelled",
+                message: "verification cancelled",
+                isRetryable: false,
+              }),
+            );
+          };
+          if (input.abortSignal?.aborted) {
+            onAbort();
+            return;
+          }
+          input.abortSignal?.addEventListener("abort", onAbort, { once: true });
+        });
+      }
       verifyCalls += 1;
       const fail =
         options.alwaysFail === true ||

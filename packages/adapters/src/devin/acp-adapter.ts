@@ -289,6 +289,7 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
           protectedPaths: [...input.gitBoundary.protectedPaths],
           maxChangedFiles: input.gitBoundary.maxChangedFiles,
           maxDiffLines: input.gitBoundary.maxDiffLines,
+          baselineMode: mode === "fix" ? "approved-base" : "session-start",
         },
       });
 

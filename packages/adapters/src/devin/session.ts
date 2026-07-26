@@ -32,6 +32,11 @@ import {
 
 export type DevinGitBoundaryConfig = Omit<GitSafetyComparisonInput, "before" | "after"> & {
   expectedRemoteIdentity: string;
+  /**
+   * `approved-base` ignores Meguribi-owned dirty files present at session start.
+   * Use for fix turns that begin after a completed implementation.
+   */
+  baselineMode?: "session-start" | "approved-base";
 };
 
 export interface StartDevinAcpSessionInput extends StartDevinAcpInput {
@@ -243,9 +248,10 @@ class DevinAcpSessionImpl implements DevinAcpSession {
           outsidePaths: this.gitBoundaryConfig.outsidePaths,
           baseSha: this.gitBoundaryConfig.expectedBaseSha,
         });
+        const { baselineMode, ...compareConfig } = this.gitBoundaryConfig;
         const comparison = await compareGitWorktreeSnapshots({
-          ...this.gitBoundaryConfig,
-          before: this.gitBoundaryBefore,
+          ...compareConfig,
+          before: toComparisonBefore(this.gitBoundaryBefore, baselineMode),
           after,
           reportedFiles,
         });
@@ -286,11 +292,14 @@ class DevinAcpSessionImpl implements DevinAcpSession {
         cwd: this.cwd,
         outsidePaths: this.gitBoundaryConfig.outsidePaths,
         baseSha: this.gitBoundaryConfig.expectedBaseSha,
-      }).then((after) => compareGitWorktreeSnapshots({
-        ...this.gitBoundaryConfig!,
-        before: this.gitBoundaryBefore!,
-        after,
-      })).then(async (comparison) => {
+      }).then((after) => {
+        const { baselineMode, ...compareConfig } = this.gitBoundaryConfig!;
+        return compareGitWorktreeSnapshots({
+          ...compareConfig,
+          before: toComparisonBefore(this.gitBoundaryBefore!, baselineMode),
+          after,
+        });
+      }).then(async (comparison) => {
         await this.artifacts.writeGitBoundary(comparison);
         return comparison;
       }).catch(async () => {
@@ -383,4 +392,25 @@ function terminationReason(error: unknown): AgentTerminationReason {
     }
   }
   return "protocol_error";
+}
+
+function toComparisonBefore(
+  before: GitWorktreeSnapshot,
+  baselineMode: "session-start" | "approved-base" | undefined,
+): GitWorktreeSnapshot {
+  if (baselineMode !== "approved-base") {
+    return before;
+  }
+  // Fix sessions start on a Meguribi-owned dirty worktree. Compare against a
+  // clean identity baseline so implement files are authoritative for publish.
+  return {
+    ...before,
+    dirty: false,
+    statusEntries: {},
+    fileDigests: {},
+    changedFiles: [],
+    diffLines: 0,
+    hasBinary: false,
+    oversized: false,
+  };
 }

@@ -132,6 +132,11 @@ describe("parseIssueTarget", () => {
       issueNumber: 22,
     });
   });
+
+  it("rejects path traversal segments", () => {
+    expect(() => parseIssueTarget("../repo#1")).toThrow(/Invalid repository|owner segment/i);
+    expect(() => parseIssueTarget("owner/..#1")).toThrow(/Invalid repository|repo segment/i);
+  });
 });
 
 describe("run / resume DI", () => {

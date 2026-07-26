@@ -67,6 +67,39 @@ function nowIso(deps: DeliveryDependencies): string {
   return (deps.now?.() ?? new Date()).toISOString();
 }
 
+function isCancelledError(error: unknown): boolean {
+  return (
+    !!error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: string }).code === "cancelled"
+  );
+}
+
+async function cancelledResult(
+  deps: DeliveryDependencies,
+  state: RunState,
+  reason: string,
+  extras?: Partial<DeliveryResult>,
+): Promise<DeliveryResult> {
+  const next = await mark(deps, state.runId, {
+    status: "cancelled",
+    currentStep: "cancelled",
+    completedSteps: appendStep(state, "cancelled"),
+    lastError: {
+      code: "cancelled",
+      message: reason,
+    },
+  });
+  return {
+    runId: next.runId,
+    status: next.status,
+    published: false,
+    reasons: [reason],
+    ...extras,
+  };
+}
+
 function appendStep(state: RunState, step: DeliveryStep): DeliveryStep[] {
   if (state.completedSteps.includes(step)) {
     return state.completedSteps;
@@ -191,17 +224,39 @@ async function runVerifyReviewPublish(input: {
     (await deps.runStore.readArtifact<ReviewArtifact>(state.runId, "review.json")) ?? undefined;
 
   if (input.startFrom === "verifying" || !verification) {
+    if (delivery.abortSignal?.aborted) {
+      return cancelledResult(deps, state, "cancelled during verification", {
+        implementation: input.implementation,
+      });
+    }
     state = await mark(deps, state.runId, {
       status: "verifying",
       currentStep: "verifying",
     });
-    verification = await deps.verifier.verify({
-      worktreePath: state.worktreePath,
-      commands: delivery.verifyCommands,
-    });
+    try {
+      verification = await deps.verifier.verify({
+        worktreePath: state.worktreePath,
+        commands: delivery.verifyCommands,
+        abortSignal: delivery.abortSignal,
+      });
+    } catch (error) {
+      if (isCancelledError(error) || delivery.abortSignal?.aborted) {
+        return cancelledResult(deps, state, "cancelled during verification", {
+          implementation: input.implementation,
+        });
+      }
+      throw error;
+    }
     await deps.runStore.saveArtifact(state.runId, "verification.json", verification);
     state = await mark(deps, state.runId, {
       completedSteps: appendStep(state, "verifying"),
+    });
+  }
+
+  if (delivery.abortSignal?.aborted) {
+    return cancelledResult(deps, state, "cancelled before review", {
+      implementation,
+      verification,
     });
   }
 
@@ -211,19 +266,29 @@ async function runVerifyReviewPublish(input: {
     }
     const needsFixFromVerify = !verification.success;
     if (needsFixFromVerify) {
-      const fixResult = await maybeFix({
-        deps,
-        state,
-        delivery,
-        plan: input.plan,
-        issue: input.issue,
-        verification,
-        review: undefined,
-        previousImplementation: implementation,
-      });
-      state = fixResult.state;
-      implementation = fixResult.implementation;
-      verification = fixResult.verification;
+      try {
+        const fixResult = await maybeFix({
+          deps,
+          state,
+          delivery,
+          plan: input.plan,
+          issue: input.issue,
+          verification,
+          review: undefined,
+          previousImplementation: implementation,
+        });
+        state = fixResult.state;
+        implementation = fixResult.implementation;
+        verification = fixResult.verification;
+      } catch (error) {
+        if (isCancelledError(error) || delivery.abortSignal?.aborted) {
+          return cancelledResult(deps, state, "cancelled during fix", {
+            implementation,
+            verification,
+          });
+        }
+        throw error;
+      }
       if (!verification.success) {
         state = await mark(deps, state.runId, {
           status: "blocked",
@@ -280,20 +345,31 @@ async function runVerifyReviewPublish(input: {
     });
 
     if (review.status === "changes_required") {
-      const fixResult = await maybeFix({
-        deps,
-        state,
-        delivery,
-        plan: input.plan,
-        issue: input.issue,
-        verification,
-        review,
-        previousImplementation: implementation,
-      });
-      state = fixResult.state;
-      implementation = fixResult.implementation;
-      verification = fixResult.verification;
-      review = fixResult.review ?? review;
+      try {
+        const fixResult = await maybeFix({
+          deps,
+          state,
+          delivery,
+          plan: input.plan,
+          issue: input.issue,
+          verification,
+          review,
+          previousImplementation: implementation,
+        });
+        state = fixResult.state;
+        implementation = fixResult.implementation;
+        verification = fixResult.verification;
+        review = fixResult.review ?? review;
+      } catch (error) {
+        if (isCancelledError(error) || delivery.abortSignal?.aborted) {
+          return cancelledResult(deps, state, "cancelled during fix", {
+            implementation,
+            verification,
+            review,
+          });
+        }
+        throw error;
+      }
       if (review.status === "changes_required" || !verification.success) {
         state = await mark(deps, state.runId, {
           status: "blocked",
@@ -318,6 +394,14 @@ async function runVerifyReviewPublish(input: {
 
   if (!verification || !review) {
     throw new Error("verification and review artifacts are required before publish");
+  }
+
+  if (delivery.abortSignal?.aborted) {
+    return cancelledResult(deps, state, "cancelled before publish", {
+      implementation,
+      verification,
+      review,
+    });
   }
 
   const gate = evaluatePublishGate({
@@ -505,10 +589,24 @@ async function maybeFix(input: {
     headSha: (await deps.git.getIdentity(state.worktreePath)).headSha,
   });
 
-  const verification = await deps.verifier.verify({
-    worktreePath: state.worktreePath,
-    commands: delivery.verifyCommands,
-  });
+  const verification = await (async () => {
+    try {
+      return await deps.verifier.verify({
+        worktreePath: state.worktreePath,
+        commands: delivery.verifyCommands,
+        abortSignal: delivery.abortSignal,
+      });
+    } catch (error) {
+      if (isCancelledError(error) || delivery.abortSignal?.aborted) {
+        throw Object.assign(new Error("cancelled during fix verification"), {
+          code: "cancelled",
+          message: "cancelled during fix verification",
+          isRetryable: false,
+        } satisfies AgentError);
+      }
+      throw error;
+    }
+  })();
   await deps.runStore.saveArtifact(state.runId, "verification.json", verification);
 
   let review = input.review;
