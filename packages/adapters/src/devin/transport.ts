@@ -98,12 +98,12 @@ type LiveHandlers = {
 /**
  * Process exit state for one ACP connection, from spawn until intentional terminate.
  */
-class AcpProcessLifecycle {
+export class AcpProcessLifecycle {
   private intentionalShutdown = false;
   private exitError: DevinAcpTransportError | undefined;
   private readonly listeners = new Set<(error: DevinAcpTransportError) => void>();
 
-  constructor(processHandle: ManagedProcess) {
+  constructor(processHandle: Pick<ManagedProcess, "waitForExit">) {
     void processHandle.waitForExit().then(
       (exit) => {
         this.recordUnexpected(
@@ -150,7 +150,6 @@ class AcpProcessLifecycle {
    * Crashes fail-fast (do not wait out the full window).
    */
   async awaitAliveOrCrash(aliveWindowMs: number): Promise<void> {
-    this.throwIfDead();
     if (aliveWindowMs <= 0) {
       await new Promise<void>((resolve) => setImmediate(resolve));
       this.throwIfDead();
@@ -159,21 +158,32 @@ class AcpProcessLifecycle {
 
     await new Promise<void>((resolve, reject) => {
       let settled = false;
+      // Initialize before onUnexpectedExit: already-exited processes notify
+      // the listener synchronously and would otherwise hit a TDZ on const.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let unsubscribe: (() => void) | undefined;
+
       const finish = (fn: () => void) => {
         if (settled) {
           return;
         }
         settled = true;
-        clearTimeout(timer);
-        unsubscribe();
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+        unsubscribe?.();
         fn();
       };
 
-      const unsubscribe = this.onUnexpectedExit((error) => {
+      unsubscribe = this.onUnexpectedExit((error) => {
         finish(() => reject(error));
       });
 
-      const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      timer = setTimeout(() => {
         finish(() => {
           try {
             this.throwIfDead();

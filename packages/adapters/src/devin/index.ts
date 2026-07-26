@@ -56,6 +56,7 @@ export {
   createDevinAcpTransport,
   DevinAcpTransportImpl,
   DEFAULT_POST_TURN_LIVENESS_MS,
+  AcpProcessLifecycle,
 } from "./transport.js";
 export type {
   DevinAcpConnection,
