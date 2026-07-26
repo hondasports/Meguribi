@@ -21,6 +21,7 @@ import {
 export interface DoctorCommandOptions {
   json?: boolean;
   nonInteractive?: boolean;
+  implementer?: string;
 }
 
 export interface DoctorDependencies {
@@ -51,6 +52,7 @@ export async function runDoctor(
     // 曖昧な MCP ポリシーは diagnose 側で構造化して返す。
     // config loader の nonInteractive throw には乗せない。
     nonInteractive: false,
+    cli: options,
   });
 
   let diagnosis: AgentDiagnosis;
@@ -96,6 +98,7 @@ function deliveryFlags(command: Command): Command {
   return command
     .option("--json", "Emit DeliveryResult JSON on stdout", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
+    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
     .option("--allow-inherited-mcp", "Explicitly allow inherited MCP under warn policy", false)
     .option(
       "--max-fix-attempts <number>",
@@ -142,6 +145,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .description("Diagnose agent CLI readiness for Meguribi")
     .option("--json", "Emit AgentDiagnosis JSON only", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
+    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
     .action(async (cliOptions: DoctorCommandOptions) => {
       try {
         const result = await runDoctor(cliOptions, deps);

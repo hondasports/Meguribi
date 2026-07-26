@@ -41,6 +41,11 @@ export interface AuthenticationDiagnosis {
 
 export interface AcpDiagnosis {
   status: "supported" | "unsupported" | "unknown";
+  /**
+   * Whether the agent CLI supports loading an existing session (e.g. for fix/resume).
+   * Absent/false means the adapter must start a new session and fall back safely.
+   */
+  supportsSessionLoad?: boolean;
 }
 
 /**

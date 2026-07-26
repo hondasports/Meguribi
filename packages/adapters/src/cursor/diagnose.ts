@@ -62,6 +62,53 @@ function resolveMinimumSupportedVersion(input: string | undefined): string {
   return source.trim();
 }
 
+const FALLBACK_CURSOR_EXECUTABLES = ["cursor-agent", "agent"];
+
+interface ResolveCursorExecutableInput {
+  runner: ProcessRunner;
+  executable: string;
+  executableArgs: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+}
+
+async function resolveCursorExecutable(
+  input: ResolveCursorExecutableInput,
+): Promise<{ executable: string; prefix: string[] } | undefined> {
+  const { runner, executable, executableArgs, cwd, env, timeoutMs } = input;
+  const candidates = [
+    executable,
+    ...FALLBACK_CURSOR_EXECUTABLES.filter((candidate) => candidate !== executable),
+  ];
+
+  for (const candidate of candidates) {
+    const prefix = candidate === executable ? executableArgs : [];
+    const probe = await captureCommand(
+      runner,
+      candidate,
+      [...prefix, "acp", "--help"],
+      { cwd, env, timeoutMs },
+    );
+    if (probe.executableMissing) {
+      continue;
+    }
+    if (probe.timedOut || probe.outputTooLarge) {
+      continue;
+    }
+    const status = parseAcpCapability({
+      acpHelp: probe.stdout || probe.stderr,
+      acpExitCode: probe.exitCode,
+      timedOut: probe.timedOut || probe.outputTooLarge,
+    });
+    if (status === "supported") {
+      return { executable: candidate, prefix };
+    }
+  }
+
+  return undefined;
+}
+
 function resolveVersionStatus(
   rawStdout: string,
   minimumSupportedVersion: string,
@@ -98,7 +145,7 @@ function evaluateMcpPolicy(
   warnings.push({
     code: "inherited_mcp",
     message:
-      "Saved Cursor settings may include MCP servers. Meguribi cannot fully isolate MCP.",
+      "Saved agent settings may include MCP servers. Meguribi cannot fully isolate MCP.",
   });
 
   if (policy === "warn" && nonInteractive) {
@@ -126,7 +173,8 @@ export async function diagnoseCursor(
   const env = options.env ?? { ...process.env };
   const timeoutMs = options.probeTimeoutMs ?? 5000;
   const nonInteractive = options.nonInteractive ?? false;
-  const prefix = options.executableArgs ?? [];
+  const requestedExecutable = options.executable;
+  const requestedExecutableArgs = options.executableArgs ?? [];
   const minimumSupportedVersion = resolveMinimumSupportedVersion(
     options.minimumSupportedVersion,
   );
@@ -137,21 +185,19 @@ export async function diagnoseCursor(
   warnings.push(...mcp.warnings);
   errors.push(...mcp.errors);
 
-  const versionProbe = await captureCommand(
+  const resolved = await resolveCursorExecutable({
     runner,
-    options.executable,
-    [...prefix, "--version"],
-    {
-      cwd,
-      env,
-      timeoutMs,
-    },
-  );
+    executable: requestedExecutable,
+    executableArgs: requestedExecutableArgs,
+    cwd,
+    env,
+    timeoutMs,
+  });
 
-  if (versionProbe.executableMissing) {
+  if (resolved === undefined) {
     errors.push({
       code: "executable_not_found",
-      message: `Cursor executable not found: ${options.executable}`,
+      message: `No supported Cursor ACP executable found. Tried: ${requestedExecutable}, cursor-agent, agent`,
       nextAction: "Install Cursor CLI and ensure it is on PATH, or set cursor.executable",
     });
     return {
@@ -166,10 +212,22 @@ export async function diagnoseCursor(
     };
   }
 
+  const prefix = resolved.prefix;
   const executable = {
     status: "ok" as const,
-    path: options.executable,
+    path: resolved.executable,
   };
+
+  const versionProbe = await captureCommand(
+    runner,
+    resolved.executable,
+    [...prefix, "--version"],
+    {
+      cwd,
+      env,
+      timeoutMs,
+    },
+  );
 
   let version = resolveVersionStatus(versionProbe.stdout, minimumSupportedVersion);
   let probeTimedOut = false;
@@ -245,7 +303,7 @@ export async function diagnoseCursor(
 
   const authProbe = await captureCommand(
     runner,
-    options.executable,
+    resolved.executable,
     [...prefix, "auth", "status"],
     { cwd, env, timeoutMs },
   );
@@ -275,24 +333,42 @@ export async function diagnoseCursor(
     errors.push({
       code: "unauthenticated",
       message: "Cursor CLI is not authenticated",
-      nextAction: "Run: cursor auth login",
+      nextAction: `Run: ${resolved.executable} auth login`,
     });
   } else if (authentication.status === "unknown") {
-    warnings.push({
-      code: "auth_unknown",
-      message: "Could not determine Cursor authentication status",
-    });
+    const statusProbe = await captureCommand(
+      runner,
+      resolved.executable,
+      [...prefix, "status"],
+      { cwd, env, timeoutMs },
+    );
+    if (!statusProbe.outputTooLarge && !statusProbe.timedOut) {
+      authentication = {
+        status: parseAuthStatus({
+          exitCode: statusProbe.exitCode,
+          stdout: statusProbe.stdout,
+          stderr: statusProbe.stderr,
+          timedOut: false,
+        }),
+      };
+    }
+    if (authentication.status === "unknown") {
+      warnings.push({
+        code: "auth_unknown",
+        message: "Could not determine Cursor authentication status",
+      });
+    }
   }
 
   const acpHelpProbe = await captureCommand(
     runner,
-    options.executable,
+    resolved.executable,
     [...prefix, "acp", "--help"],
     { cwd, env, timeoutMs },
   );
   const rootHelpProbe = await captureCommand(
     runner,
-    options.executable,
+    resolved.executable,
     [...prefix, "--help"],
     {
       cwd,
@@ -344,6 +420,7 @@ export async function diagnoseCursor(
       acpExitCode: acpHelpProbe.exitCode,
       timedOut: acpProbeDegraded,
     }),
+    supportsSessionLoad: false,
   };
 
   if (acp.status === "unsupported") {

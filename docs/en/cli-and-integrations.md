@@ -42,34 +42,35 @@ It does not write to GitHub unless `--apply-labels` is explicitly supplied.
 
 ### `meguribi doctor`
 
-Diagnose whether the local Devin CLI is runnable for Meguribi. The same diagnosis API (`diagnoseDevin`) is used by `meguribi run` preflight.
+Diagnose whether the local implementer agent CLI (Devin or Cursor) is runnable for Meguribi. The same diagnosis API (`diagnoseCursor` / `diagnoseDevin`) is used by `meguribi run` preflight.
 
 ```bash
 meguribi doctor
 meguribi doctor --json
 meguribi doctor --non-interactive
+meguribi doctor --implementer cursor
 ```
 
 Checks include:
 
-- resolve the configured Devin executable
-- capture and parse `devin --version` (do not unconditionally accept unknown versions)
-- authentication via `devin auth status` (do not read credential material)
-- ACP capability probe via `devin acp --help` (do not start sessions or network work)
+- resolve the configured implementer executable (Devin / Cursor / cursor-agent / agent)
+- capture and parse `<executable> --version` (do not unconditionally accept unknown versions)
+- authentication via `<executable> auth status` or `<executable> status` (do not read credential material)
+- ACP capability probe via `<executable> acp --help` (do not start sessions or network work)
 - `inheritedMcpPolicy` (never claim full MCP isolation)
 
 Human-readable example:
 
 ```text
-✓ Devin CLI: 3000.2.17
+✓ Agent CLI: 3000.2.17
 ✓ Authentication: authenticated
 ✓ ACP: supported
-! Saved Devin settings may include MCP servers. Meguribi cannot fully isolate MCP.
+! Saved agent settings may include MCP servers. Meguribi cannot fully isolate MCP.
   Policy: warn
 Runnable: yes
 ```
 
-`--json` prints only a stable `DevinDiagnosis` schema on stdout. Exit code is non-zero when `runnable` is false. With `--non-interactive` and `inheritedMcpPolicy: warn`, diagnosis fails closed.
+`--json` prints only a stable `AgentDiagnosis` schema on stdout. Exit code is non-zero when `runnable` is false. With `--non-interactive` and `inheritedMcpPolicy: warn`, diagnosis fails closed.
 
 ### `meguribi discover`
 
@@ -127,7 +128,7 @@ meguribi plan owner/repo#125
 
 ### `meguribi run`
 
-Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `DevinAdapter` port (production: `createDevinAcpAdapter`).
+Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `AgentAdapter` port (production: `createDevinAcpAdapter` or `createCursorAcpAdapter`).
 
 ```bash
 meguribi run owner/repo#125
@@ -137,6 +138,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 Main options:
 
 - `--repo-path <path>`
+- `--implementer <devin|cursor>`
 - `--base <branch>`
 - `--no-commit`
 - `--no-push`
@@ -223,6 +225,8 @@ Place `.meguribi.yml` in the repository root.
 ```yaml
 version: 1
 
+implementer: devin
+
 repository:
   baseBranch: main
 
@@ -274,15 +278,21 @@ devin:
   startupTimeoutMs: 10000
   turnTimeoutMinutes: 45
   inheritedMcpPolicy: warn
+
+cursor:
+  executable: cursor
+  startupTimeoutMs: 10000
+  turnTimeoutMinutes: 45
+  inheritedMcpPolicy: warn
 ```
 
 `transport: acp` is the MVP default. Never store secrets or tokens in this file.
 
-`inheritedMcpPolicy` controls how Meguribi handles the possibility that Devin CLI inherits the user's saved MCP configuration.
+`inheritedMcpPolicy` controls how Meguribi handles the possibility that the implementer agent CLI inherits the user's saved MCP configuration.
 
 - `warn`: show a warning and request confirmation in interactive mode
 - `deny`: stop when an MCP connection is detected
-- `allow`: explicitly accept the user's Devin configuration
+- `allow`: explicitly accept the user's agent configuration
 
 The MVP default is `warn`. Non-interactive execution rejects `warn` and fails closed unless `allow` or `deny` is explicit. Documentation must not claim that MCP is fully isolated.
 
@@ -298,7 +308,7 @@ Lowest to highest:
 4. environment variables
 5. CLI options
 
-Only `MEGURIBI_DEVIN_EXECUTABLE`, `MEGURIBI_DEVIN_TRANSPORT`, `MEGURIBI_DEVIN_INHERITED_MCP_POLICY`, and the documented `MEGURIBI_DEVIN_*` timeout variables are accepted from the environment. Arbitrary environment variables, tokens, and cookies are never imported into configuration.
+The environment only accepts `MEGURIBI_IMPLEMENTER`, `MEGURIBI_DEVIN_EXECUTABLE`, `MEGURIBI_DEVIN_TRANSPORT`, `MEGURIBI_DEVIN_INHERITED_MCP_POLICY`, `MEGURIBI_DEVIN_*` timeout variables, `MEGURIBI_CURSOR_EXECUTABLE`, `MEGURIBI_CURSOR_INHERITED_MCP_POLICY`, and `MEGURIBI_CURSOR_*` timeout variables. Arbitrary environment variables, tokens, and cookies are never imported into configuration.
 
 Each Run stores the resolved, redacted configuration in `state.json`.
 

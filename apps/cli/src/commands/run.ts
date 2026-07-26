@@ -21,6 +21,7 @@ export interface DeliveryCommandOptions {
   json?: boolean;
   nonInteractive?: boolean;
   allowInheritedMcp?: boolean;
+  implementer?: string;
   maxFixAttempts?: number;
   noCommit?: boolean;
   noPush?: boolean;
@@ -189,6 +190,7 @@ async function resolveDeliveryWiring(
   ).createDeliveryDeps({
     cwd: deps.cwd,
     nonInteractive: options.nonInteractive,
+    implementer: options.implementer,
     allowInheritedMcp: options.allowInheritedMcp,
   });
   return {

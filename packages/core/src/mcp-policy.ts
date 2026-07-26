@@ -19,7 +19,7 @@ export function decideInheritedMcpPolicy(input: {
   explicitAllow: boolean;
   detection: McpDetection;
 }): McpPolicyDecision {
-  const warning = "Devin may inherit saved MCP configuration; complete isolation is not guaranteed.";
+  const warning = "The agent may inherit saved MCP configuration; complete isolation is not guaranteed.";
   if (input.policy === "allow") {
     return { outcome: "allow", reason: "inherited MCP use was explicitly accepted", warning };
   }

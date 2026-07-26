@@ -186,6 +186,18 @@ export type ImplementerConfigResult =
   | { kind: "devin"; config: DevinConfig; snapshot: Record<string, unknown> }
   | { kind: "cursor"; config: CursorConfig; snapshot: Record<string, unknown> };
 
+export class ImplementerNotSpecifiedError extends Error {
+  public readonly nextAction: string;
+  constructor() {
+    super(
+      "No implementer is explicitly selected. Set MEGURIBI_IMPLEMENTER=devin|cursor, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor.",
+    );
+    this.name = "ImplementerNotSpecifiedError";
+    this.nextAction =
+      "Set MEGURIBI_IMPLEMENTER=devin|cursor, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor.";
+  }
+}
+
 export async function loadImplementerConfig(
   options: LoadDevinConfigOptions,
 ): Promise<ImplementerConfigResult> {
@@ -200,22 +212,16 @@ export async function loadImplementerConfig(
 
   const cli = isRecord(options.cli) ? options.cli : {};
   const explicitImplementer =
-    (cli.implementer as string | undefined) ?? environment.MEGURIBI_IMPLEMENTER;
+    (cli.implementer as string | undefined) ??
+    environment.MEGURIBI_IMPLEMENTER ??
+    (isRecord(userRaw) ? (userRaw.implementer as string | undefined) : undefined) ??
+    (isRecord(repositoryRaw) ? (repositoryRaw.implementer as string | undefined) : undefined);
+
+  if (explicitImplementer !== "devin" && explicitImplementer !== "cursor") {
+    throw new ImplementerNotSpecifiedError();
+  }
+
   if (explicitImplementer === "cursor") {
-    const result = await loadCursorConfig(options);
-    return { kind: "cursor", ...result };
-  }
-  if (explicitImplementer === "devin") {
-    const result = await loadDevinConfig(options);
-    return { kind: "devin", ...result };
-  }
-
-  const cliHasCursor = cli.cursor !== undefined;
-  const envHasCursor = environment.MEGURIBI_CURSOR_EXECUTABLE !== undefined;
-  const repoHasCursor = isRecord(repositoryRaw) && repositoryRaw.cursor !== undefined;
-  const userHasCursor = isRecord(userRaw) && userRaw.cursor !== undefined;
-
-  if (cliHasCursor || envHasCursor || repoHasCursor || userHasCursor) {
     const result = await loadCursorConfig(options);
     return { kind: "cursor", ...result };
   }
