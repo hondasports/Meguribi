@@ -9,7 +9,7 @@ export interface FakeHttpMcpServer {
 
 export async function startFakeHttpMcpServer(marker?: string): Promise<FakeHttpMcpServer> {
   let requests = 0;
-  const server = http.createServer((request, response) => {
+  const server = http.createServer((_request, response) => {
     requests += 1;
     if (marker) void fs.appendFile(marker, "fake-http:connected\n", "utf8");
     response.setHeader("content-type", "application/json");

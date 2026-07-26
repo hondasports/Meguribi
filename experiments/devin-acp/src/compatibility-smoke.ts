@@ -1,9 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDevinAcpAdapter, diagnoseDevin, MINIMUM_SUPPORTED_DEVIN_CLI_VERSION } from "../../../packages/adapters/dist/index.js";
-import type { DevinDiagnosis, ImplementationContext } from "../../../packages/core/dist/index.js";
-import type { ImplementationResult } from "../../../packages/core/dist/devin-adapter.js";
+import { createDevinAcpAdapter, diagnoseDevin, MINIMUM_SUPPORTED_DEVIN_CLI_VERSION } from "@meguribi/adapters";
+import type { DevinDiagnosis, ImplementationContext, ImplementationResult } from "@meguribi/core";
 import { createFixture, snapshotDirectory, diffSnapshots, type Fixture } from "./workspace.js";
 import { buildIsolatedEnvironment } from "./isolation.js";
 

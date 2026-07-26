@@ -474,6 +474,47 @@ Secret redaction always runs before persistence. If redaction or writing fails, 
 
 `termination.json` stores `reason`, `stopReason`, `stdinClosed`, `cancelSent`, `gracefulExit`, `terminateSent`, `forceKillUsed`, `residualProcesses`, and a classified `cleanupError` when present. An execution is not successful unless residual processes are confirmed to be zero.
 
+### Devin ACP compatibility smoke result
+
+The `experiments/devin-acp` manual smoke writes a machine-readable result to `artifacts/devin-acp/<run-id>/compatibility-result.json`. Its `artifactType` is `devin-acp-compatibility-smoke` and `schemaVersion` is `1`.
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "devin-acp-compatibility-smoke",
+  "optIn": true,
+  "cliVersion": "3000.0.0-fake",
+  "acpCompatible": true,
+  "sessionStarted": true,
+  "promptCompleted": true,
+  "worktreeBoundaryOk": true,
+  "shutdownCompleted": true,
+  "status": "completed",
+  "warnings": [],
+  "changedFiles": ["README.md"],
+  "outsideChanges": [],
+  "residualProcesses": false,
+  "artifactDirectory": "artifacts/devin-acp/<run-id>",
+  "implementation": { ... }
+}
+```
+
+Key fields:
+
+- `optIn`: whether explicit opt-in for the real Devin CLI was present.
+- `cliVersion`: Devin CLI version observed during diagnosis or fake execution.
+- `acpCompatible`: true only when the ACP lifecycle, worktree boundary, shutdown, and residual-process checks all pass.
+- `sessionStarted` / `promptCompleted` / `worktreeBoundaryOk` / `shutdownCompleted`: per-gate results.
+- `status`: `completed` / `blocked` / `failed`.
+- `warnings`: warnings from MCP policy or the adapter.
+- `error`: reason for failure when applicable.
+- `changedFiles` / `outsideChanges`: Git-authoritative changed files and writes outside the worktree.
+- `residualProcesses`: whether child/grandchild processes remain.
+- `artifactDirectory`: path where the smoke artifacts are stored.
+- `implementation`: the `ImplementationResult` returned by the production `DevinAcpAdapter` (`null` when opt-in is missing or blocked).
+
+It does not contain secrets, tokens, credentials, or full environment variables. On partial/failure results, it still records `artifactDirectory`, `error`, and `status` and is not treated as success.
+
 ### AgentError
 
 | code | description |

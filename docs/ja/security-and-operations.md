@@ -315,3 +315,5 @@ Agent の `reportedFiles` と Git diff が一致しない場合は warning と�
 ## 22. ACP 終了と成果物
 
 正常終了、cancel、timeout、protocol failure では、必要に応じて `session/cancel`、stdin close、grace period、SIGTERM 相当、force termination の順で process tree を回収します。turn は既定5分で timeout し、shutdown は冪等です。`termination.json` に stop reason、各段階の結果、残留 process 数、cleanup error を redaction 後に保存します。残留や cleanup error が不明な場合は成功扱いにしません。
+
+`experiments/devin-acp` の compatibility smoke は、実 Devin CLI への接続を `MEGURIBI_RUN_REAL_DEVIN_SMOKE=1` の明示 opt-in でだけ許可します。opt-in なしでは `blocked` となり、外部 MCP 接続・実 repository への書き込み・commit/push/PR/Issue 操作・credential のコピー/保存を行いません。
