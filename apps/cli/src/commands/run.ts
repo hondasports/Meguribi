@@ -7,6 +7,7 @@ import {
   type ResumeDeliveryInput,
   type RunDeliveryInput,
 } from "@meguribi/core";
+import { DEFAULT_VERIFY_TIMEOUT_MS } from "@meguribi/adapters";
 import { parseIssueTarget } from "../target.js";
 
 const DEFAULT_PROTECTED_PATHS = [
@@ -131,6 +132,7 @@ function buildRunInput(
     maxFixAttempts: options.maxFixAttempts ?? 2,
     artifactRootForDevin: `${cwd}/.meguribi-artifacts/issue-${String(parsed.issueNumber)}`,
     abortSignal,
+    verifyTimeoutMs: DEFAULT_VERIFY_TIMEOUT_MS,
     noCommit: options.noCommit,
     noPush: options.noPush,
     noPr: options.noPr,
@@ -164,6 +166,7 @@ function buildResumeInput(
     inheritedMcpPolicy,
     artifactRootForDevin: `${cwd}/.meguribi-artifacts/issue-${String(parsed.issueNumber)}`,
     abortSignal,
+    verifyTimeoutMs: DEFAULT_VERIFY_TIMEOUT_MS,
     noCommit: options.noCommit,
     noPush: options.noPush,
     noPr: options.noPr,

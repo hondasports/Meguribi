@@ -86,6 +86,7 @@ export const VerificationResultSchema = v.strictObject({
       startedAt: v.string(),
       finishedAt: v.string(),
       logPath: v.optional(v.string()),
+      timedOut: v.optional(v.boolean()),
     }),
   ),
 }) satisfies v.GenericSchema<unknown, CoreVerificationResult>;

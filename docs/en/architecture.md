@@ -169,7 +169,7 @@ Run repository-defined commands independently from agent claims:
 - test
 - build
 
-Store timestamps, exit codes, and separate logs for every command.
+Commands run as executable + argv with `shell: false`. Each command has a default 30-minute timeout and fails closed with `timedOut` when exceeded. On Windows, resolution uses PATH and `PATHEXT` order instead of blindly appending `.cmd`. Store timestamps, exit codes, and separate logs for every command.
 
 ### `PolicyEngine`
 

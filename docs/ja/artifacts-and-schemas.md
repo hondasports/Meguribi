@@ -300,17 +300,17 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
   "commands": [
     {
       "name": "test",
-      "command": ["pnpm", "test"],
       "exitCode": 0,
-      "durationMs": 12000,
-      "stdoutLog": "logs/verify-test.log",
-      "stderrLog": null
+      "startedAt": "...",
+      "finishedAt": "...",
+      "logPath": "logs/verify-test.log",
+      "timedOut": false
     }
-  ],
-  "startedAt": "...",
-  "completedAt": "..."
+  ]
 }
 ```
+
+`timedOut` は任意です。コマンドが per-command timeout を超えた場合に `true` となり、そのときの `exitCode` は `null`、全体の `success` は `false` です。
 
 ## 11. `review.json`
 

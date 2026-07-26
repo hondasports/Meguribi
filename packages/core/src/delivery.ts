@@ -106,6 +106,7 @@ export interface VerificationCommandResult {
   startedAt: string;
   finishedAt: string;
   logPath?: string;
+  timedOut?: boolean;
 }
 
 export interface VerificationResult {
@@ -167,6 +168,8 @@ export interface Verifier {
     worktreePath: string;
     commands: readonly { name: string; run: string }[];
     abortSignal?: AbortSignal;
+    /** Per-command timeout; adapters must fail closed when exceeded. */
+    timeoutMs?: number;
   }): Promise<VerificationResult>;
 }
 
@@ -262,6 +265,8 @@ export interface RunDeliveryInput {
   maxFixAttempts: number;
   artifactRootForDevin: string;
   abortSignal?: AbortSignal;
+  /** Per verify-command timeout in milliseconds. */
+  verifyTimeoutMs?: number;
   noCommit?: boolean;
   noPush?: boolean;
   noPr?: boolean;
@@ -280,6 +285,8 @@ export interface ResumeDeliveryInput {
   inheritedMcpPolicy: InheritedMcpPolicy;
   artifactRootForDevin: string;
   abortSignal?: AbortSignal;
+  /** Per verify-command timeout in milliseconds. */
+  verifyTimeoutMs?: number;
   noCommit?: boolean;
   noPush?: boolean;
   noPr?: boolean;

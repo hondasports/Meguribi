@@ -78,7 +78,7 @@ export type {
 export { FileSystemRunStore, createRunId } from "./run-store/index.js";
 export type { FileSystemRunStoreOptions } from "./run-store/index.js";
 export { createDefaultPolicyEngine } from "./policy/default-policy.js";
-export { createCommandVerifier } from "./verifier/command-verifier.js";
+export { createCommandVerifier, resolvePlatformExecutable, DEFAULT_VERIFY_TIMEOUT_MS } from "./verifier/command-verifier.js";
 export {
   createFakeCodexForDelivery,
   createFakeDeliveryDeps,
