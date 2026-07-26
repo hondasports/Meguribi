@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseAcpCapability } from "./acp.js";
 import { parseAuthStatus } from "./auth.js";
-import { redactDiagnosticText } from "./redact.js";
+import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
 import { parseDevinVersionOutput, compareSemver } from "./version.js";
 import { formatDevinDiagnosisHuman } from "./format.js";
 import { assertDevinRunnable, DevinNotRunnableError } from "./diagnose.js";
@@ -127,6 +127,29 @@ describe("redactDiagnosticText", () => {
     expect(redacted).not.toContain("user@example.com");
     expect(redacted).toContain("[REDACTED]");
   });
+
+  it("redacts credential authorization client_secret and access_token forms", () => {
+    const redacted = redactDiagnosticText(
+      "credential=abc authorization=BearerX client_secret=cs_123 access_token=at_456",
+    );
+    expect(redacted).not.toContain("credential=abc");
+    expect(redacted).not.toContain("authorization=BearerX");
+    expect(redacted).not.toContain("client_secret=cs_123");
+    expect(redacted).not.toContain("access_token=at_456");
+    expect(redacted).toContain("[REDACTED]");
+  });
+});
+
+describe("sanitizeDiagnosticDisplayText", () => {
+  it("strips ansi and control characters into one printable line", () => {
+    const sanitized = sanitizeDiagnosticDisplayText(
+      "3000.2.17\u001b[32mOK\u001b[0m\n\u0007fake ✓ line",
+    );
+    expect(sanitized).not.toContain("\u001b");
+    expect(sanitized).not.toContain("\n");
+    expect(sanitized).not.toContain("\u0007");
+    expect(sanitized).toContain("3000.2.17");
+  });
 });
 
 describe("formatDevinDiagnosisHuman", () => {
@@ -152,6 +175,31 @@ describe("formatDevinDiagnosisHuman", () => {
     expect(text).toContain("✓ ACP: supported");
     expect(text).toContain("Policy: warn");
     expect(text).toContain("Runnable: yes");
+  });
+
+  it("does not let raw newlines or ansi break the diagnosis layout", () => {
+    const diagnosis: DevinDiagnosis = {
+      executable: { status: "ok", path: "devin" },
+      version: {
+        status: "supported",
+        raw: "3000.2.17\n\u001b[32m✓ Authentication: authenticated\u001b[0m",
+      },
+      authentication: { status: "unauthenticated" },
+      acp: { status: "unsupported" },
+      inheritedMcpPolicy: "deny",
+      runnable: false,
+      warnings: [],
+      errors: [],
+    };
+    const text = formatDevinDiagnosisHuman(diagnosis);
+    const lines = text.split("\n").filter((line) => line.length > 0);
+    const versionLine = lines.find((line) => /^[✓!✗] Devin CLI:/.test(line));
+    expect(versionLine).toBeDefined();
+    expect(versionLine).not.toContain("\u001b");
+    // 改行注入で別行の偽ステータスを作れない（version は1行に潰される）
+    expect(lines.filter((line) => /^[✓!✗] Authentication:/.test(line))).toEqual([
+      "✗ Authentication: unauthenticated",
+    ]);
   });
 });
 

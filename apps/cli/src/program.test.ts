@@ -66,6 +66,7 @@ describe("runDoctor", () => {
     const chunks: string[] = [];
     let sawNonInteractive: boolean | undefined;
     let loadConfigNonInteractive: boolean | undefined;
+    let sawMinimum: string | undefined;
 
     const blocked: DevinDiagnosis = {
       ...healthy,
@@ -98,6 +99,7 @@ describe("runDoctor", () => {
         },
         diagnose: async (options) => {
           sawNonInteractive = options.nonInteractive;
+          sawMinimum = options.minimumSupportedVersion;
           return blocked;
         },
         stdout: (text) => {
@@ -108,6 +110,7 @@ describe("runDoctor", () => {
 
     expect(loadConfigNonInteractive).toBe(false);
     expect(sawNonInteractive).toBe(true);
+    expect(sawMinimum).toBe("3000.0.0");
     expect(result.exitCode).toBe(1);
     const parsed = JSON.parse(chunks.join("")) as DevinDiagnosis;
     expect(parsed.errors.some((error) => error.code === "policy_blocked")).toBe(true);

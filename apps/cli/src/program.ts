@@ -1,5 +1,9 @@
 import { Command } from "commander";
-import { diagnoseDevin, formatDevinDiagnosisHuman } from "@meguribi/adapters";
+import {
+  diagnoseDevin,
+  formatDevinDiagnosisHuman,
+  MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+} from "@meguribi/adapters";
 import { loadDevinConfig } from "@meguribi/config";
 import { DevinDiagnosisSchema } from "@meguribi/schemas";
 import * as v from "valibot";
@@ -40,6 +44,7 @@ export async function runDoctor(
     nonInteractive: options.nonInteractive ?? false,
     cwd,
     probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+    minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   });
 
   const validated = v.parse(DevinDiagnosisSchema, diagnosis);

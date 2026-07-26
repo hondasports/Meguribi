@@ -79,6 +79,21 @@ describe("diagnoseDevin integration with fake executable", () => {
     expect(result.errors.some((error) => error.code === "unsupported_version")).toBe(true);
   });
 
+  it("applies default minimum supported version without explicit override", async () => {
+    const result = await diagnose("version-unsupported");
+    expect(result.version.status).toBe("unsupported");
+    expect(result.runnable).toBe(false);
+    expect(result.errors.some((error) => error.code === "unsupported_version")).toBe(true);
+  });
+
+  it("fails closed when version probe exits non-zero", async () => {
+    const result = await diagnose("version-exit-error");
+    expect(result.runnable).toBe(false);
+    expect(result.errors.some((error) => error.code === "process_crashed")).toBe(true);
+    expect(result.authentication.status).toBe("unknown");
+    expect(result.acp.status).toBe("unknown");
+  });
+
   it("detects unauthenticated status", async () => {
     const result = await diagnose("auth-unauthenticated");
     expect(result.authentication.status).toBe("unauthenticated");
@@ -142,6 +157,9 @@ describe("diagnoseDevin integration with fake executable", () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("supersecrettoken123");
     expect(serialized).not.toContain("mcp.example.com");
+    expect(serialized).not.toContain("credential=abc");
+    expect(serialized).not.toContain("client_secret=cs_123");
+    expect(serialized).not.toContain("access_token=at_456");
     expect(redactDiagnosticText(serialized)).toBe(serialized);
   });
 });

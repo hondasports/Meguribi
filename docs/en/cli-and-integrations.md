@@ -443,7 +443,9 @@ Before launch, run the same diagnosis as `meguribi doctor`:
 - ACP capability probe (`devin acp --help`)
 - `inheritedMcpPolicy`
 
-Do not infer safety from the version string alone. Unparseable versions are `unknown` and still require a successful ACP probe. Missing ACP is reported as `capability_missing`, distinct from `unsupported_version`. Unsupported versions, missing authentication, missing ACP, ambiguous MCP policy in non-interactive mode, and unexpected process exits stop the Run. Diagnosis output must not retain secret-like strings.
+Do not infer safety from the version string alone. Unparseable versions are `unknown` and still require a successful ACP probe. Parseable versions below `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION` (default `3000.0.0`) are `unsupported_version`. Non-zero exit or timeout from `--version` fails closed. Missing ACP is reported as `capability_missing`, distinct from `unsupported_version`. Unsupported versions, missing authentication, missing ACP, ambiguous MCP policy in non-interactive mode, and unexpected process exits stop the Run. Diagnosis output must not retain secret-like strings.
+
+`meguribi run` will be wired in Issue #22 and must call `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters` as its Devin preflight.
 
 ## 9. GitHub integration
 
