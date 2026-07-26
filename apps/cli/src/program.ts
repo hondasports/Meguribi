@@ -1,14 +1,16 @@
 import { Command, Option } from "commander";
 import {
+  diagnoseCursor,
   diagnoseDevin,
+  formatCursorDiagnosisHuman,
   formatDevinDiagnosisHuman,
+  MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
 } from "@meguribi/adapters";
-import { loadDevinConfig } from "@meguribi/config";
-import type { DeliveryDependencies } from "@meguribi/core";
-import { DevinDiagnosisSchema } from "@meguribi/schemas";
+import { loadImplementerConfig } from "@meguribi/config";
+import type { AgentDiagnosis, DeliveryDependencies } from "@meguribi/core";
+import { AgentDiagnosisSchema } from "@meguribi/schemas";
 import * as v from "valibot";
-import type { DevinDiagnosis } from "@meguribi/schemas";
 import {
   runResumeCommand,
   runRunCommand,
@@ -22,8 +24,11 @@ export interface DoctorCommandOptions {
 }
 
 export interface DoctorDependencies {
-  diagnose?: typeof diagnoseDevin;
-  loadConfig?: typeof loadDevinConfig;
+  diagnoseDevin?: typeof diagnoseDevin;
+  diagnoseCursor?: typeof diagnoseCursor;
+  formatDevinDiagnosisHuman?: typeof formatDevinDiagnosisHuman;
+  formatCursorDiagnosisHuman?: typeof formatCursorDiagnosisHuman;
+  loadConfig?: typeof loadImplementerConfig;
   cwd?: string;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
@@ -36,34 +41,49 @@ export interface ProgramDependencies extends DoctorDependencies, DeliveryCommand
 export async function runDoctor(
   options: DoctorCommandOptions,
   deps: DoctorDependencies = {},
-): Promise<{ exitCode: number; diagnosis: DevinDiagnosis }> {
-  const loadConfig = deps.loadConfig ?? loadDevinConfig;
-  const diagnose = deps.diagnose ?? diagnoseDevin;
+): Promise<{ exitCode: number; diagnosis: AgentDiagnosis }> {
+  const loadConfig = deps.loadConfig ?? loadImplementerConfig;
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const cwd = deps.cwd ?? process.cwd();
 
   const config = await loadConfig({
     repositoryPath: cwd,
-    // 曖昧な MCP ポリシーは diagnoseDevin 側で構造化して返す。
+    // 曖昧な MCP ポリシーは diagnose 側で構造化して返す。
     // config loader の nonInteractive throw には乗せない。
     nonInteractive: false,
   });
 
-  const diagnosis = await diagnose({
-    executable: config.config.executable,
-    inheritedMcpPolicy: config.config.inheritedMcpPolicy,
-    nonInteractive: options.nonInteractive ?? false,
-    cwd,
-    probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
-    minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
-  });
+  let diagnosis: AgentDiagnosis;
+  if (config.kind === "cursor") {
+    diagnosis = await (deps.diagnoseCursor ?? diagnoseCursor)({
+      executable: config.config.executable,
+      inheritedMcpPolicy: config.config.inheritedMcpPolicy,
+      nonInteractive: options.nonInteractive ?? false,
+      cwd,
+      probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+      minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+    });
+  } else {
+    diagnosis = await (deps.diagnoseDevin ?? diagnoseDevin)({
+      executable: config.config.executable,
+      inheritedMcpPolicy: config.config.inheritedMcpPolicy,
+      nonInteractive: options.nonInteractive ?? false,
+      cwd,
+      probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+      minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+    });
+  }
 
-  const validated = v.parse(DevinDiagnosisSchema, diagnosis);
+  const validated = v.parse(AgentDiagnosisSchema, diagnosis);
 
   if (options.json) {
     writeOut(`${JSON.stringify(validated, null, 2)}\n`);
   } else {
-    writeOut(formatDevinDiagnosisHuman(validated));
+    const formatHuman =
+      config.kind === "cursor"
+        ? (deps.formatCursorDiagnosisHuman ?? formatCursorDiagnosisHuman)
+        : (deps.formatDevinDiagnosisHuman ?? formatDevinDiagnosisHuman);
+    writeOut(formatHuman(validated));
   }
 
   return {
@@ -119,8 +139,8 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
 
   program
     .command("doctor")
-    .description("Diagnose Devin CLI readiness for Meguribi")
-    .option("--json", "Emit DevinDiagnosis JSON only", false)
+    .description("Diagnose agent CLI readiness for Meguribi")
+    .option("--json", "Emit AgentDiagnosis JSON only", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
     .action(async (cliOptions: DoctorCommandOptions) => {
       try {

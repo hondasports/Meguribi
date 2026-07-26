@@ -75,6 +75,15 @@ export type {
   StartDevinAcpInput,
   StartDevinAcpSessionInput,
 } from "./devin/index.js";
+export {
+  assertCursorRunnable,
+  CursorNotRunnableError,
+  diagnoseCursor,
+  formatCursorDiagnosisHuman,
+  MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+  preflightCursor,
+} from "./cursor/index.js";
+export type { DiagnoseCursorOptions } from "./cursor/index.js";
 export { FileSystemRunStore, createRunId } from "./run-store/index.js";
 export type { FileSystemRunStoreOptions } from "./run-store/index.js";
 export { createDefaultPolicyEngine } from "./policy/default-policy.js";
