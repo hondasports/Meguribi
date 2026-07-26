@@ -7,6 +7,7 @@ import type { DevinDiagnosis } from "@meguribi/core";
 import { ProcessRunner } from "@meguribi/process";
 import { createDevinAcpTransport } from "./transport.js";
 import { DevinAcpTransportError } from "./transport-error.js";
+import { createPermissionMediator, type PermissionMediator } from "./permissions.js";
 
 const tempDirs: string[] = [];
 
@@ -56,6 +57,7 @@ async function start(mode: string, overrides: {
   startupTimeoutMs?: number;
   diagnosis?: DevinDiagnosis;
   postTurnLivenessMs?: number;
+  permissionMediator?: PermissionMediator;
 } = {}) {
   const cwd = await tempCwd();
   const transport = createDevinAcpTransport();
@@ -70,6 +72,7 @@ async function start(mode: string, overrides: {
     postTurnLivenessMs: overrides.postTurnLivenessMs ?? 50,
     diagnosis: overrides.diagnosis ?? runnableDiagnosis(),
     runner: new ProcessRunner(),
+    permissionMediator: overrides.permissionMediator,
   });
   return { connection, cwd };
 }
@@ -169,6 +172,16 @@ describe("DevinAcpTransport integration", () => {
     const events = await drainPrompt(connection);
     expect(events.some((event) => event.kind === "permission_request")).toBe(true);
     expect(events.at(-1)).toMatchObject({ kind: "turn_completed" });
+    await connection.terminate(500);
+  });
+
+  it("mediates an ACP permission through the domain policy", async () => {
+    const mediator = createPermissionMediator({ mode: "interactive", allowedCommands: [] });
+    const { connection } = await start("permission", { permissionMediator: mediator });
+    const events = await drainPrompt(connection);
+    const permission = events.find((event) => event.kind === "permission_request");
+    expect(permission).toMatchObject({ decision: { outcome: "approve" } });
+    expect(mediator.records()).toHaveLength(1);
     await connection.terminate(500);
   });
 

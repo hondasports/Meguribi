@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@meguribi/core";
+import type { AgentEvent, AgentTerminationReason, AgentTerminationResult } from "@meguribi/core";
 import {
   DevinAgentArtifactStore,
   type DevinAgentResultArtifact,
@@ -18,6 +18,8 @@ import {
   type StartDevinAcpInput,
 } from "./transport.js";
 import { DevinAcpTransportError } from "./transport-error.js";
+import { DevinAcpShutdownController, type ShutdownOptions } from "./shutdown.js";
+import type { PermissionMediator } from "./permissions.js";
 
 export interface StartDevinAcpSessionInput extends StartDevinAcpInput {
   artifactRoot: string;
@@ -32,6 +34,7 @@ export interface DevinAcpSession {
   cancel(): Promise<void>;
   closeInput(): Promise<void>;
   finish(result: DevinAgentResultArtifact): Promise<void>;
+  shutdown(reason: AgentTerminationReason, options: ShutdownOptions): Promise<AgentTerminationResult>;
   terminate(graceMs?: number): Promise<void>;
 }
 
@@ -107,6 +110,8 @@ class DevinAcpSessionImpl implements DevinAcpSession {
     private readonly connection: DevinAcpConnection,
     private readonly cwd: string,
     private readonly startedAt: string,
+    private readonly shutdownController: DevinAcpShutdownController,
+    private readonly permissionMediator?: PermissionMediator,
   ) {}
 
   async *prompt(input: { content: string }): AsyncIterable<AgentEvent> {
@@ -160,7 +165,18 @@ class DevinAcpSessionImpl implements DevinAcpSession {
   }
 
   async terminate(graceMs?: number): Promise<void> {
-    await this.connection.terminate(graceMs);
+    await this.shutdown("completed", {
+      gracefulShutdownMs: 1,
+      terminateTimeoutMs: graceMs ?? 1_000,
+    });
+  }
+
+  async shutdown(reason: AgentTerminationReason, options: ShutdownOptions): Promise<AgentTerminationResult> {
+    const result = await this.shutdownController.shutdown(reason, options);
+    this.permissionMediator?.endSession(this.sessionId);
+    await this.artifacts.writeTermination(result);
+    await this.persistStderr();
+    return result;
   }
 
   private async persistStderr(): Promise<void> {
@@ -202,5 +218,7 @@ export async function startDevinAcpSession(
     connection,
     input.cwd,
     startedAt,
+    new DevinAcpShutdownController(connection),
+    input.permissionMediator,
   );
 }

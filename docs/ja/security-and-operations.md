@@ -294,3 +294,23 @@ Meguribi は個人ツールですが、後から次を確認できるように�
 - 人間がどこで承認したか
 
 独自の監査 DB は作らず、Run 成果物と GitHub 履歴で実現します。
+
+## 19. Devin ACP permission
+
+ACP の permission request は adapter 境界で `PermissionRequest` へ正規化し、PolicyEngine の判定を通します。worktree 外、protected path、Git の書き込み、production、secret、external network、unknown operation は deny します。test / lint / build などの command は明示的な allowlist に一致した場合だけ許可します。
+
+対話モードの確認待ちは timeout で deny とし、非対話モードは明示許可されていない操作を fail-closed で deny します。同一 session / request ID の結果は再利用し、session 終了後の request は無効です。`allow all` の永続設定は提供しません。
+
+## 20. MCP 継承
+
+Devin CLI の保存済み MCP 設定を完全に隔離できるとは表現しません。`warn` は対話時に確認し、非対話時は明示許可なしで停止します。`deny` は検知可能な stdio / HTTP MCP 接続を SECURITY_ALERT として記録し、prompt 前または検知直後に停止します。接続先、credential、token は redaction 前の値を成果物へ保存しません。
+
+## 21. prompt と Git の安全境界
+
+Issue、comment、fix instruction は untrusted content として prompt 内で明示的に区切ります。repository rules、主 skill、approved plan、protected paths、limits は trusted contract として別ブロックに置きます。control character、zero-width character、delimiter の脱出、secret pattern、worktree 外 path を正規化・拒否し、prompt version と hash を保存します。
+
+Devin 実行前後の Git snapshot を比較し、HEAD、branch、remote、local config、protected path、symlink、changed file 数、diff 行数、binary file、worktree 外変更を検査します。違反または suspicious な snapshot は Verifier、commit、push、PR へ進めません。Git の diff が changed files の正本であり、Agent の申告は参考値です。
+
+## 22. ACP 終了と成果物
+
+正常終了、cancel、timeout、protocol failure では、必要に応じて `session/cancel`、stdin close、grace period、SIGTERM 相当、force termination の順で process tree を回収します。shutdown は冪等で、`termination.json` に stop reason、各段階の結果、残留 process 数、cleanup error を redaction 後に保存します。残留や cleanup error が不明な場合は成功扱いにしません。

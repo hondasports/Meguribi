@@ -285,3 +285,23 @@ A user must be able to determine:
 - Where human approval occurred
 
 Run artifacts and GitHub history provide this traceability without a custom audit database.
+
+## 19. Devin ACP permissions
+
+ACP permission requests are normalized at the adapter boundary into `PermissionRequest` values and evaluated by PolicyEngine. Worktree-outside paths, protected paths, Git writes, production operations, secret access, external network use, and unknown operations are denied. Test, lint, and build commands are allowed only when they match an explicit allowlist.
+
+Interactive confirmation expires to deny. Non-interactive mode fails closed for every operation without an explicit allow decision. Decisions are idempotent per session and request ID, and requests received after session termination are invalid. No persistent `allow all` setting is provided.
+
+## 20. Inherited MCP configuration
+
+Meguribi must not claim complete isolation from Devin's saved MCP configuration. `warn` requires interactive confirmation and stops non-interactive runs without explicit permission. `deny` blocks detectable stdio or HTTP MCP connections and records a redacted SECURITY_ALERT before or immediately after detection. Endpoints, credentials, and tokens are never persisted before redaction.
+
+## 21. Prompt and Git safety boundaries
+
+Issue text, comments, and fix instructions are untrusted content and are explicitly delimited inside the implementation prompt. Repository rules, the primary skill, the approved plan, protected paths, and limits are separate trusted-contract blocks. Control characters, zero-width characters, delimiter escapes, secret patterns, and paths outside the worktree are normalized or rejected. The prompt version and hash are stored.
+
+Meguribi compares Git snapshots before and after Devin execution for HEAD, branch, remote, local config, protected paths, symlink escapes, changed-file count, diff lines, binary files, and outside-worktree changes. A violation or suspicious snapshot cannot proceed to verification, commit, push, or PR creation. Git diff is authoritative for changed files; agent reports are advisory.
+
+## 22. ACP shutdown and artifacts
+
+Normal completion, cancellation, timeout, and protocol failure use `session/cancel` when applicable, stdin close, a grace period, SIGTERM-equivalent termination, and force termination as the final escalation. Shutdown is idempotent. `termination.json` stores the stop reason, stage results, residual process count, and cleanup error after redaction. Residual processes or an unknown cleanup result are never treated as success.
