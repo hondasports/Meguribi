@@ -9,6 +9,7 @@ export type {
   AgentTerminationResult,
 } from "./agent-termination.js";
 export type {
+  FixContext,
   ImplementationContext,
   UntrustedSource,
 } from "./implementation-context.js";

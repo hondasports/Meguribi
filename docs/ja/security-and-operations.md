@@ -307,10 +307,11 @@ Devin CLI の保存済み MCP 設定を完全に隔離できるとは表現し�
 
 ## 21. prompt と Git の安全境界
 
-Issue、comment、fix instruction は untrusted content として prompt 内で明示的に区切ります。repository rules、主 skill、approved plan、protected paths、limits は trusted contract として別ブロックに置きます。control character、zero-width character、delimiter の脱出、secret pattern、worktree 外 path を正規化・拒否し、prompt version と hash を保存します。
+Issue、comment、previous attempt、fix instruction は untrusted content として prompt 内で明示的に区切ります。repository rules、主 skill、approved plan、protected paths、limits は trusted contract として別ブロックに置きます。control character、zero-width character、delimiter の脱出、secret pattern、worktree 外 path を正規化・拒否し、prompt version と hash を保存します。
 
-Devin 実行前後の Git snapshot を比較し、HEAD、branch、remote、local config、protected path、symlink、changed file 数、diff 行数、binary file、worktree 外変更を検査します。違反または suspicious な snapshot は Verifier、commit、push、PR へ進めません。Git の diff が changed files の正本であり、Agent の申告は参考値です。
+Devin 実行前後の Git snapshot を比較し、repository root、common dir、HEAD、承認済み base SHA、branch、承認済み remote identity、remote、local config、reflog、protected path、pre-existing dirty state、symlink、changed file 数、diff 行数、binary file、worktree 外変更を検査します。違反または suspicious な snapshot は Verifier、commit、push、PR へ進めません。Git の diff が changed files の正本であり、Agent の申告は参考値です。repository 上で Git boundary 設定がない session は fail-closed です。
+Agent の `reportedFiles` と Git diff が一致しない場合は warning として `git-boundary.json` に保存しますが、Git diff の判定を上書きしません。
 
 ## 22. ACP 終了と成果物
 
-正常終了、cancel、timeout、protocol failure では、必要に応じて `session/cancel`、stdin close、grace period、SIGTERM 相当、force termination の順で process tree を回収します。shutdown は冪等で、`termination.json` に stop reason、各段階の結果、残留 process 数、cleanup error を redaction 後に保存します。残留や cleanup error が不明な場合は成功扱いにしません。
+正常終了、cancel、timeout、protocol failure では、必要に応じて `session/cancel`、stdin close、grace period、SIGTERM 相当、force termination の順で process tree を回収します。turn は既定5分で timeout し、shutdown は冪等です。`termination.json` に stop reason、各段階の結果、残留 process 数、cleanup error を redaction 後に保存します。残留や cleanup error が不明な場合は成功扱いにしません。

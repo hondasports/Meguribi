@@ -43,6 +43,8 @@ GitHub Issue
               +-- requirements.json
               +-- plan.json
               +-- devin-prompt.md
+              +-- prompt.json          # prompt version / hash
+              +-- git-boundary.json    # Git/worktree safety result
               +-- implementation-result.json
               +-- verification.json
               +-- diff.patch
@@ -280,6 +282,8 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
 
 `changedFiles` は `git status` を正本にします。
 
+実装 prompt の `FixContext` は、前回試行と fix instruction の出典付き内容をどちらも untrusted block として扱います。`git-boundary.json` の `warnings` には、Devin の `reportedFiles` と Git diff の不一致など、公開を止めない参考情報を保存します。
+
 ## 10. `verification.json`
 
 ```json
@@ -464,6 +468,9 @@ RunStore 導入前も含め、Devin ACP session の成果物は次の配置を�
 ├── events.jsonl       # 正規化 AgentEvent（同一 sequence で対応付け）
 ├── stderr.log         # 診断用 stderr（redaction 後）
 ├── session.json       # sessionId / protocolVersion / stopReason など
+├── devin-prompt.md    # redaction 後の送信 prompt
+├── prompt.json        # prompt version / hash
+├── git-boundary.json  # Git/worktree safety result
 ├── result.json        # 最小の実行結果サマリ
 └── termination.json    # shutdown の段階結果と残留 process
 ```

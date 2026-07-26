@@ -26,7 +26,14 @@ export type AgentEvent =
       at: string;
     }
   | { type: "file.changed"; sessionId: string; path: string; at: string }
-  | { type: "approval.required"; sessionId: string; requestId: string; summary: string; at: string }
+  | {
+      type: "approval.required";
+      sessionId: string;
+      requestId: string;
+      summary: string;
+      decision?: { outcome: "approve" | "deny" | "confirm"; reason: string };
+      at: string;
+    }
   | { type: "turn.completed"; sessionId: string; stopReason?: string; at: string }
   | { type: "session.failed"; sessionId: string; error: AgentError; at: string }
   | { type: "unknown"; sessionId: string; rawType: string; at: string };

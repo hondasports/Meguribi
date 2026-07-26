@@ -16,6 +16,7 @@ import { redactDiagnosticText } from "./redact.js";
 export interface NormalizePermissionOptions {
   cwd: string;
   protectedPaths: readonly string[];
+  rawArtifactRef?: string;
 }
 
 function within(root: string, target: string): boolean {
@@ -78,6 +79,7 @@ export function normalizeAcpPermissionRequest(
     protectedPath: relativePaths.some((candidate) => protectedMatch(candidate, options.protectedPaths)),
     destructive: /delete|remove|destroy|reset|drop|force/i.test(summary),
     network: operation === "external_network",
+    rawArtifactRef: options.rawArtifactRef ?? `raw-events.jsonl#${params.toolCall.toolCallId}`,
   };
 }
 
@@ -117,21 +119,37 @@ export function createPermissionMediator(
   const closedSessions = new Set<string>();
   const confirmWithTimeout = async (request: PermissionRequest): Promise<boolean> => {
     if (!confirm) return false;
-    return Promise.race([
-      Promise.resolve(confirm(request)),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), confirmationTimeoutMs)),
-    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve(confirm(request)),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), confirmationTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
   return {
     async decide(request) {
-      const key = `${request.sessionId}:${request.requestId}`;
+      const key = JSON.stringify([request.sessionId, request.requestId]);
+      if (closedSessions.has(request.sessionId)) {
+        const decision = { outcome: "deny" as const, reason: "session has ended" };
+        cache.set(key, { requestId: request.requestId, sessionId: request.sessionId, decision });
+        return decision;
+      }
       const previous = cache.get(key);
       if (previous) return previous.decision;
-      let decision = closedSessions.has(request.sessionId)
-        ? { outcome: "deny" as const, reason: "session has ended" }
-        : decidePermission(request, context);
+      let decision = decidePermission(request, context);
       if (decision.outcome === "confirm") {
-        decision = await confirmWithTimeout(request)
+        let confirmed = false;
+        try {
+          confirmed = await confirmWithTimeout(request);
+        } catch {
+          confirmed = false;
+        }
+        decision = confirmed
           ? { outcome: "approve", reason: "human confirmation accepted", optionId: "allow-once" }
           : { outcome: "deny", reason: "human confirmation was not received" };
       }

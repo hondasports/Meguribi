@@ -27,6 +27,7 @@ export interface ProcessExit {
   signal: NodeJS.Signals | null;
   startedAt: string;
   finishedAt: string;
+  forceKillUsed?: boolean;
 }
 
 export interface TerminationOptions {
@@ -269,7 +270,7 @@ function runTaskkill(pid: number, force: boolean): Promise<number | null> {
   });
 }
 
-async function terminateWindows(pid: number, graceMs: number): Promise<void> {
+async function terminateWindows(pid: number, graceMs: number): Promise<boolean> {
   const executeTaskkill = async (force: boolean): Promise<number | null> => {
     try {
       return await runTaskkill(pid, force);
@@ -283,12 +284,12 @@ async function terminateWindows(pid: number, graceMs: number): Promise<void> {
 
   const gentleCode = await executeTaskkill(false);
   if (await waitForProcessDeath(pid, graceMs)) {
-    return;
+    return false;
   }
 
   const forceCode = await executeTaskkill(true);
   if (await waitForProcessDeath(pid, graceMs)) {
-    return;
+    return true;
   }
 
   if (isProcessAlive(pid)) {
@@ -298,17 +299,18 @@ async function terminateWindows(pid: number, graceMs: number): Promise<void> {
       false,
     );
   }
+  return true;
 }
 
-async function terminatePosix(pid: number, graceMs: number): Promise<void> {
+async function terminatePosix(pid: number, graceMs: number): Promise<boolean> {
   sendGroupSignal(pid, "SIGTERM");
   if (await waitForProcessDeath(-pid, graceMs)) {
-    return;
+    return false;
   }
 
   sendGroupSignal(pid, "SIGKILL");
   if (await waitForProcessDeath(-pid, graceMs)) {
-    return;
+    return true;
   }
 
   if (isProcessAlive(-pid)) {
@@ -318,6 +320,7 @@ async function terminatePosix(pid: number, graceMs: number): Promise<void> {
       false,
     );
   }
+  return true;
 }
 
 function buildEnvironment(options: ProcessRunnerOptions): NodeJS.ProcessEnv {
@@ -454,12 +457,12 @@ export class ProcessRunner {
       }
 
       try {
-        if (process.platform === "win32") {
-          await terminateWindows(pid, graceMs);
-        } else {
-          await terminatePosix(pid, graceMs);
-        }
-        return await waitForClose();
+        const forceKillUsed = process.platform === "win32"
+          ? await terminateWindows(pid, graceMs)
+          : await terminatePosix(pid, graceMs);
+        const processExit = { ...(await waitForClose()), forceKillUsed };
+        exit = processExit;
+        return processExit;
       } catch (terminationError) {
         if (settled || pid === undefined) {
           throw terminationError;

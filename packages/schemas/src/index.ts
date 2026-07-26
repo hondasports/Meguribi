@@ -39,6 +39,7 @@ export {
 } from "./devin-safety.js";
 export type {
   AgentTerminationResult,
+  FixContext,
   ImplementationContext,
   PermissionRequest,
 } from "./devin-safety.js";

@@ -15,8 +15,21 @@ describe("permission mediator", () => {
     expect(await mediator.decide(request)).toMatchObject({ outcome: "approve" });
     expect(await mediator.decide(request)).toMatchObject({ outcome: "approve" });
     mediator.endSession("s-1");
+    expect(await mediator.decide(request)).toMatchObject({ outcome: "deny" });
     expect(await mediator.decide({ ...request, requestId: "r-2" })).toMatchObject({ outcome: "deny" });
     expect(mediator.records()).toHaveLength(2);
+  });
+
+  it("fails closed when human confirmation rejects", async () => {
+    const mediator = createPermissionMediator(
+      { mode: "interactive", allowedCommands: [] },
+      async () => { throw new Error("confirmation unavailable"); },
+    );
+    const decision = await mediator.decide({
+      requestId: "r-1", sessionId: "s-1", operation: "unknown", tool: "unknown", summary: "unknown",
+      targetWithinWorktree: true, protectedPath: false, destructive: false, network: false,
+    });
+    expect(decision.outcome).toBe("deny");
   });
 
   it("normalizes an ACP request without leaking raw input and maps deny to cancellation", () => {
@@ -32,7 +45,11 @@ describe("permission mediator", () => {
       },
       options: [{ optionId: "allow", name: "allow once", kind: "allow_once" }],
     }, { cwd: "C:/worktrees/issue-1", protectedPaths: [".env*"] });
-    expect(request).toMatchObject({ operation: "file_write", targetWithinWorktree: false });
+    expect(request).toMatchObject({
+      operation: "file_write",
+      targetWithinWorktree: false,
+      rawArtifactRef: "raw-events.jsonl#r-1",
+    });
     expect(request.summary).not.toContain("secretvalue");
     expect(toAcpPermissionResponse({ outcome: "deny", reason: "blocked" }, [])).toEqual({ outcome: { outcome: "cancelled" } });
   });

@@ -9,6 +9,7 @@ export type DevinAcpTransportErrorCode =
   | "spawn_failure"
   | "permission_denied"
   | "startup_timeout"
+  | "turn_timeout"
   | "initialize_failure"
   | "capability_mismatch"
   | "session_creation_failure"
@@ -18,6 +19,7 @@ export type DevinAcpTransportErrorCode =
   | "connection_closed"
   | "process_crashed"
   | "cancelled"
+  | "policy_blocked"
   | "not_runnable"
   | "unknown";
 
@@ -37,6 +39,7 @@ export class DevinAcpTransportError extends Error {
       spawn_failure: "executable_not_found",
       permission_denied: "permission_denied",
       startup_timeout: "timeout",
+      turn_timeout: "timeout",
       initialize_failure: "protocol_initialization_failure",
       capability_mismatch: "protocol_initialization_failure",
       session_creation_failure: "protocol_initialization_failure",
@@ -46,6 +49,7 @@ export class DevinAcpTransportError extends Error {
       connection_closed: "process_crashed",
       process_crashed: "process_crashed",
       cancelled: "cancelled",
+      policy_blocked: "policy_blocked",
       not_runnable: "policy_blocked",
       unknown: "unknown",
     };

@@ -89,7 +89,15 @@ export function buildDevinPrompt(context: ImplementationContext): BuiltDevinProm
     section("ACCEPTANCE CRITERIA", context.acceptanceCriteria),
     section("UNTRUSTED ISSUE CONTENT", untrustedBlock(context.issue)),
     ...context.comments.map((comment) => section("UNTRUSTED COMMENT", untrustedBlock(comment))),
-    ...(context.fixInstruction ? [section("UNTRUSTED FIX INSTRUCTION", untrustedBlock(context.fixInstruction))] : []),
+    ...(context.fixContext?.previousAttempt
+      ? [section("UNTRUSTED PREVIOUS ATTEMPT", untrustedBlock(context.fixContext.previousAttempt))]
+      : []),
+    ...(context.fixContext
+      ? [section("UNTRUSTED FIX INSTRUCTION", untrustedBlock(context.fixContext.fixInstruction))]
+      : []),
+    ...(!context.fixContext && context.fixInstruction
+      ? [section("UNTRUSTED FIX INSTRUCTION", untrustedBlock(context.fixInstruction))]
+      : []),
     section("ALLOWED SCOPE", [
       `worktree: ${path.resolve(context.worktreePath)}`,
       `allowed paths relative to worktree: ${allowedPaths.join(", ") || "."}`,

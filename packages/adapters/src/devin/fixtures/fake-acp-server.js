@@ -71,6 +71,17 @@ if (mode === "startup-hang") {
 
 async function handlePrompt(id, params) {
   const sessionId = params.sessionId ?? "unknown";
+  if (mode === "prompt-hang") {
+    await new Promise(() => undefined);
+  }
+  if (mode === "write-protected") {
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(path.join(process.cwd(), ".env.local"), "TOKEN=fixture\n", "utf8");
+  }
+  if (mode === "write-in-scope") {
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(path.join(process.cwd(), "README.md"), "# changed by fixture\n", "utf8");
+  }
   if (mode === "crash-mid-prompt") {
     writeStderr("diagnostic before crash\n");
     respond(id, { stopReason: "end_turn" });
@@ -99,6 +110,16 @@ async function handlePrompt(id, params) {
 
   if (mode === "stderr-noise") {
     writeStderr("FAKE_ACP stderr diagnostic line\n");
+  }
+
+  if (mode === "mcp-stderr") {
+    writeStderr("starting MCP stdio server command=fixture\n");
+    await wait(20);
+  }
+
+  if (mode === "mcp-http-stderr") {
+    writeStderr("connecting to MCP http endpoint https://fixture.invalid/sse\n");
+    await wait(20);
   }
 
   if (mode === "permission") {

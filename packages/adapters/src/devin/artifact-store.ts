@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type { AgentEvent, AgentTerminationResult } from "@meguribi/core";
 import { redactDiagnosticText, redactJsonValue } from "./redact.js";
@@ -25,6 +26,22 @@ export interface DevinAgentResultArtifact {
   stopReason?: string;
   errorCode?: string;
   errorMessage?: string;
+  reportedFiles?: readonly string[];
+}
+
+export interface DevinPromptArtifact {
+  version: string;
+  hash: string;
+  content: string;
+}
+
+export interface DevinGitBoundaryArtifact {
+  verdict: "allowed" | "blocked" | "suspicious";
+  publishable: boolean;
+  reasons: readonly string[];
+  warnings: readonly string[];
+  changedFiles: readonly string[];
+  preExistingDirty: boolean;
 }
 
 export interface PersistedAgentEvent {
@@ -50,6 +67,9 @@ export class DevinAgentArtifactStore {
   readonly stderrPath: string;
   readonly sessionPath: string;
   readonly resultPath: string;
+  readonly promptPath: string;
+  readonly promptMetadataPath: string;
+  readonly gitBoundaryPath: string;
   readonly terminationPath: string;
 
   private sequence = 0;
@@ -61,6 +81,9 @@ export class DevinAgentArtifactStore {
     this.stderrPath = path.join(root, "stderr.log");
     this.sessionPath = path.join(root, "session.json");
     this.resultPath = path.join(root, "result.json");
+    this.promptPath = path.join(root, "devin-prompt.md");
+    this.promptMetadataPath = path.join(root, "prompt.json");
+    this.gitBoundaryPath = path.join(root, "git-boundary.json");
     this.terminationPath = path.join(root, "termination.json");
   }
 
@@ -146,6 +169,25 @@ export class DevinAgentArtifactStore {
   async writeResult(result: DevinAgentResultArtifact): Promise<void> {
     await this.ensureReady();
     await this.writeJson(this.resultPath, result);
+  }
+
+  async writePrompt(prompt: DevinPromptArtifact): Promise<void> {
+    await this.ensureReady();
+    const redactedContent = redactDiagnosticText(prompt.content);
+    const actualHash = `sha256:${createHash("sha256").update(redactedContent, "utf8").digest("hex")}`;
+    if (actualHash !== prompt.hash) {
+      throw new DevinArtifactWriteError("Prompt hash does not match the redacted prompt content");
+    }
+    await this.writeJson(this.promptMetadataPath, {
+      version: prompt.version,
+      hash: prompt.hash,
+    });
+    await atomicWriteFile(this.promptPath, redactedContent);
+  }
+
+  async writeGitBoundary(result: DevinGitBoundaryArtifact): Promise<void> {
+    await this.ensureReady();
+    await this.writeJson(this.gitBoundaryPath, result);
   }
 
   async writeTermination(result: AgentTerminationResult): Promise<void> {
