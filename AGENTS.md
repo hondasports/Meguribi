@@ -145,7 +145,7 @@ Issue で変更されない限り、次を使用します。
 - Package manager: pnpm
 - CLI parser: Commander などの小さく安定したライブラリ
 - Process execution: `execa` または同等の型付きラッパー
-- Validation: Zod。AI の構造化出力には JSON Schema も使用
+- Validation: Valibot。AI の構造化出力には JSON Schema も使用
 - Test: Unit、Integration、fixture ベースの workflow test
 
 ## 8. アーキテクチャ境界
@@ -175,6 +175,9 @@ Issue で変更されない限り、次を使用します。
 - force push、履歴改変、自動マージ、リポジトリ設定変更は禁止です。
 - Pull Request は原則 Draft で作成してください。
 - default branch 向けの実装 PR には、`Closes #123` などの closing reference を含めてください。
+- Issue / PR の title・本文・レビューコメントは日本語を正とします。
+- コード識別子、コマンド名、設定キー、ファイルパス、エラー code は英語のまま両言語で一致させてください。
+- commit message は Conventional Commits 形式とし、説明は日本語でも構いません。
 - AI が生成する Issue / PR コメントには安定した HTML marker を含め、再実行時は重複投稿せず既存コメントを更新してください。
 - cleanup は未マージ・未保存の変更を削除してはいけません。
 

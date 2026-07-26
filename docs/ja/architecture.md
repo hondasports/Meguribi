@@ -273,8 +273,8 @@ CLI -> Workflows -> Ports <- Adapters
 - pnpm workspace
 - Commander: CLI
 - execa: 子プロセス
-- Zod: 入力・設定・成果物検証
-- zod-to-json-schema: Codex 構造化出力
+- Valibot: 入力・設定・成果物検証
+- JSON Schema: Codex 構造化出力（必要に応じて Valibot から生成）
 - YAML parser: `.meguribi.yml`
 - Vitest: unit / integration test
 - ESLint または Biome: lint

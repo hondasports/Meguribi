@@ -50,7 +50,7 @@ CLI entry point は薄く保ち、次だけを担当させます。
 - ESM / CJS は最初に一つへ固定し、混在させない。
 - Commander 等の CLI parser を利用する。
 - process 実行は共通 `ProcessRunner` を経由する。
-- config は Zod schema で検証し、既定値と project 設定の merge を純粋関数にする。
+- config は Valibot schema で検証し、既定値と project 設定の merge を純粋関数にする。
 - XDG Base Directory を優先し、OS 固有 path を一箇所へ閉じ込める。
 - `--json` 出力を追加する場合、人間向け stdout と混ぜない。
 

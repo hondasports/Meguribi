@@ -25,7 +25,7 @@ description: Meguribi の実装でテスト戦略、fixture、fake executable、
 - repository URL 正規化
 - branch slug
 - config merge
-- Zod schema
+- Valibot schema
 - state transition
 - label / approval / risk policy
 - prompt builder
