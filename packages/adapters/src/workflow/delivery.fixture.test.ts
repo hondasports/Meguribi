@@ -110,6 +110,21 @@ describe("delivery workflow fixtures", () => {
     expect(bundle.git.calls.counts.commit).toBeUndefined();
   });
 
+  it("cancels during verification and does not publish", async () => {
+    const controller = new AbortController();
+    const bundle = createFakeDeliveryDeps({
+      verifier: { hangUntilAbort: true },
+    });
+    const pending = runDelivery(baseInput({ abortSignal: controller.signal }), bundle.deps);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    controller.abort();
+    const result = await pending;
+    expect(result.status).toBe("cancelled");
+    expect(result.reasons.some((reason) => /cancel/i.test(reason))).toBe(true);
+    expect(bundle.git.calls.counts.commit).toBeUndefined();
+    expect(bundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+  });
+
   it("retries after verifier failure then publishes", async () => {
     const bundle = createFakeDeliveryDeps({
       verifier: { failFirstN: 1 },

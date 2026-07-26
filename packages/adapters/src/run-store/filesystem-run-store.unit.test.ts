@@ -112,4 +112,30 @@ describe("FileSystemRunStore", () => {
       }),
     ).resolves.toBeUndefined();
   });
+
+  it("rejects repository path traversal outside rootDir", async () => {
+    const root = await tempRoot();
+    const store = new FileSystemRunStore({ rootDir: root });
+    await expect(
+      store.loadLatest("../evil/repo", 1),
+    ).rejects.toThrow(/Invalid repository|owner segment|escapes/i);
+    await expect(
+      store.create({
+        repository: "owner/../evil",
+        issueNumber: 1,
+        command: "run",
+        maxFixAttempts: 1,
+        identity: {
+          repository: "owner/../evil",
+          issueNumber: 1,
+          branch: "b",
+          worktreePath: "/tmp/wt",
+          baseRef: "origin/main",
+          baseSha: "a",
+          headSha: "b",
+          remoteIdentity: "remote",
+        },
+      }),
+    ).rejects.toThrow(/Invalid repository|repo segment|escapes/i);
+  });
 });

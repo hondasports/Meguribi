@@ -1,33 +1,50 @@
-import { spawn } from "node:child_process";
+import path from "node:path";
 import type { VerificationResult, Verifier } from "@meguribi/core";
+import { ProcessError, ProcessRunner } from "@meguribi/process";
+
+const SHELL_METACHARACTERS = /[&|<>^%]/;
 
 /**
- * Runs configured verify commands as shell-free argv via `cmd.exe`/`sh -c` is avoided:
- * each command string is executed with the platform shell only when explicitly one string.
- * For MVP wiring we split on spaces for simple `pnpm <script>` commands.
+ * Runs configured verify commands with explicit argv and `shell: false`.
+ * Command strings are whitespace-split for simple `pnpm <script>` forms only.
  */
-export function createCommandVerifier(): Verifier {
+export function createCommandVerifier(options?: {
+  runner?: ProcessRunner;
+}): Verifier {
+  const runner = options?.runner ?? new ProcessRunner();
   return {
     async verify(input): Promise<VerificationResult> {
       const commands: VerificationResult["commands"] = [];
       let success = true;
       for (const command of input.commands) {
+        if (input.abortSignal?.aborted) {
+          throw cancelledError();
+        }
         const startedAt = new Date().toISOString();
-        const parts = command.run.trim().split(/\s+/);
-        const executable = parts[0] ?? command.run;
-        const args = parts.slice(1);
-        const exitCode = await new Promise<number | null>((resolve) => {
-          // On Windows, package managers are often `.cmd` shims; allow shell only there.
-          const child = spawn(executable, args, {
+        const { executable, args } = parseVerifyCommand(command.run);
+        const resolvedExecutable = resolvePlatformExecutable(executable);
+        let exitCode: number | null;
+        try {
+          const child = runner.run(resolvedExecutable, args, {
             cwd: input.worktreePath,
             env: process.env,
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-            shell: process.platform === "win32",
+            abortSignal: input.abortSignal,
           });
-          child.on("error", () => resolve(127));
-          child.on("exit", (code) => resolve(code));
-        });
+          const [, , exit] = await Promise.all([
+            drain(child.stdout),
+            drain(child.stderr),
+            child.waitForExit(),
+          ]);
+          exitCode = exit.code;
+        } catch (error) {
+          if (
+            input.abortSignal?.aborted ||
+            (error instanceof ProcessError && error.code === "cancelled")
+          ) {
+            throw cancelledError(error);
+          }
+          throw error;
+        }
         const finishedAt = new Date().toISOString();
         if (exitCode !== 0) {
           success = false;
@@ -47,4 +64,46 @@ export function createCommandVerifier(): Verifier {
       };
     },
   };
+}
+
+export function parseVerifyCommand(run: string): { executable: string; args: string[] } {
+  const trimmed = run.trim();
+  if (!trimmed) {
+    throw new Error("Verify command must not be empty");
+  }
+  if (SHELL_METACHARACTERS.test(trimmed)) {
+    throw new Error(`Verify command contains shell metacharacters: ${run}`);
+  }
+  const parts = trimmed.split(/\s+/);
+  const executable = parts[0];
+  if (!executable) {
+    throw new Error("Verify command must not be empty");
+  }
+  return { executable, args: parts.slice(1) };
+}
+
+function resolvePlatformExecutable(executable: string): string {
+  if (
+    process.platform === "win32" &&
+    !/[\\/]/.test(executable) &&
+    path.extname(executable) === ""
+  ) {
+    return `${executable}.cmd`;
+  }
+  return executable;
+}
+
+async function drain(source: AsyncIterable<Uint8Array>): Promise<void> {
+  for await (const _chunk of source) {
+    // Discard output so full pipes cannot deadlock the child.
+  }
+}
+
+function cancelledError(cause?: unknown): Error {
+  return Object.assign(new Error("verification cancelled"), {
+    code: "cancelled" as const,
+    message: "verification cancelled",
+    isRetryable: false,
+    cause,
+  });
 }

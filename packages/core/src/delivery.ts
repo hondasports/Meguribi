@@ -166,6 +166,7 @@ export interface Verifier {
   verify(input: {
     worktreePath: string;
     commands: readonly { name: string; run: string }[];
+    abortSignal?: AbortSignal;
   }): Promise<VerificationResult>;
 }
 

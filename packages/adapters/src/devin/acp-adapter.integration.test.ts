@@ -152,6 +152,54 @@ describe("createDevinAcpAdapter integration", () => {
     expect(result.publishable).toBe(true);
   });
 
+  it("allows fix to rewrite the same file after implement", async () => {
+    const { cwd, artifactRoot } = await tempGit();
+    const adapter = createDevinAcpAdapter({
+      executable: node(),
+      executableArgs: [fakeAcpServer()],
+      acpArgs: [],
+      diagnosis: runnableDiagnosis(),
+      inheritedMcpPolicy: "allow",
+      mode: "non-interactive",
+      startupTimeoutMs: 5_000,
+      postTurnLivenessMs: 50,
+      env: { ...process.env, FAKE_ACP_MODE: "write-in-scope" },
+      runner: new ProcessRunner(),
+    });
+    const boundary = {
+      expectedRemoteIdentity: "",
+      expectedBaseSha: "",
+      expectedBranch: "main",
+      outsidePaths: [] as string[],
+      protectedPaths: [".env*"],
+      maxChangedFiles: 10,
+      maxDiffLines: 100,
+    };
+
+    const implemented = await adapter.implement({
+      context: contextFor(cwd),
+      artifactRoot,
+      gitBoundary: boundary,
+    });
+    expect(implemented.status).toBe("completed");
+    expect(implemented.changedFiles).toContain("README.md");
+
+    const fixRoot = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-acp-adapter-fix-"));
+    tempDirs.push(fixRoot);
+    const fixed = await adapter.fix({
+      context: contextFor(cwd, {
+        fixInstruction: { source: "meguribi-fix", content: "rewrite README again" },
+      }),
+      artifactRoot: fixRoot,
+      gitBoundary: boundary,
+    });
+
+    expect(fixed.status).toBe("completed");
+    expect(fixed.publishable).toBe(true);
+    expect(fixed.changedFiles).toContain("README.md");
+    expect(fixed.error?.message ?? "").not.toMatch(/pre-existing dirty/i);
+  }, 20_000);
+
   it("blocks when preflight diagnosis is not runnable", async () => {
     const { cwd, artifactRoot } = await tempGit();
     const adapter = createDevinAcpAdapter({
