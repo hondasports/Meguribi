@@ -1,7 +1,12 @@
 import type { PlanningInput, ReviewInput } from "./types.js";
 
 function untrustedContent(value: unknown): string {
-  return ["<untrusted-content>", JSON.stringify(value), "</untrusted-content>"].join("\n");
+  const serialized = JSON.stringify(value) ?? "null";
+  const escaped = serialized
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("&", "\\u0026");
+  return ["<untrusted-content>", escaped, "</untrusted-content>"].join("\n");
 }
 
 export function buildPlanningPrompt(input: PlanningInput): string {

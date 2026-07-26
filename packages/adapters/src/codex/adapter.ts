@@ -6,9 +6,16 @@ import type {
   ReviewArtifact,
   ReviewContent,
 } from "@meguribi/core";
-import { PlanContentSchema, ReviewContentSchema } from "@meguribi/schemas";
+import {
+  PlanArtifactSchema,
+  PlanContentSchema,
+  ReviewArtifactSchema,
+  ReviewContentSchema,
+} from "@meguribi/schemas";
+import Ajv, { type ValidateFunction } from "ajv";
 import { randomUUID } from "node:crypto";
 import * as v from "valibot";
+import { digestSource } from "./digest.js";
 import { buildPlanningPrompt, buildRepairPrompt, buildReviewPrompt } from "./prompt.js";
 import { PlanContentJsonSchema, ReviewContentJsonSchema } from "./output-schema.js";
 import { redactErrorMessage, toRedactedEventRecord } from "./redact.js";
@@ -22,6 +29,10 @@ import type {
 } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const ABORT_GRACE_MS = 5_000;
+const ajv = new Ajv({ allErrors: true, strict: true });
+const validatePlanContentJson = ajv.compile(PlanContentJsonSchema);
+const validateReviewContentJson = ajv.compile(ReviewContentJsonSchema);
 
 export class CodexAdapterError extends Error {
   constructor(
@@ -71,15 +82,28 @@ function validationSummary(issues: readonly v.BaseIssue<unknown>[]): string {
     .join(", ");
 }
 
+function jsonSchemaSummary(validator: ValidateFunction): string {
+  return (validator.errors ?? [])
+    .map((error) => `${error.instancePath || "<root>"} (${error.keyword})`)
+    .join(", ");
+}
+
 function parseContent<T>(
   response: string,
   schema: v.GenericSchema<unknown, T>,
+  jsonSchemaValidator: ValidateFunction,
 ): { success: true; output: T } | { success: false; message: string } {
   let value: unknown;
   try {
     value = JSON.parse(response);
   } catch {
     return { success: false, message: "response is not valid JSON" };
+  }
+  if (!jsonSchemaValidator(value)) {
+    return {
+      success: false,
+      message: `response JSON Schema mismatch: ${jsonSchemaSummary(jsonSchemaValidator)}`,
+    };
   }
   const result = v.safeParse(schema, value);
   if (!result.success) {
@@ -115,7 +139,7 @@ function eventError(event: CodexThreadEvent): string | undefined {
   if (event.type !== "turn.failed" && event.type !== "error") {
     return undefined;
   }
-  const error = event.error;
+  const error = event.type === "error" ? event.message : event.error;
   if (typeof error === "string") {
     return error;
   }
@@ -137,10 +161,12 @@ async function consumeTurn(
   const eventLog: CodexEventRecord[] = [];
   let threadId = thread.id ?? "";
   let finalResponse = "";
+  let turnCompleted = false;
   for await (const event of streamed.events) {
     eventLog.push(toRedactedEventRecord(event, now().toISOString()));
     threadId = threadIdFromEvent(event) ?? threadId;
     finalResponse = textFromEvent(event) ?? finalResponse;
+    turnCompleted = turnCompleted || event.type === "turn.completed";
     const message = eventError(event);
     if (message !== undefined) {
       throw new CodexAdapterError("process_crashed", redactErrorMessage(message), false);
@@ -153,6 +179,13 @@ async function consumeTurn(
     throw new CodexAdapterError(
       "malformed_message",
       "Codex returned an empty structured response",
+      false,
+    );
+  }
+  if (!turnCompleted) {
+    throw new CodexAdapterError(
+      "process_crashed",
+      "Codex stream ended before turn completion",
       false,
     );
   }
@@ -171,9 +204,17 @@ function makeThreadOptions(repositoryPath: string) {
 
 async function verifyWorkspace<T>(
   guard: PlanningInput["workspaceGuard"] | ReviewInput["workspaceGuard"],
+  expectedDigest: string | undefined,
   operation: () => Promise<T>,
 ): Promise<T> {
   const before = await guard.snapshot();
+  if (expectedDigest !== undefined && expectedDigest !== digestSource(before)) {
+    throw new CodexAdapterError(
+      "malformed_message",
+      "Source digest mismatch for repository",
+      false,
+    );
+  }
   let result: T | undefined;
   let operationError: unknown;
   try {
@@ -207,6 +248,50 @@ async function verifyWorkspace<T>(
   return result;
 }
 
+async function waitForTask(task: Promise<unknown>): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const grace = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), ABORT_GRACE_MS);
+  });
+  const settled = task.then(
+    () => true,
+    () => true,
+  );
+  try {
+    return await Promise.race([settled, grace]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function assertSourceDigest(
+  name: string,
+  value: unknown,
+  sourceDigests: Record<string, string>,
+): void {
+  const expected = sourceDigests[name];
+  if (expected === undefined) {
+    throw new CodexAdapterError("malformed_message", `Missing source digest for ${name}`, false);
+  }
+  if (expected !== digestSource(value)) {
+    throw new CodexAdapterError("malformed_message", `Source digest mismatch for ${name}`, false);
+  }
+}
+
+function parseArtifact<T>(schema: v.GenericSchema<unknown, T>, value: unknown): T {
+  const result = v.safeParse(schema, value);
+  if (!result.success) {
+    throw new CodexAdapterError(
+      "malformed_message",
+      `Generated artifact schema mismatch: ${validationSummary(result.issues)}`,
+      false,
+    );
+  }
+  return result.output;
+}
+
 export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
   const defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRepairAttempts = options.maxRepairAttempts ?? 1;
@@ -233,8 +318,7 @@ export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
     let removeAbortListener: (() => void) | undefined;
     let timedOut = false;
     let cancellationTriggered = false;
-    const task = consumeTurn(thread, prompt, outputSchema, controller.signal, now);
-    void task.catch(() => undefined);
+    let task: Promise<ExecutionResult>;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         timedOut = true;
@@ -255,21 +339,32 @@ export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
       };
       removeAbortListener = () => abortSignal.removeEventListener("abort", onAbort);
       abortSignal.addEventListener("abort", onAbort, { once: true });
+      if (abortSignal.aborted) {
+        onAbort();
+      }
     });
+    task = cancellationTriggered
+      ? Promise.reject(new CodexAdapterError("cancelled", "Codex execution was cancelled", false))
+      : consumeTurn(thread, prompt, outputSchema, controller.signal, now);
+    void task.catch(() => undefined);
     try {
       return await Promise.race([task, timeout, cancellation]);
     } catch (error) {
-      if (timedOut) {
-        throw new CodexAdapterError(
-          "timeout",
-          `Codex execution timed out after ${timeoutMs}ms`,
-          true,
-        );
+      const classified = timedOut
+        ? new CodexAdapterError("timeout", `Codex execution timed out after ${timeoutMs}ms`, true)
+        : cancellationTriggered || abortSignal?.aborted
+          ? new CodexAdapterError("cancelled", "Codex execution was cancelled", false)
+          : classifyError(error);
+      if (timedOut || cancellationTriggered || abortSignal?.aborted) {
+        if (!(await waitForTask(task))) {
+          throw new CodexAdapterError(
+            "process_crashed",
+            "Codex turn did not terminate after cancellation; inspect the process before continuing",
+            false,
+          );
+        }
       }
-      if (cancellationTriggered || abortSignal?.aborted) {
-        throw new CodexAdapterError("cancelled", "Codex execution was cancelled", false);
-      }
-      throw classifyError(error);
+      throw classified;
     } finally {
       if (timer !== undefined) {
         clearTimeout(timer);
@@ -308,7 +403,11 @@ export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
       );
       eventLog = [...eventLog, ...execution.eventLog];
       threadId = execution.threadId;
-      const parsed = parseContent(execution.finalResponse, input.schema);
+      const parsed = parseContent(
+        execution.finalResponse,
+        input.schema,
+        input.role === "planner" ? validatePlanContentJson : validateReviewContentJson,
+      );
       if (parsed.success) {
         return {
           content: parsed.output,
@@ -327,46 +426,59 @@ export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
   }
 
   async function createPlan(input: PlanningInput): Promise<PlanArtifact> {
-    const execution = await verifyWorkspace(input.workspaceGuard, async () => {
-      const result = await runStructured({
-        role: "planner",
-        repositoryPath: input.repositoryPath,
-        threadId: input.threadId,
-        prompt: buildPlanningPrompt(input),
-        schema: PlanContentSchema,
-        outputSchema: PlanContentJsonSchema,
-        timeoutMs: input.timeoutMs,
-        abortSignal: input.abortSignal,
-      });
-      return {
-        ...result.content,
-        schemaVersion: 1 as const,
-        artifactType: "implementation-plan" as const,
-        metadata: makeMetadata("planner", result, input.sourceDigests),
-      } as PlanArtifact;
-    });
+    assertSourceDigest("issue", input.issue, input.sourceDigests);
+    const execution = await verifyWorkspace(
+      input.workspaceGuard,
+      input.sourceDigests.repository,
+      async () => {
+        const result = await runStructured({
+          role: "planner",
+          repositoryPath: input.repositoryPath,
+          threadId: input.threadId,
+          prompt: buildPlanningPrompt(input),
+          schema: PlanContentSchema,
+          outputSchema: PlanContentJsonSchema,
+          timeoutMs: input.timeoutMs,
+          abortSignal: input.abortSignal,
+        });
+        return parseArtifact(PlanArtifactSchema, {
+          ...result.content,
+          schemaVersion: 1 as const,
+          artifactType: "implementation-plan" as const,
+          metadata: makeMetadata("planner", result, input.sourceDigests),
+        });
+      },
+    );
     return execution;
   }
 
   async function review(input: ReviewInput): Promise<ReviewArtifact> {
-    const execution = await verifyWorkspace(input.workspaceGuard, async () => {
-      const result = await runStructured({
-        role: "reviewer",
-        repositoryPath: input.repositoryPath,
-        threadId: input.threadId,
-        prompt: buildReviewPrompt(input),
-        schema: ReviewContentSchema,
-        outputSchema: ReviewContentJsonSchema,
-        timeoutMs: input.timeoutMs,
-        abortSignal: input.abortSignal,
-      });
-      return {
-        ...result.content,
-        schemaVersion: 1 as const,
-        artifactType: "code-review" as const,
-        metadata: makeMetadata("reviewer", result, input.sourceDigests),
-      } as ReviewArtifact;
-    });
+    assertSourceDigest("issue", input.issue, input.sourceDigests);
+    assertSourceDigest("plan", input.plan, input.sourceDigests);
+    assertSourceDigest("diff", input.diff, input.sourceDigests);
+    assertSourceDigest("verification", input.verification, input.sourceDigests);
+    const execution = await verifyWorkspace(
+      input.workspaceGuard,
+      input.sourceDigests.repository,
+      async () => {
+        const result = await runStructured({
+          role: "reviewer",
+          repositoryPath: input.repositoryPath,
+          threadId: input.threadId,
+          prompt: buildReviewPrompt(input),
+          schema: ReviewContentSchema,
+          outputSchema: ReviewContentJsonSchema,
+          timeoutMs: input.timeoutMs,
+          abortSignal: input.abortSignal,
+        });
+        return parseArtifact(ReviewArtifactSchema, {
+          ...result.content,
+          schemaVersion: 1 as const,
+          artifactType: "code-review" as const,
+          metadata: makeMetadata("reviewer", result, input.sourceDigests),
+        });
+      },
+    );
     return execution;
   }
 

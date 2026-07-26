@@ -318,7 +318,7 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
       "role": "reviewer",
       "threadId": "thread-review-1"
     },
-    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:..." },
+    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:...", "verification": "sha256:..." },
     "eventLog": []
   },
   "status": "changes_required",
@@ -345,6 +345,8 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
   "recommendedAction": "fix"
 }
 ```
+
+planning は Issue の digest、review は Issue、plan、diff、verification の canonical JSON digest を実行前に検証します。不一致の場合は Codex を起動せず停止します。
 
 `status`:
 

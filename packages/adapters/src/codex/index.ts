@@ -1,4 +1,5 @@
 export { CodexAdapterError, createCodexAdapter } from "./adapter.js";
+export { digestSource } from "./digest.js";
 export { buildPlanningPrompt, buildRepairPrompt, buildReviewPrompt } from "./prompt.js";
 export { PlanContentJsonSchema, ReviewContentJsonSchema } from "./output-schema.js";
 export { CodexSdkClient } from "./sdk.js";

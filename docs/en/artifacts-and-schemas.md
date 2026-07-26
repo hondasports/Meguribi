@@ -301,7 +301,7 @@ Meguribi creates this from Devin output plus actual Git and process state.
       "role": "reviewer",
       "threadId": "thread-review-1"
     },
-    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:..." },
+    "sourceDigests": { "issue": "sha256:...", "plan": "sha256:...", "diff": "sha256:...", "verification": "sha256:..." },
     "eventLog": []
   },
   "status": "changes_required",
@@ -328,6 +328,8 @@ Meguribi creates this from Devin output plus actual Git and process state.
   "recommendedAction": "fix"
 }
 ```
+
+Planning verifies the Issue digest before execution. Review verifies canonical JSON digests for the Issue, plan, diff, and verification input; a mismatch stops execution before Codex is started.
 
 Status values:
 

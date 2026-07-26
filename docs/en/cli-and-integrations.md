@@ -304,7 +304,7 @@ Planning and review run with `sandboxMode: read-only`, `approvalPolicy: never`, 
 
 Codex structured output is validated by both a runtime schema and a JSON Schema. Invalid JSON or schema output is retried at most once with a repair prompt containing only the validation summary; a second failure is never treated as success. Timeouts, cancellation, empty responses, stream interruption, and process failures are classified errors.
 
-The thread ID, source digests, duration, and redacted event log are stored as Meguribi-owned artifact metadata. A Codex review approval never authorizes publishing, removing Draft status, or merging.
+The thread ID, source digests, duration, and redacted event log are stored as Meguribi-owned artifact metadata. Planning verifies the Issue digest, while review verifies canonical JSON digests for the Issue, plan, diff, and verification before starting Codex. A Codex review approval never authorizes publishing, removing Draft status, or merging.
 
 ## 8. Devin integration
 

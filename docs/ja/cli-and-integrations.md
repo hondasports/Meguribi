@@ -314,7 +314,7 @@ planning と review は `sandboxMode: read-only`、`approvalPolicy: never`、net
 
 Codex の structured output は runtime schema と JSON Schema の両方で検証します。不正な JSON / schema は最大1回だけ validation error のみを含む repair prompt で再試行し、再度失敗した場合は成功扱いにしません。timeout、cancel、空レスポンス、stream interruption、process failure は分類済みエラーへ変換します。
 
-`thread ID`、source digest、実行時間、redaction 済み event log は Meguribi 所有の artifact metadata として保存します。Codex の review approval は publish、Draft 解除、merge の許可を意味しません。
+`thread ID`、source digest、実行時間、redaction 済み event log は Meguribi 所有の artifact metadata として保存します。planning は Issue の digest、review は Issue、plan、diff、verification の canonical JSON digest を検証し、不一致なら Codex を起動しません。Codex の review approval は publish、Draft 解除、merge の許可を意味しません。
 
 ## 8. Devin 連携
 
