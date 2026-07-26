@@ -12,10 +12,17 @@
  */
 import readline from "node:readline";
 import path from "node:path";
+import fs from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
+const execFileAsync = promisify(execFile);
 const mode = process.env.FAKE_ACP_MODE ?? "success";
 let cancelled = false;
 let nextClientRequestId = 10_000;
+const stateFile = process.env.MEGURIBI_FAKE_DEVIN_STATE_FILE;
+let releasePromptHang;
 /** @type {Map<number | string, { resolve: (v: unknown) => void, reject: (e: Error) => void }>} */
 const pendingClientRequests = new Map();
 
@@ -51,6 +58,40 @@ async function wait(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function markState(value) {
+  if (!stateFile) return;
+  await fs.writeFile(stateFile, `${value}\n`, "utf8");
+}
+
+async function runGit(...args) {
+  await execFileAsync("git", args, { cwd: process.cwd(), windowsHide: true });
+}
+
+async function writeOutsideWorktree() {
+  const target = process.env.MEGURIBI_FAKE_OUTSIDE_PATH ??
+    path.resolve(process.cwd(), "..", "meguribi-fake-outside.txt");
+  await fs.writeFile(target, "fake outside mutation\n", "utf8");
+}
+
+async function createEscapingSymlink() {
+  const target = process.env.MEGURIBI_FAKE_OUTSIDE_PATH ??
+    path.resolve(process.cwd(), "..", "meguribi-fake-symlink-target.txt");
+  const link = path.join(process.cwd(), "escaped-link.txt");
+  await fs.writeFile(target, "fake symlink target\n", "utf8");
+  await fs.rm(link, { force: true });
+  await fs.symlink(target, link);
+}
+
+function spawnGrandchildren() {
+  const child = fileURLToPath(new URL("../../../../process/src/fixtures/spawn-child.js", import.meta.url));
+  return import("node:child_process").then(({ spawn }) => spawn(process.execPath, [child], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: "ignore",
+    windowsHide: true,
+  }));
+}
+
 if (mode === "crash-before-init") {
   process.exit(17);
 }
@@ -71,16 +112,57 @@ if (mode === "startup-hang") {
 
 async function handlePrompt(id, params) {
   const sessionId = params.sessionId ?? "unknown";
+  await markState("prompt-started");
   if (mode === "prompt-hang") {
-    await new Promise(() => undefined);
+    await new Promise((resolve) => {
+      releasePromptHang = resolve;
+    });
+  }
+  if (mode === "permission-timeout") {
+    await requestClient("session/request_permission", {
+      sessionId,
+      toolCall: {
+        toolCallId: "fake-perm-timeout",
+        kind: "edit",
+        status: "pending",
+        title: "Edit README.md",
+        locations: [{ path: path.join(process.cwd(), "README.md") }],
+        content: [],
+      },
+      options: [{ optionId: "allow-once", kind: "allow_once", name: "Allow" }],
+    });
   }
   if (mode === "write-protected") {
-    const fs = await import("node:fs/promises");
     await fs.writeFile(path.join(process.cwd(), ".env.local"), "TOKEN=fixture\n", "utf8");
   }
   if (mode === "write-in-scope") {
-    const fs = await import("node:fs/promises");
     await fs.writeFile(path.join(process.cwd(), "README.md"), "# changed by fixture\n", "utf8");
+  }
+  if (mode === "write-untracked") {
+    await fs.writeFile(path.join(process.cwd(), "untracked.txt"), "created by fixture\n", "utf8");
+  }
+  if (mode === "write-outside") {
+    await writeOutsideWorktree();
+  }
+  if (mode === "symlink-escape") {
+    await createEscapingSymlink();
+  }
+  if (mode === "diff-limit") {
+    await fs.writeFile(
+      path.join(process.cwd(), "large-change.txt"),
+      "line\n".repeat(2_100),
+      "utf8",
+    );
+  }
+  if (mode === "commit-created") {
+    await runGit("add", "README.md");
+    await runGit("commit", "-m", "fake Devin commit");
+  }
+  if (mode === "branch-changed") {
+    await runGit("switch", "-c", "fake-devin-branch");
+  }
+  if (mode === "spawn-grandchildren") {
+    await spawnGrandchildren();
   }
   if (mode === "crash-mid-prompt") {
     writeStderr("diagnostic before crash\n");
@@ -122,7 +204,10 @@ async function handlePrompt(id, params) {
     await wait(20);
   }
 
-  if (mode === "permission") {
+  if (mode === "permission" || mode === "permission-denied") {
+    const permissionPath = mode === "permission-denied"
+      ? path.join(process.cwd(), ".env.local")
+      : path.join(process.cwd(), "README.md");
     await requestClient("session/request_permission", {
       sessionId,
       toolCall: {
@@ -130,7 +215,7 @@ async function handlePrompt(id, params) {
         kind: "edit",
         status: "pending",
         title: "Edit README.md",
-        locations: [{ path: path.join(process.cwd(), "README.md") }],
+        locations: [{ path: permissionPath }],
         content: [],
       },
       options: [{ optionId: "allow-once", kind: "allow_once", name: "Allow" }],
@@ -141,6 +226,10 @@ async function handlePrompt(id, params) {
     mode === "secret-in-message"
       ? "using token=supersecrettoken123 and Bearer abc.def.ghi"
       : "fake ACP connected";
+
+  const reportedPath = mode === "reported-files-mismatch"
+    ? "reported-only.ts"
+    : "README.md";
 
   notify("session/update", {
     sessionId,
@@ -159,7 +248,7 @@ async function handlePrompt(id, params) {
       title: "Edit README.md",
       name: "edit",
       status: "pending",
-      locations: [{ path: path.join(process.cwd(), "README.md") }],
+      locations: [{ path: reportedPath }],
     },
   });
 
@@ -200,7 +289,19 @@ async function handlePrompt(id, params) {
   respond(id, { stopReason: "end_turn" });
 }
 
+if (mode === "ignore-sigterm") {
+  process.on("SIGTERM", () => undefined);
+  process.on("SIGINT", () => undefined);
+  setInterval(() => undefined, 1_000);
+}
+
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+
+rl.on("close", () => {
+  if (mode !== "ignore-sigterm" && mode !== "spawn-grandchildren" && mode !== "prompt-hang") {
+    process.exit(0);
+  }
+});
 
 rl.on("line", (line) => {
   if (!line.trim()) return;
@@ -229,6 +330,7 @@ rl.on("line", (line) => {
 
   if (method === "session/cancel") {
     cancelled = true;
+    releasePromptHang?.();
     return;
   }
 

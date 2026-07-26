@@ -49,6 +49,22 @@ describe("diagnoseDevin integration with fake executable", () => {
     });
   });
 
+  it("supports the public scenario environment variable for preflight", async () => {
+    const result = await diagnoseDevin({
+      executable: node(),
+      executableArgs: [fakeScript()],
+      inheritedMcpPolicy: "allow",
+      cwd: process.cwd(),
+      env: { ...process.env, MEGURIBI_FAKE_DEVIN_SCENARIO: "unsupported-version" },
+      runner: new ProcessRunner(),
+      probeTimeoutMs: 3000,
+      minimumSupportedVersion: "3000.0.0",
+    });
+
+    expect(result.version.status).toBe("unsupported");
+    expect(result.runnable).toBe(false);
+  });
+
   it("reports missing executable", async () => {
     const result = await diagnoseDevin({
       executable: "this-devin-binary-does-not-exist-anywhere",

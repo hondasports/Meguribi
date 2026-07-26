@@ -480,6 +480,19 @@ Devin に担当させないもの:
 
 `meguribi run` / `resume` は `@meguribi/core` の `runDelivery` / `resumeDelivery` を呼び出します。Devin preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須とします。本番 facade は `createDevinAcpAdapter` で、`implement` / `fix` を `DevinAdapter` port として提供します。Codex の `analyzeFailure` は未実装のため、fix instruction は verification / review 証拠から `buildFixInstruction` が組み立てます。
 
+### 8.7 fake Devin / ACP の総合テスト
+
+通常の CI では実 Devin CLI、GitHub、Codex SDK、外部 MCP、credential を使用しません。`packages/adapters/src/devin/fixtures/fake-devin.js` が CLI 互換入口を提供し、次の環境変数で ACP の挙動を選択します。
+
+```text
+MEGURIBI_FAKE_DEVIN_SCENARIO=success
+MEGURIBI_FAKE_DEVIN_SCENARIO=permission-denied
+MEGURIBI_FAKE_DEVIN_SCENARIO=mcp-detected
+MEGURIBI_FAKE_DEVIN_SCENARIO=timeout
+```
+
+fake executable は `--version`、`auth status`、`acp --help`、`acp` を実装します。既存の下位コンポーネントテストで使う `FAKE_DEVIN_MODE` と `FAKE_ACP_MODE` も互換のため利用できます。新しい scenario を追加する場合は、fake Devin の preflight/ACP マッピング、fake ACP の protocol・filesystem 動作、対象 adapter の integration test、workflow を横断する場合の process-boundary test を同じ変更で追加します。各 test は一時 directory を使い、終了後に `termination.json` の残留プロセス数を確認します。
+
 ## 9. GitHub 連携
 
 MVP は `gh` CLI を利用し、実行前に version、認証、対象リポジトリを確認します。
