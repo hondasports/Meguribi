@@ -19,6 +19,7 @@
   "dependencies": {
     "@meguribi/adapters": "workspace:*",
     "@meguribi/config": "workspace:*",
+    "@meguribi/core": "workspace:*",
     "@meguribi/schemas": "workspace:*",
     "commander": "^14.0.0",
     "valibot": "^1.4.2"

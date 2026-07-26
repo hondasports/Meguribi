@@ -245,25 +245,31 @@ Codex responses are validated by both a runtime schema and a JSON Schema rather 
 
 ## 9. `implementation-result.json`
 
-Meguribi creates this from Devin output plus actual Git and process state.
+Meguribi creates this from Devin output plus actual Git and process state. `DevinAcpAdapter` returns the domain `ImplementationResult` and the delivery workflow persists it via RunStore.
 
 ```json
 {
-  "schemaVersion": 1,
-  "artifactType": "implementation-result",
-  "agentExitCode": 0,
+  "status": "completed",
+  "sessionId": "session-devin",
+  "startedAt": "2026-07-26T12:00:00Z",
+  "finishedAt": "2026-07-26T12:05:00Z",
+  "durationMs": 300000,
+  "stopReason": "end_turn",
   "changedFiles": [
     "src/domain/transaction.ts",
     "src/domain/transaction.test.ts"
   ],
-  "agentSummary": "...",
-  "reportedTests": ["pnpm test"],
+  "reportedFiles": ["src/domain/transaction.ts"],
   "unresolvedItems": [],
-  "policyWarnings": []
+  "permissionDecisions": [],
+  "publishable": true,
+  "artifactPaths": {
+    "root": "/path/to/run/devin-artifacts"
+  }
 }
 ```
 
-`git status` is authoritative for changed files.
+Git / worktree boundary validation is authoritative for `changedFiles`. `reportedFiles` is informational. If `publishable` is false or status is not `completed`, the delivery publish gate does not commit, push, or open a Draft PR.
 
 The prompt `FixContext` keeps the sourced previous attempt and fix instruction in separate untrusted blocks. `git-boundary.json` stores non-blocking warnings, including mismatches between Devin's `reportedFiles` and the Git diff.
 

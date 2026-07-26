@@ -1,13 +1,20 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import {
   diagnoseDevin,
   formatDevinDiagnosisHuman,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
 } from "@meguribi/adapters";
 import { loadDevinConfig } from "@meguribi/config";
+import type { DeliveryDependencies } from "@meguribi/core";
 import { DevinDiagnosisSchema } from "@meguribi/schemas";
 import * as v from "valibot";
 import type { DevinDiagnosis } from "@meguribi/schemas";
+import {
+  runResumeCommand,
+  runRunCommand,
+  type DeliveryCommandDependencies,
+  type DeliveryCommandOptions,
+} from "./commands/run.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -20,6 +27,10 @@ export interface DoctorDependencies {
   cwd?: string;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
+}
+
+export interface ProgramDependencies extends DoctorDependencies, DeliveryCommandDependencies {
+  delivery?: DeliveryDependencies;
 }
 
 export async function runDoctor(
@@ -61,7 +72,48 @@ export async function runDoctor(
   };
 }
 
-export function createProgram(deps: DoctorDependencies = {}): Command {
+function deliveryFlags(command: Command): Command {
+  return command
+    .option("--json", "Emit DeliveryResult JSON on stdout", false)
+    .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
+    .option("--allow-inherited-mcp", "Explicitly allow inherited MCP under warn policy", false)
+    .option(
+      "--max-fix-attempts <number>",
+      "Maximum Devin fix attempts",
+      (value) => {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed < 0) {
+          throw new Error(`Invalid --max-fix-attempts: ${value}`);
+        }
+        return parsed;
+      },
+      2,
+    )
+    .addOption(new Option("--no-commit", "Skip git commit after successful review"))
+    .addOption(new Option("--no-push", "Skip git push after commit"))
+    .addOption(new Option("--no-pr", "Skip draft PR creation"))
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--worktree-path <path>", "Path for the issue worktree")
+    .option("--base <ref>", "Base ref for the worktree", "origin/main")
+    .option("--branch <name>", "Branch name for the delivery run");
+}
+
+function normalizeDeliveryOptions(
+  cliOptions: DeliveryCommandOptions & {
+    commit?: boolean;
+    push?: boolean;
+    pr?: boolean;
+  },
+): DeliveryCommandOptions {
+  return {
+    ...cliOptions,
+    noCommit: cliOptions.noCommit === true || cliOptions.commit === false,
+    noPush: cliOptions.noPush === true || cliOptions.push === false,
+    noPr: cliOptions.noPr === true || cliOptions.pr === false,
+  };
+}
+
+export function createProgram(deps: ProgramDependencies = {}): Command {
   const program = new Command();
   program.name("meguribi").description("Meguribi local CLI").version("0.0.0");
 
@@ -80,6 +132,39 @@ export function createProgram(deps: DoctorDependencies = {}): Command {
         process.exitCode = 1;
       }
     });
+
+  deliveryFlags(
+    program
+      .command("run")
+      .description("Implement an approved Issue through verify/review/Draft PR")
+      .argument("<target>", "Issue target, e.g. owner/repo#123"),
+  ).action(async (target: string, cliOptions: DeliveryCommandOptions) => {
+    try {
+      const result = await runRunCommand(target, normalizeDeliveryOptions(cliOptions), deps);
+      process.exitCode = result.exitCode;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+  deliveryFlags(
+    program
+      .command("resume")
+      .description("Resume a delivery run after implementation_completed")
+      .argument("<target>", "Issue target, e.g. owner/repo#123")
+      .option("--run-id <id>", "Specific run ID to resume"),
+  ).action(async (target: string, cliOptions: DeliveryCommandOptions) => {
+    try {
+      const result = await runResumeCommand(target, normalizeDeliveryOptions(cliOptions), deps);
+      process.exitCode = result.exitCode;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+      process.exitCode = 1;
+    }
+  });
 
   return program;
 }

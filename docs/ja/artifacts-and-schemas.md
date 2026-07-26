@@ -262,25 +262,31 @@ Codex の応答は自然文を成功根拠にせず、runtime schema と JSON Sc
 
 ## 9. `implementation-result.json`
 
-Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプロセス結果を組み合わせて生成します。
+Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプロセス結果を組み合わせて生成します。`DevinAcpAdapter` はドメイン型 `ImplementationResult` を返し、RunStore へ保存します。
 
 ```json
 {
-  "schemaVersion": 1,
-  "artifactType": "implementation-result",
-  "agentExitCode": 0,
+  "status": "completed",
+  "sessionId": "session-devin",
+  "startedAt": "2026-07-26T12:00:00Z",
+  "finishedAt": "2026-07-26T12:05:00Z",
+  "durationMs": 300000,
+  "stopReason": "end_turn",
   "changedFiles": [
     "src/domain/transaction.ts",
     "src/domain/transaction.test.ts"
   ],
-  "agentSummary": "...",
-  "reportedTests": ["pnpm test"],
+  "reportedFiles": ["src/domain/transaction.ts"],
   "unresolvedItems": [],
-  "policyWarnings": []
+  "permissionDecisions": [],
+  "publishable": true,
+  "artifactPaths": {
+    "root": "/path/to/run/devin-artifacts"
+  }
 }
 ```
 
-`changedFiles` は `git status` を正本にします。
+`changedFiles` は Git / worktree 境界検証を正本にします。`reportedFiles` は参考情報です。`publishable` が false、または status が `completed` 以外の場合、delivery workflow の publish gate は commit / push / Draft PR へ進みません。
 
 実装 prompt の `FixContext` は、前回試行と fix instruction の出典付き内容をどちらも untrusted block として扱います。`git-boundary.json` の `warnings` には、Devin の `reportedFiles` と Git diff の不一致など、公開を止めない参考情報を保存します。
 

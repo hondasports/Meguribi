@@ -127,10 +127,11 @@ meguribi plan owner/repo#125
 
 ### `meguribi run`
 
-Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR.
+Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `DevinAdapter` port (production: `createDevinAcpAdapter`).
 
 ```bash
 meguribi run owner/repo#125
+meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 ```
 
 Main options:
@@ -140,10 +141,17 @@ Main options:
 - `--no-commit`
 - `--no-push`
 - `--no-pr`
+- `--non-interactive`
+- `--allow-inherited-mcp`
+- `--max-fix-attempts <number>`
+- `--json`
 - `--wait-checks`
 - `--allow-risk <level>`
-- `--max-fix-attempts <number>`
 - `--dry-run`
+
+With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into Devin session cancel / shutdown.
+
+Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) uses `createDevinAcpAdapter`, `FileSystemRunStore`, and `createDefaultPolicyEngine`. Until dedicated GitHub/Git adapters land, those ports use fakes. Set `MEGURIBI_DELIVERY_FAKES=1` to also fake Codex/Verifier; without that flag, Codex wiring fails closed if the Codex SDK cannot be constructed (no silent auto-approve fake). Fixture tests use fakes and do not call real `gh` or real Devin.
 
 ### `meguribi review`
 
@@ -156,13 +164,12 @@ meguribi review https://github.com/owner/repo/pull/456
 
 ### `meguribi resume`
 
-Resume an interrupted Run from the last completed step.
+Resume an interrupted Run from the last completed step. In the MVP, only steps after `implementation_completed` (verify / review / publish) are resumable. Mid-implementation session resume is not guaranteed. Identity mismatches (branch / worktree / HEAD / remote) stop the Run.
 
 ```bash
 meguribi resume owner/repo#125
+meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
-
-Before resuming, branch, worktree, HEAD, Issue, and PR identity must match saved state.
 
 ### `meguribi measure`
 
@@ -461,7 +468,7 @@ Before launch, run the same diagnosis as `meguribi doctor`:
 
 Do not infer safety from the version string alone. Unparseable versions are `unknown` and still require a successful ACP probe. Parseable versions below `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION` (default `3000.0.0`) are `unsupported_version`. Non-zero exit or timeout from `--version` fails closed. Missing ACP is reported as `capability_missing`, distinct from `unsupported_version`. Unsupported versions, missing authentication, missing ACP, ambiguous MCP policy in non-interactive mode, and unexpected process exits stop the Run. Diagnosis output must not retain secret-like strings.
 
-`meguribi run` will be wired in Issue #22 and must call `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters` as its Devin preflight.
+`meguribi run` / `resume` call `@meguribi/core` `runDelivery` / `resumeDelivery`. Devin preflight must use `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters`. The production facade is `createDevinAcpAdapter`, which exposes `implement` / `fix` as the `DevinAdapter` port. Codex `analyzeFailure` is not implemented yet; `buildFixInstruction` builds fix instructions from verification / review evidence.
 
 ## 9. GitHub integration
 

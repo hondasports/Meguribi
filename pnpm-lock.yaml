@@ -35,6 +35,9 @@ importers:
       '@meguribi/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@meguribi/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@meguribi/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
