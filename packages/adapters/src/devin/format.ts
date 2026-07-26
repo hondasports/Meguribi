@@ -1,5 +1,5 @@
 import type { DevinDiagnosis } from "@meguribi/core";
-import { sanitizeDiagnosticDisplayText } from "./redact.js";
+import { sanitizeDiagnosticDisplayText } from "../acp/redact.js";
 
 /**
  * `meguribi doctor` 向けの人間可読表示。

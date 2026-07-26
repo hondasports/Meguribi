@@ -15,7 +15,7 @@ import {
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightDevin,
 } from "@meguribi/adapters";
-import { loadDevinConfig } from "@meguribi/config";
+import { loadImplementerConfig } from "@meguribi/config";
 import type { DeliveryDependencies, InheritedMcpPolicy } from "@meguribi/core";
 
 export interface CreateDeliveryDepsOptions {
@@ -110,10 +110,15 @@ export async function createDeliveryDeps(
   const useLocalFakes =
     options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
 
-  const config = await loadDevinConfig({
+  const config = await loadImplementerConfig({
     repositoryPath: cwd,
     nonInteractive: false,
   });
+  if (config.kind === "cursor") {
+    throw new Error(
+      "Cursor ACP adapter for `meguribi run` is not implemented yet; use `meguribi doctor` for Cursor.",
+    );
+  }
   const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
   const diagnosis = await diagnoseDevin({
     executable: config.config.executable,

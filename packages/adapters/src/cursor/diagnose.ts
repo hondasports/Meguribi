@@ -8,8 +8,8 @@ import type { ProcessRunner } from "@meguribi/process";
 import { ProcessRunner as DefaultProcessRunner } from "@meguribi/process";
 import { parseAcpCapability } from "./acp.js";
 import { parseAuthStatus } from "./auth.js";
-import { captureCommand } from "../devin/capture.js";
-import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "../devin/redact.js";
+import { captureCommand } from "../acp/capture.js";
+import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "../acp/redact.js";
 import {
   compareSemver,
   parseCursorVersionOutput,

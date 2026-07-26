@@ -4,7 +4,7 @@ import {
   type McpDetection,
   type McpPolicyDecision,
 } from "@meguribi/core";
-import { redactDiagnosticText } from "./redact.js";
+import { redactDiagnosticText } from "../acp/redact.js";
 
 export function detectMcpConnection(text: string): McpDetection {
   // Detection uses in-memory event text; persisted alerts are redacted below.
