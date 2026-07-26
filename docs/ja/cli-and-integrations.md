@@ -42,6 +42,37 @@ meguribi init ./path/to/repository
 
 既定では GitHub へ書き込みません。`--apply-labels` を指定した場合だけ不足ラベルを作成します。
 
+### `meguribi doctor`
+
+Devin CLI の実行可否を機械的に診断します。`meguribi run` の preflight からも同じ診断 API（`diagnoseDevin`）を利用します。
+
+```bash
+meguribi doctor
+meguribi doctor --json
+meguribi doctor --non-interactive
+```
+
+確認内容:
+
+- 設定された Devin executable の解決
+- `devin --version` の取得と parse（未知 version は無条件許可しない）
+- `devin auth status` による認証状態（認証情報そのものは読み取らない）
+- `devin acp --help` による ACP capability probe（session やネットワーク接続は開始しない）
+- `inheritedMcpPolicy`（MCP を完全隔離できるとは表示しない）
+
+人間向け表示例:
+
+```text
+✓ Devin CLI: 3000.2.17
+✓ Authentication: authenticated
+✓ ACP: supported
+! Saved Devin settings may include MCP servers. Meguribi cannot fully isolate MCP.
+  Policy: warn
+Runnable: yes
+```
+
+`--json` では `DevinDiagnosis` の安定 schema のみを stdout へ出力します。`runnable` が false のとき終了コードは非 0 です。`--non-interactive` かつ `inheritedMcpPolicy: warn` の場合は fail-closed で停止します。
+
 ### `meguribi discover`
 
 既存 Issue、指定資料、任意の利用データから課題候補を抽出します。
@@ -426,11 +457,18 @@ Devin に担当させないもの:
 - worktree 外の変更
 - `/handoff` やクラウドセッション作成
 
-### 8.6 バージョン診断
+### 8.6 バージョン診断 / preflight
 
-起動前に `devin --version`、認証状態、`devin acp` の利用可否を確認します。バージョン文字列だけで安全性を断定せず、対応する機能 probe と最小 smoke test の結果を組み合わせます。
+起動前に `meguribi doctor` と同じ診断を実行します。
 
-未対応バージョン、未認証、ACP 初期化失敗、予期しないプロセス終了では推測して継続しません。
+- `devin --version`
+- 認証状態（`devin auth status`）
+- `devin acp --help` による ACP capability probe
+- `inheritedMcpPolicy`
+
+バージョン文字列だけで安全性を断定しません。パース不能な version は `unknown` とし、ACP probe 成功を必須とします。パース可能な version は `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION`（既定 `3000.0.0`）未満なら `unsupported_version` とします。`--version` の非ゼロ終了や timeout は fail-closed です。ACP 欠如は `capability_missing` として区別します。未対応バージョン、未認証、ACP 非対応、非対話での曖昧な MCP ポリシー、予期しないプロセス終了では推測して継続しません。診断ログへは secret らしき文字列を残しません。
+
+`meguribi run` は Issue #22 で配線し、その preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須呼び出しとします。
 
 ## 9. GitHub 連携
 

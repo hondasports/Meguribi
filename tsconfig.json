@@ -3,8 +3,11 @@
   "compilerOptions": {
     "paths": {
       "@meguribi/core": ["packages/core/src/index.ts"],
-      "@meguribi/schemas": ["packages/schemas/src/index.ts"]
+      "@meguribi/schemas": ["packages/schemas/src/index.ts"],
+      "@meguribi/process": ["packages/process/src/index.ts"],
+      "@meguribi/config": ["packages/config/src/index.ts"],
+      "@meguribi/adapters": ["packages/adapters/src/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"]
 }

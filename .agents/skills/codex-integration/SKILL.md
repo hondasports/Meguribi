@@ -61,7 +61,7 @@ interface PlanningRequest {
 
 ## 構造化出力
 
-- JSON Schema と Zod の双方で検証する。
+- JSON Schema と Valibot の双方で検証する。
 - schema version を成果物へ入れる。
 - 不正 JSON を成功扱いしない。
 - repair は最大1回など、明示的な上限を持つ。

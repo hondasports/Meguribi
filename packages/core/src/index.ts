@@ -18,3 +18,15 @@ export type {
   ReviewRequirementCoverage,
   ReviewStatus,
 } from "./codex-artifact.js";
+export type {
+  DiagnosisError,
+  DiagnosisErrorCode,
+  DiagnosisWarning,
+  DiagnosisWarningCode,
+  DevinAcpDiagnosis,
+  DevinAuthenticationDiagnosis,
+  DevinDiagnosis,
+  DevinExecutableDiagnosis,
+  DevinVersionDiagnosis,
+} from "./devin-diagnosis.js";
+export type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";

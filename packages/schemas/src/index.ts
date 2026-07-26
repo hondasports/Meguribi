@@ -24,3 +24,19 @@ export type {
   ReviewArtifact,
   ReviewContent,
 } from "./codex-artifact.js";
+export {
+  DiagnosisErrorCodeSchema,
+  DiagnosisErrorSchema,
+  DiagnosisWarningCodeSchema,
+  DiagnosisWarningSchema,
+  DevinDiagnosisSchema,
+  InheritedMcpPolicySchema,
+} from "./devin-diagnosis.js";
+export type {
+  DiagnosisError,
+  DiagnosisErrorCode,
+  DiagnosisWarning,
+  DiagnosisWarningCode,
+  DevinDiagnosis,
+  InheritedMcpPolicy,
+} from "./devin-diagnosis.js";

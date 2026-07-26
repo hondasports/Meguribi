@@ -40,6 +40,37 @@ Checks include:
 
 It does not write to GitHub unless `--apply-labels` is explicitly supplied.
 
+### `meguribi doctor`
+
+Diagnose whether the local Devin CLI is runnable for Meguribi. The same diagnosis API (`diagnoseDevin`) is used by `meguribi run` preflight.
+
+```bash
+meguribi doctor
+meguribi doctor --json
+meguribi doctor --non-interactive
+```
+
+Checks include:
+
+- resolve the configured Devin executable
+- capture and parse `devin --version` (do not unconditionally accept unknown versions)
+- authentication via `devin auth status` (do not read credential material)
+- ACP capability probe via `devin acp --help` (do not start sessions or network work)
+- `inheritedMcpPolicy` (never claim full MCP isolation)
+
+Human-readable example:
+
+```text
+✓ Devin CLI: 3000.2.17
+✓ Authentication: authenticated
+✓ ACP: supported
+! Saved Devin settings may include MCP servers. Meguribi cannot fully isolate MCP.
+  Policy: warn
+Runnable: yes
+```
+
+`--json` prints only a stable `DevinDiagnosis` schema on stdout. Exit code is non-zero when `runnable` is false. With `--non-interactive` and `inheritedMcpPolicy: warn`, diagnosis fails closed.
+
 ### `meguribi discover`
 
 Extract candidate problems from Issues, supplied documents, or optional usage data.
@@ -416,11 +447,18 @@ Devin does not:
 - modify outside the assigned worktree
 - invoke `/handoff` or create cloud sessions
 
-### 8.6 Version diagnosis
+### 8.6 Version diagnosis / preflight
 
-Before launch, verify `devin --version`, authentication, and `devin acp` support. Do not infer safety from the version string alone; combine feature probes and a minimal smoke test.
+Before launch, run the same diagnosis as `meguribi doctor`:
 
-Unsupported versions, missing authentication, ACP initialization failure, and unexpected process exits stop the Run.
+- `devin --version`
+- authentication (`devin auth status`)
+- ACP capability probe (`devin acp --help`)
+- `inheritedMcpPolicy`
+
+Do not infer safety from the version string alone. Unparseable versions are `unknown` and still require a successful ACP probe. Parseable versions below `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION` (default `3000.0.0`) are `unsupported_version`. Non-zero exit or timeout from `--version` fails closed. Missing ACP is reported as `capability_missing`, distinct from `unsupported_version`. Unsupported versions, missing authentication, missing ACP, ambiguous MCP policy in non-interactive mode, and unexpected process exits stop the Run. Diagnosis output must not retain secret-like strings.
+
+`meguribi run` will be wired in Issue #22 and must call `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters` as its Devin preflight.
 
 ## 9. GitHub integration
 

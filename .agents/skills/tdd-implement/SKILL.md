@@ -8,7 +8,7 @@ description: Issue Readiness GateのGo後に、失敗するテストから始め
 ## 前提
 
 - `issue-readiness-gate`のGo成果物がある。
-- Issue専用ブランチまたはworktreeで作業している。
+- Issue専用ブランチと git worktree で作業している。通常 checkout（default branch）上では編集しない。手順は `AGENTS.md` §9。
 - 対象領域の専門スキルを読んでいる。
 - 実装範囲と今回やらないことが確定している。
 

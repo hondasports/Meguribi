@@ -1,12 +1,19 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
+    "outDir": "./dist",
+    "rootDir": "./src",
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "@meguribi/config": ["../config/src/index.ts"],
+      "@meguribi/core": ["../core/src/index.ts"],
+      "@meguribi/process": ["../process/src/index.ts"],
+      "@meguribi/schemas": ["../schemas/src/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/devin/fixtures/**"]
 }

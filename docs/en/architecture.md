@@ -257,8 +257,8 @@ CLI -> Workflows -> Ports <- Adapters
 - pnpm workspace
 - Commander for CLI parsing
 - execa for child processes
-- Zod for configuration and artifact validation
-- zod-to-json-schema for Codex output schemas
+- Valibot for configuration and artifact validation
+- JSON Schema for Codex output schemas (generated from Valibot when needed)
 - YAML parser for `.meguribi.yml`
 - Vitest for unit and integration tests
 - ESLint or Biome for linting

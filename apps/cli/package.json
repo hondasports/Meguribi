@@ -1,8 +1,11 @@
 {
-  "name": "@meguribi/adapters",
+  "name": "@meguribi/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "meguribi": "./dist/index.js"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -14,12 +17,10 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@meguribi/adapters": "workspace:*",
     "@meguribi/config": "workspace:*",
-    "@meguribi/core": "workspace:*",
-    "@meguribi/process": "workspace:*",
     "@meguribi/schemas": "workspace:*",
-    "@openai/codex-sdk": "0.145.0",
-    "ajv": "^8.20.0",
+    "commander": "^14.0.0",
     "valibot": "^1.4.2"
   },
   "devDependencies": {

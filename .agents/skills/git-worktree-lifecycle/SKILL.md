@@ -29,6 +29,15 @@ description: Meguribi の Git repository identity、branch、worktree、status�
 - shell 文字列連結を使わず、引数配列で実行する。
 - destructive command は allowlist 方式で管理する。
 
+## 2種類の worktree を混同しない
+
+| 種類 | 目的 | 置き場所の例 |
+|---|---|---|
+| Meguribi 本体の実装 worktree | AI / 人間が Meguribi リポジトリを直す | `../Meguribi-issue-<number>`（通常 checkout の兄弟） |
+| 製品が作る対象リポ worktree | `meguribi run` 等が Issue 実装を隔離する | `~/.local/share/meguribi/worktrees/<owner>/<repo>/issue-<number>/` |
+
+本体実装の手順の正本は `AGENTS.md` §9「Meguribi 本体を実装するときの worktree」です。このスキルの以降の節は、主に **製品側の GitAdapter / worktree ライフサイクル実装** 向けです。
+
 ## repository identity
 
 次を照合してください。
