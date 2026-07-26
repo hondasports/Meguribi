@@ -168,6 +168,7 @@ class DevinAcpSessionImpl implements DevinAcpSession {
       return;
     }
     this.stderrPersisted = true;
+    await this.connection.awaitStderrDrain(1_000);
     const stderr = this.connection.stderrText();
     if (stderr.length > 0) {
       await this.artifacts.appendStderr(stderr);

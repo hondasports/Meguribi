@@ -59,6 +59,11 @@ export interface DevinAcpConnection {
   readonly sessionId: string;
   readonly protocolVersion: number;
   readonly stderrText: () => string;
+  /**
+   * Wait until stderr collection finishes or `timeoutMs` elapses.
+   * Use before persisting stderr so late diagnostic lines are not lost.
+   */
+  awaitStderrDrain(timeoutMs?: number): Promise<void>;
   prompt(input: { content: string }): AsyncIterable<RawDevinAcpEvent>;
   cancel(): Promise<void>;
   closeInput(): Promise<void>;
@@ -130,6 +135,25 @@ async function collectStderr(
     getText: () => chunks.join(""),
     done,
   };
+}
+
+async function waitMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Observe whether the ACP process exited shortly after a prompt response.
+ * A healthy ACP server stays alive; an early exit means the turn must not be
+ * treated as a successful completion.
+ */
+async function observeUnexpectedExit(
+  processHandle: ManagedProcess,
+  graceMs: number,
+): Promise<ProcessExit | undefined> {
+  return Promise.race([
+    processHandle.waitForExit().then((exit) => exit),
+    waitMs(graceMs).then(() => undefined),
+  ]);
 }
 
 function toTransportError(
@@ -211,6 +235,10 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
 
   stderrText(): string {
     return this.stderr.getText();
+  }
+
+  async awaitStderrDrain(timeoutMs = 1_000): Promise<void> {
+    await Promise.race([this.stderr.done, waitMs(timeoutMs)]);
   }
 
   private nextSequence(): number {
@@ -304,6 +332,18 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
         yield item;
       }
       await promptPromise;
+
+      // ACP servers normally remain alive after a turn. An immediate exit after
+      // a successful prompt response (e.g. crash-mid-prompt) must not become
+      // turn.completed / end_turn success.
+      const unexpectedExit = await observeUnexpectedExit(this.processHandle, 150);
+      if (unexpectedExit) {
+        throw new DevinAcpTransportError(
+          "process_crashed",
+          `ACP process exited after prompt response (code=${unexpectedExit.code}, signal=${unexpectedExit.signal})`,
+        );
+      }
+
       yield {
         kind: "turn_completed",
         sequence: this.nextSequence(),
@@ -393,13 +433,17 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
     );
 
     let processExitedEarly: DevinAcpTransportError | undefined;
-    const watchExit = processHandle.waitForExit().then((exit) => {
-      processExitedEarly = new DevinAcpTransportError(
-        "process_crashed",
-        `ACP process exited before protocol was ready (code=${exit.code}, signal=${exit.signal})`,
-      );
-    });
-    void watchExit;
+    void processHandle.waitForExit().then(
+      (exit) => {
+        processExitedEarly = new DevinAcpTransportError(
+          "process_crashed",
+          `ACP process exited before protocol was ready (code=${exit.code}, signal=${exit.signal})`,
+        );
+      },
+      (error: unknown) => {
+        processExitedEarly = toTransportError(error, "spawn_failure");
+      },
+    );
 
     const guard = async <T>(promise: Promise<T>): Promise<T> => {
       const result = await promise;

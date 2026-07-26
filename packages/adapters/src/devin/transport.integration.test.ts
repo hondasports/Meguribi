@@ -161,4 +161,43 @@ describe("DevinAcpTransport integration", () => {
     expect(events.at(-1)).toMatchObject({ kind: "turn_completed" });
     await connection.terminate(500);
   });
+
+  it("does not treat crash-after-prompt-response as turn.completed", async () => {
+    const { connection } = await start("crash-mid-prompt");
+    await expect(drainPrompt(connection)).rejects.toMatchObject({
+      code: "process_crashed",
+    });
+    await connection.terminate(500).catch(() => undefined);
+  });
+
+  it("rejects missing executable without leaving unhandled rejections", async () => {
+    const transport = createDevinAcpTransport();
+    const cwd = await tempCwd();
+    const previous = process.listenerCount("unhandledRejection");
+    const seen: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      seen.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expect(
+        transport.start({
+          executable: path.join(cwd, "definitely-missing-devin-binary"),
+          acpArgs: ["acp"],
+          cwd,
+          env: { ...process.env },
+          startupTimeoutMs: 3_000,
+          diagnosis: runnableDiagnosis(),
+          runner: new ProcessRunner(),
+        }),
+      ).rejects.toMatchObject({
+        code: expect.stringMatching(/spawn_failure|process_crashed|initialize_failure/),
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 200));
+      expect(seen).toEqual([]);
+      expect(process.listenerCount("unhandledRejection")).toBeGreaterThanOrEqual(previous);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
 });

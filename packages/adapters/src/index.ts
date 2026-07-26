@@ -10,6 +10,7 @@ export {
   formatDevinDiagnosisHuman,
   InvalidMinimumSupportedVersionError,
   isDevinAcpTransportError,
+  isSecretKey,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   normalizePermissionRequest,
   normalizeSessionStarted,
@@ -21,6 +22,7 @@ export {
   pathsFromToolCall,
   preflightDevin,
   redactDiagnosticText,
+  redactJsonValue,
   sanitizeDiagnosticDisplayText,
   startDevinAcpSession,
 } from "./devin/index.js";

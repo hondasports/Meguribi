@@ -20,7 +20,12 @@ export {
 } from "./capture.js";
 export type { CapturedCommandResult } from "./capture.js";
 export { formatDevinDiagnosisHuman } from "./format.js";
-export { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
+export {
+  isSecretKey,
+  redactDiagnosticText,
+  redactJsonValue,
+  sanitizeDiagnosticDisplayText,
+} from "./redact.js";
 export {
   compareSemver,
   parseDevinVersionOutput,

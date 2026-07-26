@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseAcpCapability } from "./acp.js";
 import { parseAuthStatus } from "./auth.js";
-import { redactDiagnosticText, sanitizeDiagnosticDisplayText } from "./redact.js";
+import { redactDiagnosticText, redactJsonValue, sanitizeDiagnosticDisplayText } from "./redact.js";
 import { parseDevinVersionOutput, compareSemver } from "./version.js";
 import { formatDevinDiagnosisHuman } from "./format.js";
 import {
@@ -184,6 +184,19 @@ describe("redactDiagnosticText", () => {
     expect(redacted).not.toContain("DEVIN_CLIENT_SECRET=dcs_789");
     expect(redacted).not.toContain("MY_ACCESS_TOKEN=mat_012");
     expect(redacted).toContain("[REDACTED]");
+  });
+});
+
+describe("redactJsonValue", () => {
+  it("redacts structured env secret values by key without requiring key=value text", () => {
+    const redacted = redactJsonValue({
+      env: {
+        API_TOKEN: "plain-secret-value",
+        NODE_ENV: "test",
+      },
+    }) as { env: { API_TOKEN: string; NODE_ENV: string } };
+    expect(redacted.env.API_TOKEN).toBe("[REDACTED]");
+    expect(redacted.env.NODE_ENV).toBe("test");
   });
 });
 
