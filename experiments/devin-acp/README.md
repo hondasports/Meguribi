@@ -46,10 +46,12 @@ pnpm smoke
 
 ```powershell
 $env:MEGURIBI_RUN_REAL_DEVIN_SMOKE = "1"
-pnpm smoke:devin-acp
+pnpm smoke:devin-acp -- --yes
 ```
 
-実機smokeは明示opt-inがない限り外部agentを起動せず、未認証・ACP非対応・MCP policy不許可・worktree境界違反・shutdown失敗のいずれかで安全側に停止します。実在プロダクトrepository、commit、push、PR、Issue更新、外部MCP接続は行いません。Devin利用料金、ネットワーク通信、保存済みMCP設定継承の可能性があるため、実行前に結果と注意点を確認してください。
+実機smokeは明示opt-inがない限り外部agentを起動せず、未認証・ACP非対応・MCP policy不許可・worktree境界違反・shutdown失敗のいずれかで安全側に停止します。実在プロダクトrepository、commit、push、PR、Issue更新、外部MCP接続は行いません。実行前に警告を表示し、TTY では確認プロンプトを出します。非対話実行では `--yes` を付与してください。Devin 利用料金、ネットワーク通信、保存済み認証・MCP 設定継承の可能性があるため、内容を確認してから実行してください。
+
+MCP は `inheritedMcpPolicy: deny` で fail-closed にしますが、完全な機械的隔離は保証できません。認証を保つため、実機 smoke は `HOME` / `USERPROFILE` / `APPDATA` などの隔離を行わず、現在のユーザ環境を継承します。credential をコピー・保存することはありません。
 
 fake ACPを本番facade経由で確認する場合:
 

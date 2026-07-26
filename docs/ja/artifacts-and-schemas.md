@@ -502,6 +502,7 @@ JSONL の各行は次の envelope を持つ。
   "artifactType": "devin-acp-compatibility-smoke",
   "optIn": true,
   "cliVersion": "3000.0.0-fake",
+  "minimumSupportedVersion": "3000.0.0",
   "acpCompatible": true,
   "sessionStarted": true,
   "promptCompleted": true,
@@ -513,6 +514,7 @@ JSONL の各行は次の envelope を持つ。
   "outsideChanges": [],
   "residualProcesses": false,
   "artifactDirectory": "artifacts/devin-acp/<run-id>",
+  "executedAt": "2025-07-25T12:00:00.000Z",
   "implementation": { ... }
 }
 ```
@@ -521,14 +523,16 @@ JSONL の各行は次の envelope を持つ。
 
 - `optIn`: 実 Devin 起動の明示 opt-in があったか。
 - `cliVersion`: 診断または fake 実行で確認した Devin CLI version。
+- `minimumSupportedVersion`: smoke で適用した最低対応 Devin CLI version。
 - `acpCompatible`: ACP lifecycle、worktree 境界、shutdown、残留 process をすべて満たしたか。
 - `sessionStarted` / `promptCompleted` / `worktreeBoundaryOk` / `shutdownCompleted`: 各 gate の結果。
 - `status`: `completed` / `blocked` / `failed`。
-- `warnings`: MCP policy や adapter からの警告。
+- `warnings`: MCP policy や adapter からの警告。version が未検証の場合も含む。
 - `error`: 失敗時の理由。
 - `changedFiles` / `outsideChanges`: Git authoritative changed files と worktree 外変更。
 - `residualProcesses`: 子/孫 process の残留有無。
 - `artifactDirectory`: 成果物保存先。
+- `executedAt`: smoke 実行開始時の ISO 8601 timestamp。
 - `implementation`: 本番 `DevinAcpAdapter` から返された `ImplementationResult`（opt-in なし・blocked 時は `null`）。
 
 secret、token、認証情報、全環境変数は含みません。partial/failure 時も `artifactDirectory`、`error`、`status` を保存し、成功扱いにしません。

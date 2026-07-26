@@ -493,16 +493,16 @@ MEGURIBI_FAKE_DEVIN_SCENARIO=timeout
 
 fake executable は `--version`、`auth status`、`acp --help`、`acp` を実装します。既存の下位コンポーネントテストで使う `FAKE_DEVIN_MODE` と `FAKE_ACP_MODE` も互換のため利用できます。新しい scenario を追加する場合は、fake Devin の preflight/ACP マッピング、fake ACP の protocol・filesystem 動作、対象 adapter の integration test、workflow を横断する場合の process-boundary test を同じ変更で追加します。各 test は一時 directory を使い、終了後に `termination.json` の残留プロセス数を確認します。
 
-## 8.7 実 Devin CLI compatibility smoke
+## 8.8 実 Devin CLI compatibility smoke
 
 Issue #24 の実機 compatibility smoke は、通常の delivery workflow・`pnpm test`・CI から分離した手動確認です。`experiments/devin-acp` の専用 script を使い、既存の `DevinAcpAdapter` facade、temporary Git repository、Issue 模擬 worktree を通して ACP lifecycle を確認します。
 
 ```powershell
 $env:MEGURIBI_RUN_REAL_DEVIN_SMOKE = "1"
-pnpm smoke:devin-acp
+pnpm smoke:devin-acp -- --yes
 ```
 
-次の場合は外部agentを起動せず、または途中で停止します。
+実行前に警告を表示し、TTY では確認プロンプトを出します。非対話実行では `--yes` を付与してください。次の場合は外部agentを起動せず、または途中で停止します。
 
 - 明示opt-inがない。
 - Devin CLIが未認証、ACP非対応、または診断不能である。

@@ -484,6 +484,7 @@ The `experiments/devin-acp` manual smoke writes a machine-readable result to `ar
   "artifactType": "devin-acp-compatibility-smoke",
   "optIn": true,
   "cliVersion": "3000.0.0-fake",
+  "minimumSupportedVersion": "3000.0.0",
   "acpCompatible": true,
   "sessionStarted": true,
   "promptCompleted": true,
@@ -495,6 +496,7 @@ The `experiments/devin-acp` manual smoke writes a machine-readable result to `ar
   "outsideChanges": [],
   "residualProcesses": false,
   "artifactDirectory": "artifacts/devin-acp/<run-id>",
+  "executedAt": "2025-07-25T12:00:00.000Z",
   "implementation": { ... }
 }
 ```
@@ -503,14 +505,16 @@ Key fields:
 
 - `optIn`: whether explicit opt-in for the real Devin CLI was present.
 - `cliVersion`: Devin CLI version observed during diagnosis or fake execution.
+- `minimumSupportedVersion`: the minimum supported Devin CLI version applied by the smoke.
 - `acpCompatible`: true only when the ACP lifecycle, worktree boundary, shutdown, and residual-process checks all pass.
 - `sessionStarted` / `promptCompleted` / `worktreeBoundaryOk` / `shutdownCompleted`: per-gate results.
 - `status`: `completed` / `blocked` / `failed`.
-- `warnings`: warnings from MCP policy or the adapter.
+- `warnings`: warnings from MCP policy or the adapter; also includes an `unknown` version warning.
 - `error`: reason for failure when applicable.
 - `changedFiles` / `outsideChanges`: Git-authoritative changed files and writes outside the worktree.
 - `residualProcesses`: whether child/grandchild processes remain.
 - `artifactDirectory`: path where the smoke artifacts are stored.
+- `executedAt`: ISO 8601 timestamp when the smoke run started.
 - `implementation`: the `ImplementationResult` returned by the production `DevinAcpAdapter` (`null` when opt-in is missing or blocked).
 
 It does not contain secrets, tokens, credentials, or full environment variables. On partial/failure results, it still records `artifactDirectory`, `error`, and `status` and is not treated as success.
