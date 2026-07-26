@@ -41,6 +41,7 @@ export type {
   RunStatus,
   RunStore,
   VerificationCommandResult,
+  VerificationLogWriter,
   VerificationResult,
   Verifier,
 } from "./delivery.js";

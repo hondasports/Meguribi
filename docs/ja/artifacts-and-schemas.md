@@ -312,6 +312,8 @@ Devin の自然文回答をそのまま正本にせず、Meguribi が Git とプ
 
 `timedOut` は任意です。コマンドが per-command timeout を超えた場合に `true` となり、そのときの `exitCode` は `null`、全体の `success` は `false` です。
 
+`logPath` は RunStore 配下の検証ログを指します。stdout と stderr は区切り付きで保存し、保存前に secret-like な値を redaction します。ログはコマンドごとに上限を設け、超過時は truncation marker を記録します。
+
 ## 11. `review.json`
 
 ```json

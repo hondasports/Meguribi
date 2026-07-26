@@ -49,6 +49,19 @@ describe("delivery workflow fixtures", () => {
     expect("push" in bundle.devin).toBe(false);
     expect(bundle.devin.calls.counts.createDraftPullRequest).toBeUndefined();
     expect(bundle.devin.calls.counts.commit).toBeUndefined();
+
+    const state = await bundle.runStore.loadLatest("owner/repo", 22);
+    expect(state).not.toBeNull();
+    const verification = await bundle.runStore.readArtifact<{
+      commands: { logPath?: string }[];
+    }>(state!.runId, "verification.json");
+    const logPath = verification?.commands[0]?.logPath;
+    expect(logPath).toBeTruthy();
+    const log = bundle.runStore.artifacts
+      .get(state!.runId)
+      ?.get("logs/verify-01-test.log");
+    expect(log).toContain("[stdout]");
+    expect(log).toContain("fake verification passed");
   });
 
   it("blocks MCP warn policy in non-interactive mode", async () => {

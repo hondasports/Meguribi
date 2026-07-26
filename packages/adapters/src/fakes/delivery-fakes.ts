@@ -302,6 +302,17 @@ export function createFakeVerifier(options: FakeVerifierOptions = {}): Verifier 
             exitCode: fail ? 1 : 0,
             startedAt,
             finishedAt,
+            ...(input.logWriter
+              ? {
+                  logPath: await input.logWriter.write({
+                    commandName: "test",
+                    commandIndex: 0,
+                    stdout: fail ? "fake verification failed" : "fake verification passed",
+                    stderr: "",
+                    truncated: false,
+                  }),
+                }
+              : {}),
           },
         ],
       };
@@ -476,6 +487,7 @@ export function createFakeDevinAdapter(options: FakeDevinOptions = {}): DevinAda
 export function createMemoryRunStore(options: { now?: () => Date } = {}): RunStore & {
   calls: CallCounter;
   states: Map<string, RunState>;
+  artifacts: Map<string, Map<string, unknown>>;
 } {
   const calls = createCounter();
   const now = options.now ?? (() => new Date());
@@ -490,6 +502,7 @@ export function createMemoryRunStore(options: { now?: () => Date } = {}): RunSto
   return {
     calls,
     states,
+    artifacts,
     async create(input) {
       calls.track("create");
       seq += 1;
