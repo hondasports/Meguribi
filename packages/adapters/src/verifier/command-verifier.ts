@@ -155,6 +155,7 @@ export function resolvePlatformExecutable(
 
   const env = options.env ?? process.env;
   const pathValue = env.PATH ?? env.Path ?? "";
+  const pathDelimiter = platform === "win32" ? ";" : path.delimiter;
   const extensions = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
     .split(";")
     .map((value) => value.trim())
@@ -171,7 +172,7 @@ export function resolvePlatformExecutable(
       }
     });
 
-  for (const dir of pathValue.split(path.delimiter)) {
+  for (const dir of pathValue.split(pathDelimiter)) {
     if (!dir) {
       continue;
     }
