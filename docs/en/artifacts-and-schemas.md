@@ -517,7 +517,7 @@ Key fields:
 - `executedAt`: ISO 8601 timestamp when the smoke run started.
 - `implementation`: the `ImplementationResult` returned by the production `DevinAcpAdapter` (`null` when opt-in is missing or blocked).
 
-It does not contain secrets, tokens, credentials, or full environment variables. On partial/failure results, it still records `artifactDirectory`, `error`, and `status` and is not treated as success.
+It does not contain secrets, tokens, credentials, or full environment variables. The same redaction is applied to the value returned by `runCompatibilitySmoke` (and therefore to CLI stdout). On partial/failure results, it still records `artifactDirectory`, `error`, and `status` and is not treated as success.
 
 ### AgentError
 

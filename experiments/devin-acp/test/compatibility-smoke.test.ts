@@ -70,6 +70,37 @@ describe("Devin compatibility smoke", () => {
     expect(result.error).toContain("not authenticated");
   });
 
+  it("redacts secrets in the returned result and compatibility-result.json", async () => {
+    const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-redact-"));
+    artifactDirectories.push(artifactDirectory);
+    const secret = "supersecrettoken123";
+    const diagnosis: DevinDiagnosis = {
+      executable: { status: "ok", path: "devin" },
+      version: { status: "supported", raw: "3000.0.0" },
+      authentication: { status: "unauthenticated" },
+      acp: { status: "supported" },
+      inheritedMcpPolicy: "deny",
+      runnable: false,
+      warnings: [{ code: "inherited_mcp", message: `probe leaked token=${secret}` }],
+      errors: [
+        {
+          code: "unauthenticated",
+          message: `auth failed token=${secret}`,
+          nextAction: "Run: devin auth login",
+        },
+      ],
+    };
+    const result = await runCompatibilitySmoke({ artifactDirectory, optIn: true, diagnosis });
+    const serialized = JSON.stringify(result);
+    const onDisk = await fs.readFile(path.join(artifactDirectory, "compatibility-result.json"), "utf8");
+
+    expect(result.status).toBe("blocked");
+    expect(serialized).not.toContain(secret);
+    expect(serialized).toContain("[REDACTED]");
+    expect(onDisk).not.toContain(secret);
+    expect(onDisk).toContain("[REDACTED]");
+  });
+
   it("records worktree boundary violation and outside changes", async () => {
     const artifactDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-compatibility-outside-"));
     artifactDirectories.push(artifactDirectory);

@@ -265,16 +265,21 @@ function buildFailedResult(
   });
 }
 
-async function writeResult(
+function redactResult(result: DevinCompatibilitySmokeResult): DevinCompatibilitySmokeResult {
+  return redactJsonValue(result) as DevinCompatibilitySmokeResult;
+}
+
+async function writeAndReturnResult(
   directory: string,
   result: DevinCompatibilitySmokeResult,
-): Promise<void> {
-  const redacted = redactJsonValue(result) as DevinCompatibilitySmokeResult;
+): Promise<DevinCompatibilitySmokeResult> {
+  const redacted = redactResult(result);
   await fs.writeFile(
     path.join(directory, "compatibility-result.json"),
     `${JSON.stringify(redacted, null, 2)}\n`,
     "utf8",
   );
+  return redacted;
 }
 
 export async function runCompatibilitySmoke(
@@ -299,8 +304,7 @@ export async function runCompatibilitySmoke(
         "Real Devin smoke requires MEGURIBI_RUN_REAL_DEVIN_SMOKE=1; no external agent was started.",
       ],
     });
-    await writeResult(artifactDirectory, result);
-    return result;
+    return await writeAndReturnResult(artifactDirectory, result);
   }
 
   const isolated = options.isolated ?? options.fake ?? false;
@@ -365,8 +369,7 @@ export async function runCompatibilitySmoke(
           minimumSupportedVersion,
           diagnosis,
         );
-        await writeResult(artifactDirectory, result);
-        return result;
+        return await writeAndReturnResult(artifactDirectory, result);
       }
     }
 
@@ -412,8 +415,7 @@ export async function runCompatibilitySmoke(
       minimumSupportedVersion,
       diagnosis: diagnosis ?? fakeDiagnosis(executable, inheritedMcpPolicy),
     });
-    await writeResult(artifactDirectory, result);
-    return result;
+    return await writeAndReturnResult(artifactDirectory, result);
   } catch (error) {
     let outsideChanges: string[] = [];
     if (fixture) {
@@ -439,8 +441,7 @@ export async function runCompatibilitySmoke(
       error,
       diagnosis,
     );
-    await writeResult(artifactDirectory, result);
-    return result;
+    return await writeAndReturnResult(artifactDirectory, result);
   } finally {
     await fixture?.cleanup();
   }
@@ -453,7 +454,6 @@ const REAL_SMOKE_WARNING = `WARNING: This command runs the real Devin CLI agains
 `;
 
 async function confirmRealSmoke(): Promise<boolean> {
-  process.stderr.write(REAL_SMOKE_WARNING);
   if (!process.stdin.isTTY) {
     process.stderr.write("This command requires an interactive terminal or --yes.\n");
     return false;
@@ -487,6 +487,7 @@ export async function runCompatibilitySmokeCli(): Promise<void> {
     }
   }
 
+  // runCompatibilitySmoke already returns a redacted result suitable for stdout / CI logs.
   const result = await runCompatibilitySmoke({
     fake,
     optIn: fake || optIn,
