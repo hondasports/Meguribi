@@ -446,7 +446,8 @@ Until RunStore lands, and afterward under the same relative paths, Devin ACP ses
 ├── events.jsonl       # normalized AgentEvent lines (same sequence)
 ├── stderr.log         # diagnostic stderr (redacted)
 ├── session.json       # sessionId / protocolVersion / stopReason
-└── result.json        # minimal execution summary
+├── result.json        # minimal execution summary
+└── termination.json    # shutdown stages and residual processes
 ```
 
 Each JSONL line uses this envelope:
@@ -455,6 +456,8 @@ Each JSONL line uses this envelope:
 - normalized: `{ sequence, at, event }`
 
 Secret redaction always runs before persistence. If redaction or writing fails, persistence stops (fail-closed).
+
+`termination.json` stores `reason`, `stopReason`, `stdinClosed`, `cancelSent`, `gracefulExit`, `terminateSent`, `forceKillUsed`, `residualProcesses`, and a classified `cleanupError` when present. An execution is not successful unless residual processes are confirmed to be zero.
 
 ### AgentError
 

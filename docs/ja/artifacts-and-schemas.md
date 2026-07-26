@@ -464,7 +464,8 @@ RunStore 導入前も含め、Devin ACP session の成果物は次の配置を�
 ├── events.jsonl       # 正規化 AgentEvent（同一 sequence で対応付け）
 ├── stderr.log         # 診断用 stderr（redaction 後）
 ├── session.json       # sessionId / protocolVersion / stopReason など
-└── result.json        # 最小の実行結果サマリ
+├── result.json        # 最小の実行結果サマリ
+└── termination.json    # shutdown の段階結果と残留 process
 ```
 
 JSONL の各行は次の envelope を持つ。
@@ -473,6 +474,8 @@ JSONL の各行は次の envelope を持つ。
 - normalized: `{ sequence, at, event }`
 
 永続化前に secret redaction を必ず通す。redaction または書き込みに失敗した場合は保存を中止する（fail-closed）。
+
+`termination.json` は `reason`、`stopReason`、`stdinClosed`、`cancelSent`、`gracefulExit`、`terminateSent`、`forceKillUsed`、`residualProcesses`、および分類済み `cleanupError` を保存します。残留 process が 0 と確認できない場合、実行を成功扱いにしません。
 
 ### AgentError
 

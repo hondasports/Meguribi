@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { AgentEvent } from "@meguribi/core";
+import type { AgentEvent, AgentTerminationResult } from "@meguribi/core";
 import { redactDiagnosticText, redactJsonValue } from "./redact.js";
 
 export class DevinArtifactWriteError extends Error {
@@ -50,6 +50,7 @@ export class DevinAgentArtifactStore {
   readonly stderrPath: string;
   readonly sessionPath: string;
   readonly resultPath: string;
+  readonly terminationPath: string;
 
   private sequence = 0;
   private initialized = false;
@@ -60,6 +61,7 @@ export class DevinAgentArtifactStore {
     this.stderrPath = path.join(root, "stderr.log");
     this.sessionPath = path.join(root, "session.json");
     this.resultPath = path.join(root, "result.json");
+    this.terminationPath = path.join(root, "termination.json");
   }
 
   nextSequence(): number {
@@ -144,6 +146,11 @@ export class DevinAgentArtifactStore {
   async writeResult(result: DevinAgentResultArtifact): Promise<void> {
     await this.ensureReady();
     await this.writeJson(this.resultPath, result);
+  }
+
+  async writeTermination(result: AgentTerminationResult): Promise<void> {
+    await this.ensureReady();
+    await this.writeJson(this.terminationPath, result);
   }
 
   private async ensureReady(): Promise<void> {

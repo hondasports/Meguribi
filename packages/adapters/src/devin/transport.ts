@@ -6,6 +6,11 @@ import {
   DevinAcpTransportError,
   toDevinAcpTransportError,
 } from "./transport-error.js";
+import {
+  normalizeAcpPermissionRequest,
+  toAcpPermissionResponse,
+  type PermissionMediator,
+} from "./permissions.js";
 
 /**
  * How long a turn stays open against the session process lifecycle after ACP
@@ -38,6 +43,8 @@ export interface StartDevinAcpInput {
   diagnosis: DevinDiagnosis;
   runner?: ProcessRunner;
   clientInfo?: { name: string; version: string };
+  permissionMediator?: PermissionMediator;
+  protectedPaths?: string[];
 }
 
 /**
@@ -59,6 +66,7 @@ export type RawDevinAcpEvent =
       requestId: string;
       summary: string;
       raw: Record<string, unknown>;
+      decision?: { outcome: "approve" | "deny" | "confirm"; reason: string };
     }
   | {
       kind: "turn_completed";
@@ -303,6 +311,9 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
     private readonly handlers: LiveHandlers,
     private readonly lifecycle: AcpProcessLifecycle,
     private readonly postTurnLivenessMs: number,
+    private readonly cwd: string,
+    private readonly permissionMediator?: PermissionMediator,
+    private readonly protectedPaths: string[] = [],
   ) {}
 
   stderrText(): string {
@@ -365,10 +376,17 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
         },
       });
     };
-    this.handlers.onPermission = (params) => {
+    this.handlers.onPermission = async (params) => {
       const at = new Date().toISOString();
       const requestId = params.toolCall.toolCallId;
       const summary = params.toolCall.title ?? params.toolCall.name ?? "unknown tool";
+      const normalized = normalizeAcpPermissionRequest(params, {
+        cwd: this.cwd,
+        protectedPaths: this.protectedPaths,
+      });
+      const decision = this.permissionMediator
+        ? await this.permissionMediator.decide(normalized)
+        : { outcome: "deny" as const, reason: "no permission policy was provided" };
       push({
         kind: "permission_request",
         sequence: this.nextSequence(),
@@ -377,9 +395,9 @@ class DevinAcpConnectionImpl implements DevinAcpConnection {
         requestId,
         summary,
         raw: params as unknown as Record<string, unknown>,
+        decision,
       });
-      // Permission mediation is Issue #16. Fail-closed auto-deny keeps the protocol moving.
-      return { outcome: { outcome: "cancelled" } };
+      return toAcpPermissionResponse(decision, params.options);
     };
 
     const promptPromise = this.connection
@@ -562,6 +580,9 @@ export class DevinAcpTransportImpl implements DevinAcpTransport {
         handlers,
         lifecycle,
         postTurnLivenessMs,
+        input.cwd,
+        input.permissionMediator,
+        input.protectedPaths ?? [],
       );
     } catch (error) {
       lifecycle.markIntentionalShutdown();

@@ -70,3 +70,26 @@ export {
   toDevinAcpTransportError,
 } from "./transport-error.js";
 export type { DevinAcpTransportErrorCode } from "./transport-error.js";
+export {
+  buildDevinPrompt,
+  DevinPromptBuildError,
+  DEVIN_PROMPT_VERSION,
+} from "./prompt.js";
+export type { BuiltDevinPrompt } from "./prompt.js";
+export {
+  createPermissionMediator,
+  normalizeAcpPermissionRequest,
+  toAcpPermissionResponse,
+} from "./permissions.js";
+export type {
+  NormalizePermissionOptions,
+  PermissionDecisionRecord,
+  PermissionMediator,
+} from "./permissions.js";
+export {
+  detectMcpConnection,
+  evaluateMcpOutput,
+  formatMcpSecurityAlert,
+} from "./mcp.js";
+export { DevinAcpShutdownController } from "./shutdown.js";
+export type { ShutdownOptions } from "./shutdown.js";

@@ -32,6 +32,16 @@ export {
   DevinDiagnosisSchema,
   InheritedMcpPolicySchema,
 } from "./devin-diagnosis.js";
+export {
+  AgentTerminationResultSchema,
+  ImplementationContextSchema,
+  PermissionRequestSchema,
+} from "./devin-safety.js";
+export type {
+  AgentTerminationResult,
+  ImplementationContext,
+  PermissionRequest,
+} from "./devin-safety.js";
 export type {
   DiagnosisError,
   DiagnosisErrorCode,

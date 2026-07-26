@@ -154,6 +154,12 @@ Responsibilities:
 
 Devin command-line flags are configuration- or driver-owned because they may vary by installed version. Core workflows must not hard-code a specific flag set. A future Devin API implementation should preserve the same adapter interface.
 
+#### Devin execution safety boundary
+
+`PermissionRequest`, inherited-MCP decisions, implementation prompts, Git/worktree snapshots, and shutdown are normalized and checked inside the Devin ACP adapter. ACP SDK request/response types and CLI-specific output do not leak into core workflows. Issue text, comments, and fix instructions are delimited as untrusted content by the prompt builder; permission and Git decisions are enforced independently by PolicyEngine.
+
+`DevinAcpShutdownController` performs cancel, stdin close, grace period, termination, and force escalation at most once and stores the result in `termination.json`. Git snapshot changes to HEAD, branch, remote, local config, protected paths, symlinks, or diff limits feed the publish gate. Git diff remains authoritative over agent-reported changed files.
+
 ### `Verifier`
 
 Run repository-defined commands independently from agent claims:

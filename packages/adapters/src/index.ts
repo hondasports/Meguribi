@@ -1,5 +1,18 @@
 export * from "./codex/index.js";
 export {
+  captureGitWorktreeSnapshot,
+  compareGitWorktreeSnapshots,
+  ProcessGitCommandRunner,
+} from "./git-boundary.js";
+export type {
+  GitCommandResult,
+  GitCommandRunner,
+  GitSafetyComparison,
+  GitSafetyComparisonInput,
+  GitWorktreeSnapshot,
+  GitWorktreeSnapshotInput,
+} from "./git-boundary.js";
+export {
   assertDevinRunnable,
   createDevinAcpTransport,
   DEFAULT_POST_TURN_LIVENESS_MS,
@@ -14,6 +27,14 @@ export {
   isDevinAcpTransportError,
   isSecretKey,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+  buildDevinPrompt,
+  createPermissionMediator,
+  detectMcpConnection,
+  DevinAcpShutdownController,
+  evaluateMcpOutput,
+  formatMcpSecurityAlert,
+  normalizeAcpPermissionRequest,
+  toAcpPermissionResponse,
   normalizePermissionRequest,
   normalizeSessionStarted,
   normalizeSessionUpdate,
@@ -36,6 +57,12 @@ export type {
   DevinAcpSession,
   DevinAcpTransport,
   DevinAcpTransportErrorCode,
+  BuiltDevinPrompt,
+  DevinPromptBuildError,
+  NormalizePermissionOptions,
+  PermissionDecisionRecord,
+  PermissionMediator,
+  ShutdownOptions,
   DevinAgentResultArtifact,
   DevinAgentSessionMetadata,
   DiagnoseDevinOptions,

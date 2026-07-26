@@ -163,6 +163,12 @@ Codex TypeScript SDK は Codex CLI を子プロセスとして起動し、JSONL 
 
 Devin CLI の引数はバージョン差異を吸収できるよう設定駆動にします。コア層に特定フラグをハードコードしません。
 
+#### Devin 実行安全境界
+
+`PermissionRequest`、MCP 継承判定、実装 prompt、Git/worktree snapshot、shutdown は Devin ACP adapter の内側で正規化・検証します。ACP SDK の request / response 型や CLI 固有の出力を core workflow へ漏らしません。Issue、comment、fix instruction は untrusted として prompt builder が区切り、permission と Git の判定は prompt とは独立した PolicyEngine が行います。
+
+`DevinAcpShutdownController` は cancel、stdin close、grace period、terminate、force escalation を一度だけ実行し、`termination.json` へ結果を保存します。Git snapshot の HEAD、branch、remote、local config、protected path、symlink、diff limit の違反は publish gate の入力となり、Agent が申告した changed files より Git diff を優先します。
+
 将来 API 連携へ変更しても、`DevinAdapter` のインターフェースは維持します。
 
 ### Verifier

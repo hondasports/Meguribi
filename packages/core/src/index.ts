@@ -5,6 +5,27 @@ export type { AgentExecutionResult } from "./agent-execution-result.js";
 export type { AgentPrompt } from "./agent-prompt.js";
 export type { AgentSession } from "./agent-session.js";
 export type {
+  AgentTerminationReason,
+  AgentTerminationResult,
+} from "./agent-termination.js";
+export type {
+  ImplementationContext,
+  UntrustedSource,
+} from "./implementation-context.js";
+export {
+  decideInheritedMcpPolicy,
+  type McpDetection,
+  type McpPolicyDecision,
+  type McpTransport,
+} from "./mcp-policy.js";
+export {
+  decidePermission,
+  type PermissionDecision,
+  type PermissionOperation,
+  type PermissionPolicyContext,
+  type PermissionRequest,
+} from "./permission-policy.js";
+export type {
   CodexArtifactMetadata,
   CodexArtifactRole,
   CodexEventRecord,
