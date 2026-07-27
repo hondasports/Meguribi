@@ -117,7 +117,7 @@ export async function createDeliveryDeps(
 
   const config = await loadImplementerConfig({
     repositoryPath: cwd,
-    nonInteractive: false,
+    nonInteractive,
     cli: options.implementer !== undefined ? { implementer: options.implementer } : {},
   });
 

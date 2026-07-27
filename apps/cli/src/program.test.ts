@@ -66,7 +66,7 @@ describe("runDoctor", () => {
     expect(chunks.join("")).not.toContain("✓");
   });
 
-  it("passes nonInteractive to diagnose and still emits structured JSON for warn policy", async () => {
+  it("passes nonInteractive to loadConfig and diagnose while still emitting structured JSON for warn policy", async () => {
     const chunks: string[] = [];
     let sawNonInteractive: boolean | undefined;
     let loadConfigNonInteractive: boolean | undefined;
@@ -112,7 +112,7 @@ describe("runDoctor", () => {
       },
     );
 
-    expect(loadConfigNonInteractive).toBe(false);
+    expect(loadConfigNonInteractive).toBe(true);
     expect(sawNonInteractive).toBe(true);
     expect(sawMinimum).toBe("3000.0.0");
     expect(result.exitCode).toBe(1);
