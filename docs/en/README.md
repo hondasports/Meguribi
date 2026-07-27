@@ -2,7 +2,7 @@
 
 Meguribi is a personal CLI that connects hypotheses, problems, requirements, implementation, pull requests, and post-release learning for existing GitHub repositories.
 
-It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Codex, Devin, and existing CI instead of becoming a hosted development platform.
+It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Codex, ACP-based implementation agents such as Devin and Cursor, and existing CI instead of becoming a hosted development platform.
 
 ## Recommended reading order
 
@@ -22,11 +22,15 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 | Product concept and growth loop | Product / business / developers | What Meguribi solves and where human decisions are required |
 | System architecture | Implementers | Components, dependency direction, and execution sequences |
 | GitHub workflow model | Users / implementers | Issue types, labels, branches, and pull requests |
-| CLI and integration specification | Implementers | Commands, configuration, Codex and Devin integration |
+| CLI and integration specification | Implementers | Commands, configuration, and agent integrations |
 | Artifacts, state, and schemas | Implementers | Local storage and structured agent output |
 | Safety and operations | Users / implementers | Permissions, blocked operations, retry, and recovery |
 | Implementation roadmap | Implementers | MVP order, issue decomposition, and completion criteria |
 | Architecture decision records | Implementers | Adopted and rejected decisions, PoC evidence, and revisit conditions |
+
+## Current implementation scope
+
+The implemented delivery CLI currently consists of `doctor`, `run`, and `resume`. `doctor` diagnoses ACP readiness for Devin or Cursor, while `run` and `resume` use the explicitly selected `AgentAdapter`. Production GitHub and Git adapters, along with the product-growth commands, are still specification/foundation work.
 
 ## Key decisions
 

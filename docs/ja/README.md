@@ -2,7 +2,7 @@
 
 Meguribi は、既存の GitHub リポジトリに対して、仮説から Pull Request、効果測定までをつなぐ個人向け CLI です。
 
-大規模な開発プラットフォームを目指さず、GitHub Issue、Git worktree、Codex、Devin、既存 CI を薄く連携させます。
+大規模な開発プラットフォームを目指さず、GitHub Issue、Git worktree、Codex、ACP ベースの実装エージェント（Devin / Cursor）、既存 CI を薄く連携させます。
 
 ## 推奨する読み順
 
@@ -22,11 +22,15 @@ Meguribi は、既存の GitHub リポジトリに対して、仮説から Pull 
 | プロダクト構想と成長ループ | Product / BIZ / 開発者 | 何を解決し、どこに人間判断を置くか |
 | システムアーキテクチャ | 実装者 | コンポーネント、依存方向、処理シーケンス |
 | GitHub 運用モデル | 利用者 / 実装者 | Issue、ラベル、ブランチ、PR の扱い |
-| CLI と外部連携仕様 | 実装者 | コマンド、設定、Codex・Devin 接続 |
+| CLI と外部連携仕様 | 実装者 | コマンド、設定、Codex・実装エージェント接続 |
 | 成果物・状態・スキーマ | 実装者 | ローカル保存形式と構造化出力 |
 | 安全設計と運用 | 利用者 / 実装者 | 権限、禁止操作、再実行、障害対応 |
 | 実装ロードマップ | 実装者 | MVP の順序、Issue 分割、完了条件 |
 | 設計判断記録 | 実装者 | PoC結果を踏まえた採用・不採用判断と再検討条件 |
+
+## 現在の実装範囲
+
+実装済みの delivery CLI は `doctor`、`run`、`resume` です。`doctor` は Devin / Cursor の ACP 実行可否を診断し、`run` と `resume` は明示的に選択した AgentAdapter を利用します。GitHub / Git の本番アダプターと成長ループ系コマンドは、現時点では仕様・土台の段階です。
 
 ## 主要な設計判断
 

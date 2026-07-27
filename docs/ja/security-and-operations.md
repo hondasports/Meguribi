@@ -43,7 +43,7 @@ Issue、コメント、リポジトリ内文書はコンテキストであり、
 - Issue ごとに専用 branch と worktree を作る。
 - 利用者の通常 checkout を Agent の作業ディレクトリにしない。
 - Codex の計画・レビューは原則読み取り専用。
-- Devin だけが実装フェーズで worktree を変更できる。
+- 選択した実装エージェントだけが実装フェーズで worktree を変更できる。
 - 同じ worktree へ複数 Agent を同時に書き込ませない。
 - worktree 外のパスへの書き込みを検出した場合は停止する。
 
@@ -255,7 +255,7 @@ Ctrl+C / signal を受けた場合:
 - branch remote tracking
 - 既存 PR の head SHA
 - 設定 digest
-- Codex / Devin session の利用可否
+- Codex / 選択した実装エージェントの session 利用可否
 
 差異がある場合は、どの成果物を再生成するか人間へ提示します。
 

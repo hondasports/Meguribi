@@ -10,7 +10,7 @@ Meguribi は、最初からプロダクト開発基盤を作らず、実際に�
 GitHub Issue
   -> Codex 技術計画
   -> Git worktree
-  -> Devin 実装
+  -> ACP 実装エージェント（Devin / Cursor）
   -> Meguribi による検証
   -> Codex レビュー
   -> Draft Pull Request
@@ -63,6 +63,18 @@ tests/fixtures/
 
 既存 GitHub Issue から Draft PR までの一周を完成させる。
 
+### 現在の実装スナップショット
+
+現在のリポジトリには delivery loop の基盤が実装されています。
+
+- `doctor` は明示的に選択した Devin / Cursor CLI の version、認証、ACP capability、継承 MCP policy を診断する。
+- `run` と `resume` は CLI に登録され、delivery use case を呼び出す。
+- `AgentAdapter` は `createDevinAcpAdapter` と `createCursorAcpAdapter` が実装する。
+- ACP session は redaction 済み event、prompt、Git boundary、正規化 result、termination result を保存する。
+- 既定 wiring は実際の RunStore と PolicyEngine を使うが、専用アダプターが完成するまで GitHub / Git port は fake を使う。
+
+したがって Phase 1 の完了条件はまだ満たしていません。残作業は本番 GitHub / Git adapter と、計画済みの `init`、`plan`、`review`、`cleanup` の CLI surface です。
+
 ### 3.1 `init`
 
 実装内容:
@@ -70,7 +82,7 @@ tests/fixtures/
 - ローカル Git リポジトリ解決
 - remote URL 正規化
 - GitHub repository 解決
-- `git` / `gh` / Codex / Devin の存在確認
+- `git` / `gh` / Codex / 選択した Agent の存在確認
 - 認証診断
 - default branch 取得
 - `.meguribi.yml` 草案生成
@@ -152,7 +164,7 @@ tests/fixtures/
 - 不正出力を成功扱いしない。
 - Codex がファイルを変更していないことを検証する。
 
-### 3.6 Devin adapter: implement
+### 3.6 ACP 実装エージェント adapter
 
 実装内容:
 
@@ -166,9 +178,9 @@ tests/fixtures/
 
 完了条件:
 
-- mock executable を使う integration test がある。
+- Devin / Cursor の fake executable・ACP server を使う integration test がある。
 - 非対応バージョンで明示的に失敗する。
-- Agent が GitHub / Git 操作を担当しない。
+- 実装エージェントが GitHub / branch / commit / push 操作を担当しない。
 - worktree 外変更を検出できる。
 
 ### 3.7 Verifier
@@ -216,7 +228,7 @@ tests/fixtures/
 - approval 確認
 - worktree
 - plan 再利用または再生成
-- Devin
+- 選択した実装エージェント
 - verify
 - Codex review
 - commit / push
@@ -327,7 +339,7 @@ tests/fixtures/
 4. `feat: add GitHub adapter using gh CLI`
 5. `feat: add Git worktree lifecycle`
 6. `feat: add Codex planning adapter`
-7. `feat: add Devin implementation adapter`
+7. `feat: add ACP implementation-agent adapters (Devin and Cursor)`
 8. `feat: add deterministic verifier`
 9. `feat: add Codex code review adapter`
 10. `feat: implement plan command`
@@ -358,7 +370,7 @@ tests/fixtures/
 - fake `gh` executable
 - temporary Git repository / worktree
 - fake Codex adapter
-- fake Devin executable
+- Devin / Cursor の fake ACP executable・server
 - verifier command execution
 - signal / timeout
 
@@ -408,7 +420,7 @@ Phase 1 完了時に、専用の検証リポジトリで次を確認します。
 - `review`
 - `resume`
 - `cleanup`
-- GitHub / Git / Codex / Devin adapter
+- GitHub / Git / Codex / AgentAdapter 実装
 - RunStore
 - Verifier
 - PolicyEngine

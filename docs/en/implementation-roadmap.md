@@ -10,7 +10,7 @@ The first complete loop is:
 GitHub Issue
   -> Codex technical plan
   -> Git worktree
-  -> Devin implementation
+  -> ACP implementation agent (Devin or Cursor)
   -> Meguribi verification
   -> Codex review
   -> Draft pull request
@@ -62,6 +62,18 @@ tests/fixtures/
 
 Complete an existing GitHub Issue to draft-PR workflow.
 
+### Current implementation snapshot
+
+The repository currently has a working foundation for the delivery loop:
+
+- `doctor` diagnoses the explicitly selected Devin or Cursor CLI, including version, authentication, ACP capability, and inherited-MCP policy.
+- `run` and `resume` are registered in the CLI and call the delivery use cases.
+- `AgentAdapter` is implemented by `createDevinAcpAdapter` and `createCursorAcpAdapter`.
+- ACP sessions persist redacted events, prompts, Git-boundary results, normalized results, and termination results.
+- The default wiring uses the real run store and policy engine, but GitHub and Git ports still use fakes until their dedicated adapters land.
+
+The Phase 1 completion criteria are therefore not met yet. The remaining work includes the production GitHub/Git adapters and the planned `init`, `plan`, `review`, and `cleanup` command surfaces.
+
 ### 3.1 `init`
 
 Implement:
@@ -69,7 +81,7 @@ Implement:
 - Local Git repository resolution
 - Remote URL normalization
 - GitHub repository resolution
-- `git`, `gh`, Codex, and Devin diagnostics
+- `git`, `gh`, Codex, and selected-agent diagnostics
 - Authentication check
 - Default branch detection
 - `.meguribi.yml` draft generation
@@ -149,7 +161,7 @@ Completion:
 - Never accept invalid output as success.
 - Verify that planning did not modify files.
 
-### 3.6 Devin implementation adapter
+### 3.6 ACP implementation-agent adapter
 
 Implement:
 
@@ -163,9 +175,9 @@ Implement:
 
 Completion:
 
-- Integration test with a fake executable.
+- Integration tests with fake Devin and Cursor executables/ACP servers.
 - Explicit failure for unsupported versions.
-- Devin does not own GitHub, branch, commit, or push operations.
+- The implementation agent does not own GitHub, branch, commit, or push operations.
 - Detect writes outside the worktree.
 
 ### 3.7 Verifier
@@ -219,7 +231,7 @@ Completion:
 - Validate approval.
 - Create worktree.
 - Reuse or regenerate plan.
-- Run Devin.
+- Run the selected implementation agent.
 - Verify.
 - Run Codex review.
 - Commit and push.
@@ -324,7 +336,7 @@ Do not implement these until a real problem requires them, such as excessive CLI
 4. `feat: add GitHub adapter using gh CLI`
 5. `feat: add Git worktree lifecycle`
 6. `feat: add Codex planning adapter`
-7. `feat: add Devin implementation adapter`
+7. `feat: add ACP implementation-agent adapters (Devin and Cursor)`
 8. `feat: add deterministic verifier`
 9. `feat: add Codex code review adapter`
 10. `feat: implement plan command`
@@ -355,7 +367,7 @@ Each Issue should be independently testable. Avoid combining a new adapter and t
 - Fake `gh` executable
 - Temporary Git repository and worktree
 - Fake Codex adapter
-- Fake Devin executable
+- Fake Devin and Cursor ACP executables/servers
 - Verification command execution
 - Signal and timeout handling
 
@@ -403,7 +415,7 @@ First release:
 - `review`
 - `resume`
 - `cleanup`
-- GitHub, Git, Codex, and Devin adapters
+- GitHub, Git, Codex, and AgentAdapter implementations
 - RunStore
 - Verifier
 - PolicyEngine
