@@ -51,7 +51,7 @@ export async function runDoctor(
     repositoryPath: cwd,
     // 曖昧な MCP ポリシーは diagnose 側で構造化して返す。
     // config loader の nonInteractive throw には乗せない。
-    nonInteractive: false,
+    nonInteractive: options.nonInteractive ?? false,
     cli: options,
   });
 
