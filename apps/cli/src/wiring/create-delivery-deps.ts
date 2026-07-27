@@ -131,9 +131,10 @@ export async function createDeliveryDeps(
       probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
       minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
     });
+    const resolvedExecutable = diagnosis.executable.path ?? config.config.executable;
 
     const implementer = createCursorAcpAdapter({
-      executable: config.config.executable,
+      executable: resolvedExecutable,
       diagnosis,
       inheritedMcpPolicy,
       mode: nonInteractive ? "non-interactive" : "interactive",
@@ -155,7 +156,7 @@ export async function createDeliveryDeps(
         runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
         async assertImplementerReady() {
           await preflightCursor({
-            executable: config.config.executable,
+            executable: resolvedExecutable,
             inheritedMcpPolicy,
             nonInteractive,
             cwd,
@@ -165,7 +166,7 @@ export async function createDeliveryDeps(
         },
         async assertDevinReady() {
           await preflightCursor({
-            executable: config.config.executable,
+            executable: resolvedExecutable,
             inheritedMcpPolicy,
             nonInteractive,
             cwd,
