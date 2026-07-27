@@ -34,8 +34,8 @@ meguribi init ./path/to/repository
 
 - Git リポジトリか
 - remote と GitHub リポジトリが一致するか
-- `git`、`gh`、Codex、Devin の利用可否
-- GitHub / Codex / Devin の認証状態
+- `git`、`gh`、Codex、選択した実装エージェントの利用可否
+- GitHub / Codex / 選択した実装エージェントの認証状態
 - default branch
 - package manager
 - 検証コマンド候補
@@ -163,7 +163,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 - `--allow-risk <level>`
 - `--dry-run`
 
-`--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で Devin session の cancel / shutdown に伝播します。
+`--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で選択した Agent session の cancel / shutdown に伝播します。
 
 本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は明示された実装エージェントに応じて `createDevinAcpAdapter` または `createCursorAcpAdapter` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。GitHub/Git は専用アダプター実装までの暫定として fake を接続します。`MEGURIBI_DELIVERY_FAKES=1` では Codex/Verifier も fake になります。このフラグ無しで Codex SDK を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
 
@@ -370,9 +370,9 @@ Codex の structured output は runtime schema と JSON Schema の両方で検�
 
 Devin と Cursor は `AgentAdapter` port を共有します。ACP SDK 型、実行ファイル名、診断、prompt、成果物ストア、transport は各 adapter の内側に閉じ込め、delivery workflow は正規化された `ImplementationResult` だけを受け取ります。
 
-### 8.1 採用する接続方式
+### 8.1 ACP 接続方式
 
-MVP は `DevinAcpAdapter` を採用し、Meguribi が `devin acp` を Issue 専用 worktree を `cwd` として子プロセス起動します。人間が事前に Devin CLI を起動しておく必要はありません。
+MVP は明示された implementer に応じて `DevinAcpAdapter` または `CursorAcpAdapter` を使います。以下は Devin の例です。Meguribi が `devin acp` を Issue 専用 worktree を `cwd` として子プロセス起動し、人間が事前に Devin CLI を起動しておく必要はありません。
 
 ```text
 Meguribi
@@ -389,7 +389,7 @@ export interface DevinAdapter {
 }
 ```
 
-`@agentclientprotocol/sdk` は `@meguribi/adapters` の依存としてのみ使用する。SDK の request / event / error 型を core・CLI・RunStore へ漏らさない。transport は `ManagedProcess` で `devin acp` を起動し、`initialize` / `session/new` / `session/prompt` / `session/update` を扱う。stdout は ACP 通信専用、stderr は診断ログとして分離する。permission の PolicyEngine 仲介と完全な shutdown シーケンスは後続 Issue で完成させる。
+`@agentclientprotocol/sdk` は `@meguribi/adapters` の依存としてのみ使用する。SDK の request / event / error 型を core・CLI・RunStore へ漏らさない。各 transport は選択した ACP executable を `ManagedProcess` で起動し、`initialize` / `session/new` / `session/prompt` / `session/update` を扱う。stdout は ACP 通信専用、stderr は診断ログとして分離する。permission の PolicyEngine 仲介と共通の冪等な shutdown シーケンスは adapter 境界で強制する。
 
 ACP 固有の request / event / error 型は adapter 内に閉じ込め、コア層では正規化した `AgentEvent` とドメイン型だけを扱います。
 

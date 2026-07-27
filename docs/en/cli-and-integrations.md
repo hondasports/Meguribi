@@ -33,8 +33,8 @@ meguribi init ./path/to/repository
 Checks include:
 
 - Git repository and remote identity
-- `git`, `gh`, Codex, and Devin availability
-- GitHub, Codex, and Devin authentication
+- `git`, `gh`, Codex, and the selected implementation-agent availability
+- GitHub, Codex, and the selected implementation-agent authentication
 - default branch
 - package manager and verification commands
 - `AGENTS.md`
@@ -153,7 +153,7 @@ Main options:
 - `--allow-risk <level>`
 - `--dry-run`
 
-With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into Devin session cancel / shutdown.
+With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into the selected agent session cancel / shutdown.
 
 Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) selects `createDevinAcpAdapter` or `createCursorAcpAdapter` from the explicit implementer setting, and uses `FileSystemRunStore` and `createDefaultPolicyEngine`. Until dedicated GitHub/Git adapters land, those ports use fakes. Set `MEGURIBI_DELIVERY_FAKES=1` to also fake Codex/Verifier; without that flag, Codex wiring fails closed if the Codex SDK cannot be constructed (no silent auto-approve fake). Fixture tests use fakes and do not call real `gh` or real agent CLIs.
 
@@ -360,9 +360,9 @@ The thread ID, source digests, duration, and redacted event log are stored as Me
 
 Devin and Cursor share the `AgentAdapter` contract. Their ACP SDK types, executable names, diagnostics, prompts, artifact stores, and transports remain inside their adapters; delivery workflow code only receives normalized `ImplementationResult` values.
 
-### 8.1 Adopted transport
+### 8.1 ACP transport
 
-The MVP adopts `DevinAcpAdapter`. Meguribi launches `devin acp` as a child process with the Issue-specific worktree as `cwd`. The user does not pre-launch Devin.
+The MVP uses `DevinAcpAdapter` or `CursorAcpAdapter` according to the explicit implementer selection. The following example shows the Devin path: Meguribi launches `devin acp` as a child process with the Issue-specific worktree as `cwd`; the user does not pre-launch Devin.
 
 ```text
 Meguribi
@@ -379,7 +379,7 @@ export interface DevinAdapter {
 }
 ```
 
-`@agentclientprotocol/sdk` is a dependency of `@meguribi/adapters` only. SDK request / event / error types must not leak into core, CLI, or RunStore. Transport starts `devin acp` through `ManagedProcess` and handles `initialize` / `session/new` / `session/prompt` / `session/update`. stdout is reserved for ACP traffic; stderr is diagnostic-only. PolicyEngine permission mediation and the full shutdown sequence are completed in later issues.
+`@agentclientprotocol/sdk` is a dependency of `@meguribi/adapters` only. SDK request / event / error types must not leak into core, CLI, or RunStore. Each transport starts its selected ACP executable through `ManagedProcess` and handles `initialize` / `session/new` / `session/prompt` / `session/update`. stdout is reserved for ACP traffic; stderr is diagnostic-only. PolicyEngine permission mediation and the shared idempotent shutdown sequence are enforced at the adapter boundary.
 
 ACP-specific requests, events, and errors remain inside the adapter. Core workflows consume normalized `AgentEvent` and domain types.
 

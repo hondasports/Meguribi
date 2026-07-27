@@ -163,9 +163,9 @@ Purpose:
 - Inspect a target repository and produce a technical plan.
 - Review implementation diffs and verification results.
 
-### Devin
+### Implementation agent (Devin or Cursor)
 
-- Implement approved requirements and the Codex technical plan.
+- Implement approved requirements and the Codex technical plan through the selected ACP agent.
 - Add required tests.
 - Modify only the assigned worktree.
 - Report unresolved items.
