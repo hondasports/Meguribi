@@ -2,5 +2,6 @@ packages:
   - "packages/*"
   - "apps/*"
   - "experiments/devin-acp"
+  - "experiments/cursor-acp"
 allowBuilds:
   esbuild: true

@@ -132,10 +132,12 @@ export async function createDeliveryDeps(
       minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
     });
     const resolvedExecutable = diagnosis.executable.path ?? config.config.executable;
+    let currentDiagnosis = diagnosis;
 
     const implementer = createCursorAcpAdapter({
       executable: resolvedExecutable,
       diagnosis,
+      getDiagnosis: () => currentDiagnosis,
       inheritedMcpPolicy,
       mode: nonInteractive ? "non-interactive" : "interactive",
       explicitAllowInheritedMcp: allowInheritedMcp,
@@ -155,7 +157,7 @@ export async function createDeliveryDeps(
         policy: createDefaultPolicyEngine(),
         runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
         async assertImplementerReady() {
-          await preflightCursor({
+          currentDiagnosis = await preflightCursor({
             executable: resolvedExecutable,
             inheritedMcpPolicy,
             nonInteractive,
@@ -165,7 +167,7 @@ export async function createDeliveryDeps(
           });
         },
         async assertDevinReady() {
-          await preflightCursor({
+          currentDiagnosis = await preflightCursor({
             executable: resolvedExecutable,
             inheritedMcpPolicy,
             nonInteractive,
@@ -187,10 +189,12 @@ export async function createDeliveryDeps(
     probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
     minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   });
+  let currentDiagnosis = diagnosis;
 
   const implementer = createDevinAcpAdapter({
     executable: config.config.executable,
     diagnosis,
+    getDiagnosis: () => currentDiagnosis,
     inheritedMcpPolicy,
     mode: nonInteractive ? "non-interactive" : "interactive",
     explicitAllowInheritedMcp: allowInheritedMcp,
@@ -210,7 +214,7 @@ export async function createDeliveryDeps(
       policy: createDefaultPolicyEngine(),
       runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
       async assertImplementerReady() {
-        await preflightDevin({
+        currentDiagnosis = await preflightDevin({
           executable: config.config.executable,
           inheritedMcpPolicy,
           nonInteractive,
@@ -220,7 +224,7 @@ export async function createDeliveryDeps(
         });
       },
       async assertDevinReady() {
-        await preflightDevin({
+        currentDiagnosis = await preflightDevin({
           executable: config.config.executable,
           inheritedMcpPolicy,
           nonInteractive,

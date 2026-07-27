@@ -47,6 +47,7 @@ export interface StartAcpInput {
    */
   postTurnLivenessMs?: number;
   diagnosis: AgentDiagnosis;
+  resumeSessionId?: string;
   assertRunnable: (diagnosis: AgentDiagnosis) => void;
   runner?: ProcessRunner;
   clientInfo?: { name: string; version: string };
@@ -100,6 +101,11 @@ export interface AcpConnection {
   closeInput(): Promise<void>;
   waitForProcessExit(timeoutMs?: number): Promise<ProcessExit>;
   terminate(graceMs?: number): Promise<ProcessExit>;
+  /**
+   * Whether the agent advertised the `session/load` capability in initialize response.
+   */
+  readonly supportsSessionLoad: boolean;
+  loadSession(input: { sessionId: string; cwd: string }): Promise<{ sessionId: string }>;
 }
 
 export interface AcpTransport {
@@ -323,6 +329,7 @@ class AcpConnectionImpl implements AcpConnection {
   constructor(
     readonly sessionId: string,
     readonly protocolVersion: number,
+    readonly supportsSessionLoad: boolean,
     private readonly connection: acp.ClientSideConnection,
     private readonly processHandle: ManagedProcess,
     private readonly stderr: { getText: () => string; done: Promise<void> },
@@ -517,6 +524,15 @@ class AcpConnectionImpl implements AcpConnection {
     this.lifecycle.markIntentionalShutdown();
     return this.processHandle.terminateTree({ graceMs });
   }
+
+  async loadSession(input: { sessionId: string; cwd: string }): Promise<{ sessionId: string }> {
+    await this.connection.loadSession({
+      sessionId: input.sessionId,
+      cwd: input.cwd,
+      mcpServers: [],
+    });
+    return { sessionId: input.sessionId };
+  }
 }
 
 export class AcpTransportImpl implements AcpTransport {
@@ -606,20 +622,40 @@ export class AcpTransportImpl implements AcpTransport {
         );
       }
 
-      const sessionResponse = await withTimeout(
-        guard(
-          connection.newSession({
-            cwd: input.cwd,
-            mcpServers: [],
-          }),
-        ),
-        input.startupTimeoutMs,
-        "ACP session/new",
-      );
+      const supportsSessionLoad = initializeResponse.agentCapabilities?.loadSession === true;
+
+      let sessionId: string;
+      if (input.resumeSessionId && supportsSessionLoad) {
+        await withTimeout(
+          guard(
+            connection.loadSession({
+              sessionId: input.resumeSessionId,
+              cwd: input.cwd,
+              mcpServers: [],
+            }),
+          ),
+          input.startupTimeoutMs,
+          "ACP session/load",
+        );
+        sessionId = input.resumeSessionId;
+      } else {
+        const sessionResponse = await withTimeout(
+          guard(
+            connection.newSession({
+              cwd: input.cwd,
+              mcpServers: [],
+            }),
+          ),
+          input.startupTimeoutMs,
+          "ACP session/new",
+        );
+        sessionId = sessionResponse.sessionId;
+      }
 
       return new AcpConnectionImpl(
-        sessionResponse.sessionId,
+        sessionId,
         initializeResponse.protocolVersion,
+        supportsSessionLoad,
         connection,
         processHandle,
         stderr,

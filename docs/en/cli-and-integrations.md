@@ -512,6 +512,33 @@ A warning is printed before the run and an interactive prompt is shown on a TTY.
 
 Only a temporary fixture is used. The smoke does not commit, push, create PRs, update Issues, modify a real repository, or connect to external MCP servers. Devin configuration and authentication cannot be guaranteed to be isolated simultaneously, so credentials are never copied or stored and the smoke does not claim complete MCP isolation. `compatibility-result.json` and the raw/normalized event artifacts, together with their exit code, are the evidence for the result.
 
+## 8.9 Real Cursor CLI compatibility smoke
+
+The Issue #32 real-device compatibility smoke is a manual check separated from the normal delivery workflow, `pnpm test`, and CI. It uses the dedicated `experiments/cursor-acp` script and exercises the existing `createCursorAcpAdapter` facade, a temporary Git repository, and an Issue-like worktree through the ACP lifecycle.
+
+```powershell
+$env:MEGURIBI_RUN_REAL_CURSOR_SMOKE = "1"
+pnpm smoke:cursor-acp -- --yes
+```
+
+A warning is printed before the run and an interactive prompt is shown on a TTY. For non-interactive execution, pass `--yes`. The smoke refuses to start the external agent or stops during the run when:
+
+- explicit opt-in is missing;
+- Cursor CLI is unauthenticated, does not support ACP, or cannot be diagnosed;
+- inherited MCP handling is not explicit for non-interactive execution;
+- an outside-worktree write, protected-path change, or Git boundary violation is detected; or
+- stdin close, SIGTERM, force termination when required, or residual-process checks do not complete.
+
+Only a temporary fixture is used. The smoke does not commit, push, create PRs, update Issues, modify a real repository, or connect to external MCP servers. Cursor configuration and authentication cannot be guaranteed to be isolated simultaneously, so credentials are never copied or stored and the smoke does not claim complete MCP isolation. `compatibility-result.json` and the raw/normalized event artifacts, together with their exit code, are the evidence for the result.
+
+Fake ACP server smoke:
+
+```powershell
+pnpm smoke:cursor-acp:fake
+$env:MEGURIBI_FAKE_CURSOR_SCENARIO = "write-outside"
+pnpm smoke:cursor-acp:fake
+```
+
 ## 9. GitHub integration
 
 The MVP uses `gh` CLI and checks version, authentication, and repository identity before work begins.
