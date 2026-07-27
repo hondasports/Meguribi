@@ -27,6 +27,7 @@ export interface CursorAcpAdapterOptions {
   executableArgs?: string[];
   acpArgs?: string[];
   diagnosis: AgentDiagnosis;
+  getDiagnosis?: () => Promise<AgentDiagnosis> | AgentDiagnosis;
   inheritedMcpPolicy: InheritedMcpPolicy;
   mode: "interactive" | "non-interactive";
   explicitAllowInheritedMcp?: boolean;
@@ -214,7 +215,10 @@ export function createCursorAcpAdapter(options: CursorAcpAdapterOptions): AgentA
         );
       }
 
-      assertCursorRunnable(options.diagnosis);
+      const diagnosis = options.getDiagnosis
+        ? await options.getDiagnosis()
+        : options.diagnosis;
+      assertCursorRunnable(diagnosis);
 
       mcpPolicyResult = decideInheritedMcpPolicy({
         policy: options.inheritedMcpPolicy,
@@ -268,9 +272,10 @@ export function createCursorAcpAdapter(options: CursorAcpAdapterOptions): AgentA
         startupTimeoutMs: options.startupTimeoutMs,
         promptTimeoutMs: options.promptTimeoutMs,
         postTurnLivenessMs: options.postTurnLivenessMs,
-        diagnosis: options.diagnosis,
+        diagnosis,
         runner: options.runner,
         transport: options.transport,
+        resumeSessionId: mode === "fix" ? (input as FixInput).previousSessionId : undefined,
         artifactRoot: input.artifactRoot,
         implementationContext: parsedContext,
         permissionMediator,

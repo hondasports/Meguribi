@@ -522,6 +522,33 @@ pnpm smoke:devin-acp -- --yes
 
 実行対象は一時fixtureだけです。commit、push、PR、Issue更新、実在repositoryの変更、外部MCP接続は行いません。保存済みDevin設定と認証の完全な同時隔離は保証できないため、credentialをコピー・保存せず、MCP完全隔離とも表現しません。`compatibility-result.json` と raw/normalized event artifact の exit code・内容を結果の根拠にします。
 
+## 8.9 実 Cursor CLI compatibility smoke
+
+Issue #32 の実機 compatibility smoke は、通常の delivery workflow・`pnpm test`・CI から分離した手動確認です。`experiments/cursor-acp` の専用 script を使い、既存の `createCursorAcpAdapter` facade、temporary Git repository、Issue 模擬 worktree を通して ACP lifecycle を確認します。
+
+```powershell
+$env:MEGURIBI_RUN_REAL_CURSOR_SMOKE = "1"
+pnpm smoke:cursor-acp -- --yes
+```
+
+実行前に警告を表示し、TTY では確認プロンプトを出します。非対話実行では `--yes` を付与してください。次の場合は外部agentを起動せず、または途中で停止します。
+
+- 明示opt-inがない。
+- Cursor CLIが未認証、ACP非対応、または診断不能である。
+- 非対話実行で継承MCPの扱いが明示されていない。
+- worktree外変更、protected path変更、Git境界違反を検出した。
+- stdin close、SIGTERM、必要時force termination、process残留確認が完了しない。
+
+実行対象は一時fixtureだけです。commit、push、PR、Issue更新、実在repositoryの変更、外部MCP接続は行いません。保存済みCursor設定と認証の完全な同時隔離は保証できないため、credentialをコピー・保存せず、MCP完全隔離とも表現しません。`compatibility-result.json` と raw/normalized event artifact の exit code・内容を結果の根拠にします。
+
+fake ACP server を使う smoke は以下の通りです。
+
+```powershell
+pnpm smoke:cursor-acp:fake
+$env:MEGURIBI_FAKE_CURSOR_SCENARIO = "write-outside"
+pnpm smoke:cursor-acp:fake
+```
+
 ## 9. GitHub 連携
 
 MVP は `gh` CLI を利用し、実行前に version、認証、対象リポジトリを確認します。

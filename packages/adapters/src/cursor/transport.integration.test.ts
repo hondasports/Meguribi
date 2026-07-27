@@ -279,4 +279,28 @@ describe("CursorAcpTransport integration", () => {
       process.off("unhandledRejection", onUnhandled);
     }
   });
+
+  it("cancels an in-flight prompt", async () => {
+    const { connection } = await start("prompt-hang", { promptTimeoutMs: 10_000 });
+    const events: unknown[] = [];
+    const promptPromise = (async () => {
+      for await (const event of connection.prompt({ content: "implement fixture" })) {
+        events.push(event);
+      }
+    })();
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    await connection.cancel();
+    await promptPromise;
+    expect(events.at(-1)).toMatchObject({
+      kind: "turn_completed",
+      stopReason: "cancelled",
+    });
+    await connection.terminate(500);
+  });
+
+  it("terminates a process that ignores SIGTERM", async () => {
+    const { connection } = await start("ignore-sigterm");
+    const exit = await connection.terminate(500);
+    expect(exit.code !== null || exit.signal !== null).toBe(true);
+  });
 });

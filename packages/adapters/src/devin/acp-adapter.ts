@@ -27,6 +27,7 @@ export interface DevinAcpAdapterOptions {
   executableArgs?: string[];
   acpArgs?: string[];
   diagnosis: DevinDiagnosis;
+  getDiagnosis?: () => Promise<DevinDiagnosis> | DevinDiagnosis;
   inheritedMcpPolicy: InheritedMcpPolicy;
   mode: "interactive" | "non-interactive";
   explicitAllowInheritedMcp?: boolean;
@@ -214,7 +215,10 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
         );
       }
 
-      assertDevinRunnable(options.diagnosis);
+      const diagnosis = options.getDiagnosis
+        ? await options.getDiagnosis()
+        : options.diagnosis;
+      assertDevinRunnable(diagnosis);
 
       mcpPolicyResult = decideInheritedMcpPolicy({
         policy: options.inheritedMcpPolicy,
@@ -268,9 +272,10 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
         startupTimeoutMs: options.startupTimeoutMs,
         promptTimeoutMs: options.promptTimeoutMs,
         postTurnLivenessMs: options.postTurnLivenessMs,
-        diagnosis: options.diagnosis,
+        diagnosis,
         runner: options.runner,
         transport: options.transport,
+        resumeSessionId: mode === "fix" ? (input as FixInput).previousSessionId : undefined,
         artifactRoot: input.artifactRoot,
         implementationContext: parsedContext,
         permissionMediator,
