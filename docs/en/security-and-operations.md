@@ -40,7 +40,7 @@ Repository content is context, not a source of Meguribi system permissions.
 - Create one branch and worktree per Issue.
 - Never use the developer's normal checkout as the agent workspace.
 - Codex planning and review are read-only by default.
-- Devin writes only during implementation.
+- The selected implementation agent writes only during implementation.
 - Do not let multiple agents write to the same worktree concurrently.
 - Stop when writes outside the worktree are detected.
 
@@ -246,7 +246,7 @@ Before resume, validate:
 - Remote tracking state
 - Existing PR head SHA
 - Configuration digest
-- Codex and Devin session availability
+- Codex and selected implementation-agent session availability
 
 When inputs differ, show which artifacts require regeneration and wait for human direction.
 

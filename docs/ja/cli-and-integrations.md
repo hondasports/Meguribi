@@ -20,6 +20,8 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
+現在 CLI に実装されているコマンドは `doctor`、`run`、`resume` です。`init`、成長ループ系コマンド、`plan`、`review`、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+
 ### `meguribi init`
 
 対象リポジトリを Meguribi で扱えるか診断し、設定ファイルの雛形を生成します。
@@ -163,7 +165,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 
 `--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で Devin session の cancel / shutdown に伝播します。
 
-本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は `createDevinAcpAdapter` と `FileSystemRunStore`、`createDefaultPolicyEngine` を使い、GitHub/Git は専用アダプター実装までの暫定として fake を接続します。`MEGURIBI_DELIVERY_FAKES=1` では Codex/Verifier も fake になります。このフラグ無しで Codex SDK を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Devin は呼びません。
+本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は明示された実装エージェントに応じて `createDevinAcpAdapter` または `createCursorAcpAdapter` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。GitHub/Git は専用アダプター実装までの暫定として fake を接続します。`MEGURIBI_DELIVERY_FAKES=1` では Codex/Verifier も fake になります。このフラグ無しで Codex SDK を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
 
 ### `meguribi review`
 
@@ -364,7 +366,9 @@ Codex の structured output は runtime schema と JSON Schema の両方で検�
 
 `thread ID`、source digest、実行時間、redaction 済み event log は Meguribi 所有の artifact metadata として保存します。planning は Issue の digest、review は Issue、plan、diff、verification の canonical JSON digest を検証し、不一致なら Codex を起動しません。Codex の review approval は publish、Draft 解除、merge の許可を意味しません。
 
-## 8. Devin 連携
+## 8. ACP 実装エージェント連携
+
+Devin と Cursor は `AgentAdapter` port を共有します。ACP SDK 型、実行ファイル名、診断、prompt、成果物ストア、transport は各 adapter の内側に閉じ込め、delivery workflow は正規化された `ImplementationResult` だけを受け取ります。
 
 ### 8.1 採用する接続方式
 
@@ -467,7 +471,7 @@ Devin に渡すもの:
 - 変更可能範囲
 - 成果物出力先
 
-Devin に担当させないもの:
+実装エージェントに担当させないもの:
 
 - Issue / PR の直接更新
 - branch 作成
@@ -488,7 +492,7 @@ Devin に担当させないもの:
 
 バージョン文字列だけで安全性を断定しません。パース不能な version は `unknown` とし、ACP probe 成功を必須とします。パース可能な version は `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION`（既定 `3000.0.0`）未満なら `unsupported_version` とします。`--version` の非ゼロ終了や timeout は fail-closed です。ACP 欠如は `capability_missing` として区別します。未対応バージョン、未認証、ACP 非対応、非対話での曖昧な MCP ポリシー、予期しないプロセス終了では推測して継続しません。診断ログへは secret らしき文字列を残しません。
 
-`meguribi run` / `resume` は `@meguribi/core` の `runDelivery` / `resumeDelivery` を呼び出します。Devin preflight では `@meguribi/adapters` の `preflightDevin` / `assertDevinRunnable` を必須とします。本番 facade は `createDevinAcpAdapter` で、`implement` / `fix` を `DevinAdapter` port として提供します。Codex の `analyzeFailure` は未実装のため、fix instruction は verification / review 証拠から `buildFixInstruction` が組み立てます。
+`meguribi run` / `resume` は `@meguribi/core` の `runDelivery` / `resumeDelivery` を呼び出します。preflight では選択した Agent の診断 API（`preflightDevin` / `assertDevinRunnable` または `preflightCursor` / `assertCursorRunnable`）を必須とします。本番 facade は `createDevinAcpAdapter` または `createCursorAcpAdapter` で、`implement` / `fix` を `AgentAdapter` port として提供します。Codex の `analyzeFailure` は未実装のため、fix instruction は verification / review 証拠から `buildFixInstruction` が組み立てます。
 
 ### 8.7 fake Devin / ACP の総合テスト
 

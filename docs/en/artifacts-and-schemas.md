@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Meguribi does not forward free-form chat directly between Codex and Devin. Structured artifacts are the handoff boundary.
+Meguribi does not forward free-form chat directly between Codex and an implementation agent. Structured artifacts are the handoff boundary.
 
 ```text
 GitHub Issue
@@ -33,7 +33,7 @@ This provides responsibility separation, schema validation, reproducibility, hum
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
-              +-- devin-prompt.md
+              +-- <agent>-prompt.md
               +-- prompt.json          # prompt version / hash
               +-- git-boundary.json    # Git/worktree safety result
               +-- implementation-result.json
@@ -424,7 +424,7 @@ Retention is user-configurable.
 
 ## 16. Agent event and error contracts
 
-To abstract external agents such as the Codex SDK and Devin ACP, domain types live in `@meguribi/core` and Valibot schemas live in `@meguribi/schemas`.
+To abstract external agents such as the Codex SDK, Devin ACP, and Cursor ACP, domain types live in `@meguribi/core` and Valibot schemas live in `@meguribi/schemas`.
 
 ### AgentEvent
 
@@ -444,21 +444,21 @@ A discriminated union identified by the `type` field.
 
 `at` is an ISO 8601 timestamp string.
 
-Raw events from Devin ACP and similar sources are normalized inside each adapter. The adapter stores the redacted raw payload as JSONL / artifact and returns only normalized `AgentEvent` values to the core. This prevents vendor-specific information from leaking into the core contract.
+Raw events from Devin ACP, Cursor ACP, and similar sources are normalized inside each adapter. The adapter stores the redacted raw payload as JSONL / artifact and returns only normalized `AgentEvent` values to the core. This prevents vendor-specific information from leaking into the core contract.
 
 Unrecognized `sessionUpdate` values are kept as `type: "unknown"`. An `unknown` event alone must not advance workflow state.
 
-### Devin agent artifact layout
+### Agent artifact layout
 
-Until RunStore lands, and afterward under the same relative paths, Devin ACP session artifacts use:
+Until RunStore lands, and afterward under the same relative paths, Devin and Cursor ACP session artifacts use:
 
 ```text
-<artifactRoot>/   # future: runs/<run-id>/agents/devin/
+<artifactRoot>/   # future: runs/<run-id>/agents/<implementer>/
 ├── raw-events.jsonl   # redacted raw payloads (with sequence)
 ├── events.jsonl       # normalized AgentEvent lines (same sequence)
 ├── stderr.log         # diagnostic stderr (redacted)
 ├── session.json       # sessionId / protocolVersion / stopReason
-├── devin-prompt.md    # redacted prompt sent to Devin
+├── <agent>-prompt.md  # redacted prompt sent to the selected agent
 ├── prompt.json        # prompt version / hash
 ├── git-boundary.json  # Git/worktree safety result
 ├── result.json        # minimal execution summary

@@ -2,7 +2,7 @@
 
 ## 1. 目的
 
-Codex と Devin の間で自然文チャットを直接転送しません。
+Codex と実装エージェントの間で自然文チャットを直接転送しません。
 
 Meguribi が管理する構造化成果物を受け渡しの境界にします。
 
@@ -42,7 +42,7 @@ GitHub Issue
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
-              +-- devin-prompt.md
+              +-- <agent>-prompt.md
               +-- prompt.json          # prompt version / hash
               +-- git-boundary.json    # Git/worktree safety result
               +-- implementation-result.json
@@ -442,7 +442,7 @@ packages/schemas/
 
 ## 16. Agent イベント・エラー共通契約
 
-Codex SDK と Devin ACP などの外部エージェントを抽象化するため、`@meguribi/core` に Agent 用の型を定義し、`@meguribi/schemas` に Valibot スキーマを配置する。
+Codex SDK、Devin ACP、Cursor ACP などの外部エージェントを抽象化するため、`@meguribi/core` に Agent 用の型を定義し、`@meguribi/schemas` に Valibot スキーマを配置する。
 
 ### AgentEvent
 
@@ -462,21 +462,21 @@ Codex SDK と Devin ACP などの外部エージェントを抽象化するた�
 
 `at` は ISO 8601 タイムスタンプ文字列とする。
 
-Devin ACP などの raw イベントは、各 adapter 内で正規化される。adapter は redaction 後の raw payload を JSONL / artifact へ保存し、core には正規化済みの `AgentEvent` だけを返す。これにより vendor 固有の情報が core 契約に漏れない。
+Devin ACP、Cursor ACP などの raw イベントは、各 adapter 内で正規化される。adapter は redaction 後の raw payload を JSONL / artifact へ保存し、core には正規化済みの `AgentEvent` だけを返す。これにより vendor 固有の情報が core 契約に漏れない。
 
 未知の `sessionUpdate` は握りつぶさず `type: "unknown"` として保持する。`unknown` だけでは workflow の状態を進めてはならない。
 
-### Devin agent artifact レイアウト
+### Agent artifact レイアウト
 
-RunStore 導入前も含め、Devin ACP session の成果物は次の配置を標準とする。
+RunStore 導入前も含め、Devin / Cursor ACP session の成果物は次の配置を標準とする。
 
 ```text
-<artifactRoot>/   # 将来: runs/<run-id>/agents/devin/
+<artifactRoot>/   # 将来: runs/<run-id>/agents/<implementer>/
 ├── raw-events.jsonl   # redaction 後の raw payload（sequence 付き）
 ├── events.jsonl       # 正規化 AgentEvent（同一 sequence で対応付け）
 ├── stderr.log         # 診断用 stderr（redaction 後）
 ├── session.json       # sessionId / protocolVersion / stopReason など
-├── devin-prompt.md    # redaction 後の送信 prompt
+├── <agent>-prompt.md  # redaction 後の送信 prompt
 ├── prompt.json        # prompt version / hash
 ├── git-boundary.json  # Git/worktree safety result
 ├── result.json        # 最小の実行結果サマリ

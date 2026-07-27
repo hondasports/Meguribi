@@ -10,7 +10,7 @@ User
       -> GitHub
       -> Git worktree
       -> Codex
-      -> Devin
+      -> ACP implementation agent (Devin or Cursor)
       -> Verification commands
 ```
 
@@ -22,7 +22,7 @@ The MVP has no database, daemon, job queue, web UI, or multiple workers.
 
 - Command ordering
 - GitHub Issue and PR reads and writes
-- Context construction for Codex and Devin
+- Context construction for Codex and implementation agents
 - Structured artifact storage
 - Git worktree and branch lifecycle
 - Deterministic verification
@@ -37,7 +37,7 @@ The MVP has no database, daemon, job queue, web UI, or multiple workers.
 - Repository inspection and technical planning
 - Diff review and failure analysis
 
-### Owned by Devin
+### Owned by the implementation agent
 
 - Code changes within approved scope
 - Test additions
@@ -74,7 +74,9 @@ apps/cli
   |     +-- github
   |     +-- git
   |     +-- codex
-  |     `-- devin
+  |     +-- acp
+  |     +-- devin
+  |     `-- cursor
   |
   +-- services
   |     +-- context-builder
@@ -103,7 +105,7 @@ async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
   await policy.assertReady(issue);
   const workspace = await git.createWorktree(issue);
   const plan = await codex.createPlan({ issue, workspace });
-  await devin.implement({ issue, plan, workspace });
+  await agent.implement({ issue, plan, workspace });
   const verification = await verifier.run(workspace);
   const review = await codex.review({ issue, plan, verification, workspace });
   return github.createDraftPullRequest({ issue, workspace, review });
@@ -212,7 +214,7 @@ Use XDG Base Directory conventions and keep temporary execution logs outside tar
 ## 5. Delivery sequence
 
 ```text
-Human        CLI        GitHub       Git        Codex       Devin       CI
+  Human        CLI        GitHub       Git        Codex       Agent       CI
   |           |            |           |           |           |          |
   | run #123  |            |           |           |           |          |
   |---------->| fetch      |           |           |           |          |
@@ -237,7 +239,7 @@ The MVP defaults to zero automatic fix attempts and allows at most one when expl
 verification failure or review changes_required
   -> Codex creates structured fix instructions
   -> PolicyEngine verifies scope
-  -> Devin resumes or starts a fix run
+  -> the selected agent resumes or starts a fix run
   -> verification runs again
   -> Meguribi stops when the attempt limit is reached
 ```
@@ -257,7 +259,7 @@ CLI -> Workflows -> Ports <- Adapters
 
 ## 8. Recommended stack
 
-- Node.js 22+
+- Node.js 24.x (the repository pins `>=24 <25`)
 - TypeScript strict mode
 - pnpm workspace
 - Commander for CLI parsing
@@ -313,7 +315,7 @@ interrupted
 MVP constraints:
 
 - Only one active Run per `owner/repo#issue`.
-- Codex and Devin do not write to the same worktree concurrently.
+- Codex and the selected implementation agent do not write to the same worktree concurrently.
 - Steps within a Run are sequential.
 - Cross-Issue fetch sharing is postponed.
 
@@ -322,6 +324,7 @@ MVP constraints:
 Potential future adapters:
 
 - Devin API
+- Cursor API
 - Claude Code
 - Slack notifications
 - GitHub REST / App integration

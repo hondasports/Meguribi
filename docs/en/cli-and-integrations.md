@@ -20,6 +20,8 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
+The currently implemented CLI commands are `doctor`, `run`, and `resume`. `init`, the product-growth commands, `plan`, `review`, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
+
 ### `meguribi init`
 
 Diagnose whether a repository can be managed by Meguribi and generate a configuration skeleton.
@@ -153,7 +155,7 @@ Main options:
 
 With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into Devin session cancel / shutdown.
 
-Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) uses `createDevinAcpAdapter`, `FileSystemRunStore`, and `createDefaultPolicyEngine`. Until dedicated GitHub/Git adapters land, those ports use fakes. Set `MEGURIBI_DELIVERY_FAKES=1` to also fake Codex/Verifier; without that flag, Codex wiring fails closed if the Codex SDK cannot be constructed (no silent auto-approve fake). Fixture tests use fakes and do not call real `gh` or real Devin.
+Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) selects `createDevinAcpAdapter` or `createCursorAcpAdapter` from the explicit implementer setting, and uses `FileSystemRunStore` and `createDefaultPolicyEngine`. Until dedicated GitHub/Git adapters land, those ports use fakes. Set `MEGURIBI_DELIVERY_FAKES=1` to also fake Codex/Verifier; without that flag, Codex wiring fails closed if the Codex SDK cannot be constructed (no silent auto-approve fake). Fixture tests use fakes and do not call real `gh` or real agent CLIs.
 
 ### `meguribi review`
 
@@ -354,7 +356,9 @@ Codex structured output is validated by both a runtime schema and a JSON Schema.
 
 The thread ID, source digests, duration, and redacted event log are stored as Meguribi-owned artifact metadata. Planning verifies the Issue digest, while review verifies canonical JSON digests for the Issue, plan, diff, and verification before starting Codex. A Codex review approval never authorizes publishing, removing Draft status, or merging.
 
-## 8. Devin integration
+## 8. ACP implementation-agent integration
+
+Devin and Cursor share the `AgentAdapter` contract. Their ACP SDK types, executable names, diagnostics, prompts, artifact stores, and transports remain inside their adapters; delivery workflow code only receives normalized `ImplementationResult` values.
 
 ### 8.1 Adopted transport
 
@@ -448,7 +452,7 @@ The decision is therefore:
 
 ### 8.5 Inputs and prohibited operations
 
-Devin receives only:
+The selected agent receives only:
 
 - approved Issue content and relevant comments
 - Codex `plan.json`
@@ -457,7 +461,7 @@ Devin receives only:
 - allowed change scope
 - artifact output locations
 
-Devin does not:
+The selected agent does not:
 
 - directly update Issues or PRs
 - create branches
@@ -478,7 +482,7 @@ Before launch, run the same diagnosis as `meguribi doctor`:
 
 Do not infer safety from the version string alone. Unparseable versions are `unknown` and still require a successful ACP probe. Parseable versions below `MINIMUM_SUPPORTED_DEVIN_CLI_VERSION` (default `3000.0.0`) are `unsupported_version`. Non-zero exit or timeout from `--version` fails closed. Missing ACP is reported as `capability_missing`, distinct from `unsupported_version`. Unsupported versions, missing authentication, missing ACP, ambiguous MCP policy in non-interactive mode, and unexpected process exits stop the Run. Diagnosis output must not retain secret-like strings.
 
-`meguribi run` / `resume` call `@meguribi/core` `runDelivery` / `resumeDelivery`. Devin preflight must use `preflightDevin` / `assertDevinRunnable` from `@meguribi/adapters`. The production facade is `createDevinAcpAdapter`, which exposes `implement` / `fix` as the `DevinAdapter` port. Codex `analyzeFailure` is not implemented yet; `buildFixInstruction` builds fix instructions from verification / review evidence.
+`meguribi run` / `resume` call `@meguribi/core` `runDelivery` / `resumeDelivery`. Preflight uses the selected agent's diagnostic API (`preflightDevin` / `assertDevinRunnable` or `preflightCursor` / `assertCursorRunnable`). The production facade is `createDevinAcpAdapter` or `createCursorAcpAdapter`, each exposing `implement` / `fix` through the `AgentAdapter` port. Codex `analyzeFailure` is not implemented yet; `buildFixInstruction` builds fix instructions from verification / review evidence.
 
 ### 8.7 Fake Devin / ACP integration tests
 

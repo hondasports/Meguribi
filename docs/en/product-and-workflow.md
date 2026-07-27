@@ -18,7 +18,7 @@ Observation
   -> Next hypothesis
 ```
 
-Meguribi structures the information needed by this loop, assigns narrow responsibilities to Codex and Devin, and leaves an auditable decision trail in GitHub.
+Meguribi structures the information needed by this loop, assigns narrow responsibilities to Codex and the selected implementation agent, and leaves an auditable decision trail in GitHub.
 
 ## 2. Intended user
 
@@ -35,7 +35,7 @@ A coding agent by itself does not solve the following problems:
 - The rationale and hypothesis in an Issue may be lost by the time a PR is created.
 - AI may present an unverified problem as a fact.
 - Implementation completion may be mistaken for product success.
-- Codex and Devin may have overlapping responsibilities.
+- Codex and implementation agents may have overlapping responsibilities.
 - Test success may depend on an agent's natural-language claim.
 - Agent changes may be mixed with the developer's normal working directory.
 
@@ -173,7 +173,7 @@ Purpose:
 ### Meguribi
 
 - Fetch Issue and repository context.
-- Build explicit inputs for Codex and Devin.
+- Build explicit inputs for Codex and the implementation agent.
 - Store their artifacts and prevent direct agent-to-agent recursion.
 - Manage worktrees, branches, verification, and draft PRs.
 - Stop at human approval gates.
@@ -215,7 +215,7 @@ meguribi promote
 meguribi require
   -> human approves requirements, exclusions, and metrics
 meguribi run
-  -> Codex plan -> Devin implementation -> verification -> Codex review -> Draft PR
+  -> Codex plan -> Agent implementation -> verification -> Codex review -> Draft PR
 human merges the PR
 meguribi measure
   -> human evaluates the result

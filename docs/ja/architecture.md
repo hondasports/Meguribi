@@ -10,7 +10,7 @@ Meguribi はローカルで実行する単一 CLI として実装します。
       -> GitHub
       -> Git worktree
       -> Codex
-      -> Devin
+      -> ACP 実装エージェント（Devin / Cursor）
       -> 検証コマンド
 ```
 
@@ -22,7 +22,7 @@ MVP では、DB、常駐サーバー、ジョブキュー、Web UI、複数 Work
 
 - コマンド実行順序
 - GitHub Issue / PR の取得と更新
-- Codex / Devin 用コンテキストの構築
+- Codex / 実装エージェント用コンテキストの構築
 - 構造化成果物の保存
 - Git worktree とブランチの作成・削除
 - 検証コマンドの実行
@@ -38,7 +38,7 @@ MVP では、DB、常駐サーバー、ジョブキュー、Web UI、複数 Work
 - コードレビュー
 - テスト失敗の分析
 
-### Devin が所有するもの
+### 実装エージェントが所有するもの
 
 - 承認済みスコープ内のコード変更
 - テスト追加
@@ -77,7 +77,9 @@ apps/cli
   |     +-- github
   |     +-- git
   |     +-- codex
-  |     `-- devin
+  |     +-- acp
+  |     +-- devin
+  |     `-- cursor
   |
   +-- services
   |     +-- context-builder
@@ -108,7 +110,7 @@ async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
   const approval = await policy.assertReady(issue);
   const workspace = await git.createWorktree(issue);
   const plan = await codex.createPlan({ issue, workspace });
-  const implementation = await devin.implement({ issue, plan, workspace });
+  const implementation = await agent.implement({ issue, plan, workspace });
   const verification = await verifier.run(workspace);
   const review = await codex.review({ issue, plan, verification, workspace });
   return github.createDraftPullRequest({ issue, workspace, review });
@@ -227,7 +229,7 @@ XDG Base Directory を利用し、OS ごとに保存先を解決します。対�
 ### 5.1 計画から Draft PR まで
 
 ```text
-Human        CLI        GitHub       Git        Codex       Devin       CI
+  Human        CLI        GitHub       Git        Codex       Agent       CI
   |           |            |           |           |           |          |
   | run #123  |            |           |           |           |          |
   |---------->| fetch      |           |           |           |          |
@@ -253,7 +255,7 @@ MVP では自動修正を 0 回または最大 1 回に制限します。
 検証失敗または review: changes_required
   -> Codex が修正指示を構造化
   -> PolicyEngine が対象範囲を確認
-  -> Devin セッションを再開、または新規実行
+  -> 選択した Agent のセッションを再開、または新規実行
   -> 再検証
   -> 上限到達時は停止して人間へ返す
 ```
@@ -266,14 +268,14 @@ CLI -> Workflows -> Ports <- Adapters
                   -> Schemas
 ```
 
-- Workflow から SDK、`gh`、`git`、Devin コマンドを直接呼ばない。
+- Workflow から SDK、`gh`、`git`、Agent コマンドを直接呼ばない。
 - Adapter は Domain model へ変換して返す。
 - Prompt builder は外部プロセスを呼ばない。
 - PolicyEngine は副作用を持たず、判定結果だけを返す。
 
 ## 7. 推奨技術スタック
 
-- Node.js 22 以上
+- Node.js 24.x（リポジトリでは `>=24 <25` に固定）
 - TypeScript strict mode
 - pnpm workspace
 - Commander: CLI
@@ -329,7 +331,7 @@ interrupted
 MVP では次の制約を置きます。
 
 - 同じ owner/repo#issue に対する同時 Run を禁止する。
-- 同じ worktree を Codex と Devin が同時に変更しない。
+- 同じ worktree を Codex と選択した実装エージェントが同時に変更しない。
 - 一つの Run 内は原則直列実行する。
 - リポジトリの fetch 操作だけ、別 Issue と共有可能にするのは将来対応とする。
 
@@ -338,6 +340,7 @@ MVP では次の制約を置きます。
 将来追加可能:
 
 - Devin API adapter
+- Cursor API adapter
 - Claude Code adapter
 - Slack 通知
 - GitHub App / API adapter
