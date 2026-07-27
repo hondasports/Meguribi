@@ -96,6 +96,9 @@ export function toAcpTransportError(
   if (/capability mismatch/i.test(message)) {
     return new AcpTransportError("capability_mismatch", message);
   }
+  if (/load session failed/i.test(message)) {
+    return new AcpTransportError("session_creation_failure", message);
+  }
   if (/session creation failed/i.test(message)) {
     return new AcpTransportError("session_creation_failure", message);
   }

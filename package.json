@@ -12,6 +12,8 @@
     "test": "vitest run",
     "smoke:devin-acp": "pnpm --dir experiments/devin-acp smoke:devin-acp",
     "smoke:devin-acp:fake": "pnpm --dir experiments/devin-acp smoke:devin-acp:fake",
+    "smoke:cursor-acp": "pnpm --dir experiments/cursor-acp smoke:cursor-acp",
+    "smoke:cursor-acp:fake": "pnpm --dir experiments/cursor-acp smoke:cursor-acp:fake",
     "build": "pnpm -r build"
   },
   "devDependencies": {
