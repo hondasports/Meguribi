@@ -9,6 +9,7 @@ import { createCursorAcpTransport } from "./transport.js";
 import { AcpTransportError as CursorAcpTransportError } from "../acp/transport-error.js";
 import { createPermissionMediator, type PermissionMediator } from "../acp/permissions.js";
 import { assertCursorRunnable } from "./diagnose.js";
+import { AcpShutdownController } from "../acp/shutdown.js";
 
 const tempDirs: string[] = [];
 
@@ -61,6 +62,8 @@ async function start(mode: string, overrides: {
   promptTimeoutMs?: number;
   permissionMediator?: PermissionMediator;
   mcpPolicy?: { policy: "allow" | "warn" | "deny"; mode: "interactive" | "non-interactive"; explicitAllow: boolean };
+  env?: NodeJS.ProcessEnv;
+  resumeSessionId?: string;
 } = {}) {
   const cwd = await tempCwd();
   const transport = createCursorAcpTransport();
@@ -69,8 +72,9 @@ async function start(mode: string, overrides: {
     executableArgs: [fakeAcpServer()],
     acpArgs: [],
     cwd,
-    env: { ...process.env, FAKE_ACP_MODE: mode },
+    env: { ...process.env, ...overrides.env, FAKE_ACP_MODE: mode },
     startupTimeoutMs: overrides.startupTimeoutMs ?? 5_000,
+    resumeSessionId: overrides.resumeSessionId,
     // Keep happy-path tests fast; crash tests override this upward.
     postTurnLivenessMs: overrides.postTurnLivenessMs ?? 50,
     promptTimeoutMs: overrides.promptTimeoutMs,
@@ -280,7 +284,7 @@ describe("CursorAcpTransport integration", () => {
     }
   });
 
-  it("cancels an in-flight prompt", async () => {
+  it("cancels an in-flight prompt and leaves no residual process", async () => {
     const { connection } = await start("prompt-hang", { promptTimeoutMs: 10_000 });
     const events: unknown[] = [];
     const promptPromise = (async () => {
@@ -295,12 +299,56 @@ describe("CursorAcpTransport integration", () => {
       kind: "turn_completed",
       stopReason: "cancelled",
     });
+    const controller = new AcpShutdownController(connection);
+    const result = await controller.shutdown("cancelled", {
+      gracefulShutdownMs: 50,
+      terminateTimeoutMs: 500,
+    });
+    expect(result.residualProcesses).toBe(0);
+  });
+
+  it("terminates a process that ignores SIGTERM without residual processes", async () => {
+    const { connection } = await start("ignore-sigterm");
+    const controller = new AcpShutdownController(connection);
+    const result = await controller.shutdown("completed", {
+      gracefulShutdownMs: 50,
+      terminateTimeoutMs: 500,
+    });
+    expect(result.residualProcesses).toBe(0);
+    expect(result.forceKillUsed).toBe(true);
+  });
+
+  it("loads a previous session when loadSession is advertised and resumeSessionId is provided", async () => {
+    const resumeId = "resume-123";
+    const { connection } = await start("success", {
+      resumeSessionId: resumeId,
+      env: { FAKE_ACP_LOAD_SESSION: "1" },
+    });
+    expect(connection.sessionId).toBe(resumeId);
+    expect(connection.supportsSessionLoad).toBe(true);
+    await connection.closeInput();
     await connection.terminate(500);
   });
 
-  it("terminates a process that ignores SIGTERM", async () => {
-    const { connection } = await start("ignore-sigterm");
-    const exit = await connection.terminate(500);
-    expect(exit.code !== null || exit.signal !== null).toBe(true);
+  it("falls back to a new session when loadSession is not advertised", async () => {
+    const resumeId = "resume-456";
+    const { connection, cwd } = await start("success", { resumeSessionId: resumeId });
+    expect(connection.sessionId).not.toBe(resumeId);
+    expect(connection.sessionId).toBe(`fake-${path.basename(cwd)}`);
+    expect(connection.supportsSessionLoad).toBe(false);
+    await connection.closeInput();
+    await connection.terminate(500);
+  });
+
+  it("rejects when loadSession is advertised but fails", async () => {
+    const resumeId = "resume-789";
+    await expect(
+      start("load-fail", {
+        resumeSessionId: resumeId,
+        env: { FAKE_ACP_LOAD_SESSION: "1" },
+      }),
+    ).rejects.toMatchObject({
+      code: "session_creation_failure",
+    });
   });
 });

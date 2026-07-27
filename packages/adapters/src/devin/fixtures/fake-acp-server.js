@@ -342,7 +342,7 @@ rl.on("line", (line) => {
     if (mode === "crash-after-init") {
       respond(id, {
         protocolVersion: params.protocolVersion,
-        agentCapabilities: { loadSession: false },
+        agentCapabilities: { loadSession: process.env.FAKE_ACP_LOAD_SESSION === "1" },
         authMethods: [],
         agentInfo: { name: "meguribi-fake-devin", version: "0.1.0" },
       });
@@ -351,7 +351,7 @@ rl.on("line", (line) => {
     }
     respond(id, {
       protocolVersion: params.protocolVersion,
-      agentCapabilities: { loadSession: false },
+      agentCapabilities: { loadSession: process.env.FAKE_ACP_LOAD_SESSION === "1" },
       authMethods: [],
       agentInfo: { name: "meguribi-fake-devin", version: "0.1.0" },
     });
@@ -365,6 +365,15 @@ rl.on("line", (line) => {
     }
     writeStderr(`cwd=${params.cwd}\n`);
     respond(id, { sessionId: `fake-${path.basename(params.cwd)}` });
+    return;
+  }
+
+  if (method === "session/load") {
+    if (mode === "load-fail") {
+      respondError(id, -32003, "load session failed: cannot resume session");
+      return;
+    }
+    respond(id, {});
     return;
   }
 
