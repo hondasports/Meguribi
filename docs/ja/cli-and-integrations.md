@@ -20,29 +20,32 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `doctor`、`run`、`resume` です。`init`、成長ループ系コマンド、`plan`、`review`、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`run`、`resume` です。成長ループ系コマンド、`plan`、`review`、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
 対象リポジトリを Meguribi で扱えるか診断し、設定ファイルの雛形を生成します。
 
 ```bash
-meguribi init ./path/to/repository
+meguribi init --implementer devin ./path/to/repository
 ```
+
+`--implementer devin` または `--implementer cursor` で診断する実装エージェントを明示します。既存の `.meguribi.yml` は上書きせず、存在しない場合だけ雛形を作成します。`--json` は診断結果だけを stdout へ出力し、問題がある場合は非 0 で終了します。
 
 確認内容:
 
 - Git リポジトリか
 - remote と GitHub リポジトリが一致するか
 - `git`、`gh`、Codex、選択した実装エージェントの利用可否
-- GitHub / Codex / 選択した実装エージェントの認証状態
+- GitHub と選択した実装エージェントの認証状態
 - default branch
-- package manager
-- 検証コマンド候補
-- `AGENTS.md`
-- 必要ラベルの存在
+- `git`、`gh`、Codex の version
+- 選択した実装エージェントの ACP readiness
+- `.meguribi.yml` の存在と生成結果
 
-既定では GitHub へ書き込みません。`--apply-labels` を指定した場合だけ不足ラベルを作成します。
+package manager、検証コマンド候補、`AGENTS.md`、必要ラベルの詳細診断は後続の delivery CLI で扱います。
+
+GitHub へは書き込みません。必要ラベルの自動作成（`--apply-labels`）は未実装で、ラベル不足は後続の delivery workflow で停止します。
 
 ### `meguribi doctor`
 

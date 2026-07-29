@@ -101,6 +101,11 @@ export type {
   DevinVersionDiagnosis,
 } from "./devin-diagnosis.js";
 export type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+export type {
+  InitDependencyCheck,
+  InitDependencyStatus,
+  RepositoryInitDiagnostics,
+} from "./init.js";
 export {
   evaluatePublishGate,
   resumeDelivery,

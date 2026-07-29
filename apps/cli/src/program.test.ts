@@ -3,6 +3,7 @@ import { createFakeDeliveryDeps } from "@meguribi/adapters";
 import type { DevinDiagnosis } from "@meguribi/schemas";
 import type { CodexClient, CodexThreadEvent } from "@meguribi/adapters";
 import { runResumeCommand, runRunCommand } from "./commands/run.js";
+import { runInit } from "./commands/init.js";
 import { runDoctor } from "./program.js";
 import { parseIssueTarget } from "./target.js";
 import { createCodexBridge } from "./wiring/create-delivery-deps.js";
@@ -121,6 +122,83 @@ describe("runDoctor", () => {
     const parsed = JSON.parse(chunks.join("")) as DevinDiagnosis;
     expect(parsed.errors.some((error) => error.code === "policy_blocked")).toBe(true);
     expect(parsed.runnable).toBe(false);
+  });
+});
+
+describe("runInit", () => {
+  const repositoryDiagnostics = (root: string) => ({
+    repositoryPath: root,
+    repository: "owner/repo",
+    defaultBranch: "main",
+    githubRepository: "owner/repo",
+    githubDefaultBranch: "main",
+    githubAuthenticated: true,
+    dependencies: [
+      { name: "git" as const, status: "available" as const, version: "git version" },
+      { name: "gh" as const, status: "available" as const, version: "gh version" },
+      { name: "codex" as const, status: "available" as const, version: "codex version" },
+    ],
+    warnings: [],
+    errors: [],
+    runnable: true,
+  });
+
+  it("creates a config template without overwriting an existing file", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const root = await fs.mkdtemp(
+      path.join(process.env.TEMP ?? process.env.TMP ?? ".", "meguribi-init-"),
+    );
+    try {
+      const configPath = path.join(root, ".meguribi.yml");
+      await fs.writeFile(configPath, "implementer: cursor\n", "utf8");
+      const stdout: string[] = [];
+      const result = await runInit(
+        root,
+        { json: true, implementer: "devin" },
+        {
+          diagnoseRepository: async () => repositoryDiagnostics(root),
+          runDoctor: async () => ({ exitCode: 0, diagnosis: healthy }),
+          stdout: (text) => stdout.push(text),
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.result.configAction).toBe("existing");
+      expect(await fs.readFile(configPath, "utf8")).toBe("implementer: cursor\n");
+      expect(JSON.parse(stdout.join(""))).toMatchObject({
+        configAction: "existing",
+        runnable: true,
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates the selected implementer template when configuration is absent", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const root = await fs.mkdtemp(
+      path.join(process.env.TEMP ?? process.env.TMP ?? ".", "meguribi-init-"),
+    );
+    try {
+      const result = await runInit(
+        root,
+        { implementer: "cursor" },
+        {
+          diagnoseRepository: async () => repositoryDiagnostics(root),
+          runDoctor: async () => ({ exitCode: 0, diagnosis: healthy }),
+          stdout: () => undefined,
+        },
+      );
+
+      expect(result.result.configAction).toBe("created");
+      await expect(fs.readFile(path.join(root, ".meguribi.yml"), "utf8")).resolves.toContain(
+        "implementer: cursor",
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });
 

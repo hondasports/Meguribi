@@ -20,27 +20,31 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `doctor`, `run`, and `resume`. `init`, the product-growth commands, `plan`, `review`, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `run`, and `resume`. The product-growth commands, `plan`, `review`, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
 Diagnose whether a repository can be managed by Meguribi and generate a configuration skeleton.
 
 ```bash
-meguribi init ./path/to/repository
+meguribi init --implementer devin ./path/to/repository
 ```
+
+Pass `--implementer devin` or `--implementer cursor` to select the implementation agent to diagnose. Existing `.meguribi.yml` files are never overwritten; a template is created only when the file is absent. `--json` emits diagnostics only on stdout and exits non-zero when the repository is not runnable.
 
 Checks include:
 
 - Git repository and remote identity
 - `git`, `gh`, Codex, and the selected implementation-agent availability
-- GitHub, Codex, and the selected implementation-agent authentication
+- GitHub and the selected implementation-agent authentication
 - default branch
-- package manager and verification commands
-- `AGENTS.md`
-- required labels
+- `git`, `gh`, and Codex versions
+- ACP readiness for the selected implementation agent
+- whether `.meguribi.yml` exists and the config action taken
 
-It does not write to GitHub unless `--apply-labels` is explicitly supplied.
+Detailed package-manager, verification-command, `AGENTS.md`, and required-label checks remain part of the later delivery CLI work.
+
+It does not write to GitHub. Automatic required-label creation (`--apply-labels`) is not implemented; delivery workflows stop when required labels are missing.
 
 ### `meguribi doctor`
 

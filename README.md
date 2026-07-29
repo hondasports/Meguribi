@@ -56,11 +56,12 @@ Meguribi CLI
 
 ## CLI status
 
-The implemented delivery surface currently consists of `doctor`, `run`, and `resume`. The default delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine. Temporary fakes are used only when explicitly enabled with `MEGURIBI_DELIVERY_FAKES=1`.
+The implemented CLI surface currently consists of `init`, `doctor`, `run`, and `resume`. The default delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine. Temporary fakes are used only when explicitly enabled with `MEGURIBI_DELIVERY_FAKES=1`.
 
-日本語: 現在利用できる配信系 CLI は `doctor`、`run`、`resume` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
+日本語: 現在利用できる CLI は `init`、`doctor`、`run`、`resume` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
 ```bash
+meguribi init --implementer cursor
 meguribi doctor --implementer cursor
 meguribi run owner/repo#125 --implementer devin
 meguribi resume owner/repo#125

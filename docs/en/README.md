@@ -30,7 +30,7 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 
 ## Current implementation scope
 
-The implemented delivery CLI currently consists of `doctor`, `run`, and `resume`. `doctor` diagnoses ACP readiness for Devin or Cursor, while `run` and `resume` orchestrate real GitHub / Git / Codex / Verifier components with the explicitly selected `AgentAdapter`. The product-growth commands remain specification/foundation work.
+The implemented CLI currently consists of `init`, `doctor`, `run`, and `resume`. `init` diagnoses the repository and dependencies, then creates a `.meguribi.yml` template without overwriting an existing file. `doctor` diagnoses ACP readiness for Devin or Cursor, while `run` and `resume` orchestrate real GitHub / Git / Codex / Verifier components with the explicitly selected `AgentAdapter`. The product-growth commands and `plan` / `review` / `cleanup` remain specification/foundation work.
 
 ## Key decisions
 
