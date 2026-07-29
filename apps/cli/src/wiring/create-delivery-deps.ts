@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import {
   createCodexAdapter,
+  captureGitWorktreeSnapshot,
   createCommandVerifier,
   createCursorAcpAdapter,
   createDefaultPolicyEngine,
@@ -10,7 +11,11 @@ import {
   createFakeGitAdapter,
   createFakeGitHubAdapter,
   createFakeVerifier,
+  createGitAdapter,
+  createGitHubAdapter,
+  createLocalGitHubAdapter,
   CodexSdkClient,
+  digestSource,
   diagnoseCursor,
   diagnoseDevin,
   FileSystemRunStore,
@@ -21,9 +26,13 @@ import {
 } from "@meguribi/adapters";
 import { loadImplementerConfig } from "@meguribi/config";
 import type { DeliveryDependencies, InheritedMcpPolicy } from "@meguribi/core";
+import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
 export interface CreateDeliveryDepsOptions {
   cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
   nonInteractive?: boolean;
   implementer?: string;
   allowInheritedMcp?: boolean;
@@ -51,60 +60,91 @@ function resolveRunsRoot(explicit?: string): string {
   return path.join(homedir(), ".local", "share", "meguribi");
 }
 
-function createCodexBridge(): DeliveryDependencies["codex"] {
-  const adapter = createCodexAdapter({ client: new CodexSdkClient() });
+export interface CodexBridgeOptions {
+  client?: CodexClient;
+  workspaceSnapshot?: (repositoryPath: string) => Promise<string>;
+}
+
+async function captureWorkspaceSnapshot(repositoryPath: string): Promise<string> {
+  return JSON.stringify(await captureGitWorktreeSnapshot({ cwd: repositoryPath }));
+}
+
+function issueContext(issue: Parameters<DeliveryDependencies["codex"]["createPlan"]>[0]["issue"]) {
   return {
-    createPlan: async (input) =>
-      adapter.createPlan({
+    title: issue.title,
+    body: issue.body,
+    comments: issue.comments.map((comment) => comment.body),
+  };
+}
+
+async function createWorkspaceGuard(
+  repositoryPath: string,
+  workspaceSnapshot: (repositoryPath: string) => Promise<string>,
+): Promise<{ guard: CodexWorkspaceGuard; sourceDigest: string }> {
+  const guard: CodexWorkspaceGuard = {
+    snapshot: () => workspaceSnapshot(repositoryPath),
+  };
+  const before = await guard.snapshot();
+  return { guard, sourceDigest: digestSource(before) };
+}
+
+export function createCodexBridge(
+  options: CodexBridgeOptions = {},
+): DeliveryDependencies["codex"] {
+  const adapter = createCodexAdapter({ client: options.client ?? new CodexSdkClient() });
+  const workspaceSnapshot = options.workspaceSnapshot ?? captureWorkspaceSnapshot;
+  return {
+    createPlan: async (input) => {
+      const issue = issueContext(input.issue);
+      const workspace = await createWorkspaceGuard(input.repositoryPath, workspaceSnapshot);
+      return adapter.createPlan({
         repositoryPath: input.repositoryPath,
-        issue: {
-          title: input.issue.title,
-          body: input.issue.body,
-          comments: input.issue.comments.map((comment) => comment.body),
-        },
+        issue,
         repositoryRules: input.repositoryRules,
         completionCriteria: input.completionCriteria,
         outOfScope: input.outOfScope,
-        sourceDigests: { issue: "cli" },
-        workspaceGuard: {
-          async snapshot() {
-            return "unchanged";
-          },
+        sourceDigests: {
+          issue: digestSource(issue),
+          repository: workspace.sourceDigest,
         },
-      }),
-    review: async (input) =>
-      adapter.review({
+        workspaceGuard: workspace.guard,
+      });
+    },
+    review: async (input) => {
+      const issue = issueContext(input.issue);
+      const workspace = await createWorkspaceGuard(input.repositoryPath, workspaceSnapshot);
+      const verification = {
+        success: input.verification.success,
+        commands: input.verification.commands.map((command) => ({
+          name: command.name,
+          exitCode: command.exitCode,
+        })),
+      };
+      return adapter.review({
         repositoryPath: input.repositoryPath,
-        issue: {
-          title: input.issue.title,
-          body: input.issue.body,
-          comments: input.issue.comments.map((comment) => comment.body),
-        },
+        issue,
         plan: input.plan,
         diff: input.diff,
         changedFiles: input.changedFiles,
-        verification: {
-          success: input.verification.success,
-          commands: input.verification.commands.map((command) => ({
-            name: command.name,
-            exitCode: command.exitCode,
-          })),
-        },
+        verification,
         repositoryRules: input.repositoryRules,
-        sourceDigests: { issue: "cli" },
-        workspaceGuard: {
-          async snapshot() {
-            return "unchanged";
-          },
+        sourceDigests: {
+          issue: digestSource(issue),
+          plan: digestSource(input.plan),
+          diff: digestSource(input.diff),
+          verification: digestSource(verification),
+          repository: workspace.sourceDigest,
         },
-      }),
+        workspaceGuard: workspace.guard,
+      });
+    },
   };
 }
 
 /**
  * Default delivery wiring for `meguribi run` / `resume`.
- * Real: DevinAcpAdapter, FileSystemRunStore, PolicyEngine.
- * GitHub/Git stay fake until dedicated adapters land (Issue scope).
+ * Real: GitHub/Git/Codex/Verifier, selected AgentAdapter, FileSystemRunStore, PolicyEngine.
+ * Fakes are opt-in for fixture tests through MEGURIBI_DELIVERY_FAKES=1.
  */
 export async function createDeliveryDeps(
   options: CreateDeliveryDepsOptions = {},
@@ -148,8 +188,12 @@ export async function createDeliveryDeps(
     return {
       inheritedMcpPolicy,
       deps: {
-        github: createFakeGitHubAdapter(),
-        git: createFakeGitAdapter(),
+        github: useLocalFakes
+          ? createFakeGitHubAdapter()
+          : options.localOnly
+            ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
+            : createGitHubAdapter({ cwd, executable: "gh" }),
+        git: useLocalFakes ? createFakeGitAdapter() : createGitAdapter({ expectedRepository: options.repository, allowMissingRemote: options.localOnly }),
         codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
         implementer,
         devin: implementer,
@@ -205,8 +249,12 @@ export async function createDeliveryDeps(
   return {
     inheritedMcpPolicy,
     deps: {
-      github: createFakeGitHubAdapter(),
-      git: createFakeGitAdapter(),
+      github: useLocalFakes
+        ? createFakeGitHubAdapter()
+        : options.localOnly
+          ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
+          : createGitHubAdapter({ cwd, executable: "gh" }),
+      git: useLocalFakes ? createFakeGitAdapter() : createGitAdapter({ expectedRepository: options.repository, allowMissingRemote: options.localOnly }),
       codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
       implementer,
       devin: implementer,

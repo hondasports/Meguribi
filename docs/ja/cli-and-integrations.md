@@ -165,7 +165,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 
 `--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で選択した Agent session の cancel / shutdown に伝播します。
 
-本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は明示された実装エージェントに応じて `createDevinAcpAdapter` または `createCursorAcpAdapter` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。GitHub/Git は専用アダプター実装までの暫定として fake を接続します。`MEGURIBI_DELIVERY_FAKES=1` では Codex/Verifier も fake になります。このフラグ無しで Codex SDK を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
+本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は実 `gh` / `git` / Codex SDK / Verifier と、明示された実装エージェントの `createDevinAcpAdapter` または `createCursorAcpAdapter` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。`MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ、fixture 用に GitHub/Git/Codex/Verifier を fake にします。このフラグ無しで外部 adapter を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
 
 ### `meguribi review`
 

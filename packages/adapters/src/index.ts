@@ -1,4 +1,6 @@
 export * from "./codex/index.js";
+export * from "./github/index.js";
+export * from "./git/index.js";
 export {
   captureGitWorktreeSnapshot,
   compareGitWorktreeSnapshots,

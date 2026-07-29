@@ -136,10 +136,16 @@ async function mark(
   runId: string,
   patch: Partial<RunState>,
 ): Promise<RunState> {
-  return deps.runStore.update(runId, {
+  const next = await deps.runStore.update(runId, {
     ...patch,
     updatedAt: nowIso(deps),
   });
+  try {
+    await deps.onStateChange?.(next);
+  } catch {
+    // Progress reporting must never change the delivery result.
+  }
+  return next;
 }
 
 function toAgentError(error: unknown, fallbackCode: AgentError["code"]): AgentError {
@@ -342,7 +348,7 @@ async function runVerifyReviewPublish(input: {
     });
     const diff = await deps.git.getDiff(state.worktreePath);
     review = await deps.codex.review({
-      repositoryPath: delivery.repositoryPath,
+      repositoryPath: state.worktreePath,
       issue: input.issue,
       plan: {
         summary: input.plan.summary,
@@ -650,7 +656,7 @@ async function maybeFix(input: {
   if (verification.success) {
     const diff = await deps.git.getDiff(state.worktreePath);
     review = await deps.codex.review({
-      repositoryPath: delivery.repositoryPath,
+      repositoryPath: state.worktreePath,
       issue: input.issue,
       plan: {
         summary: input.plan.summary,

@@ -42,6 +42,33 @@ const alwaysDenyOperations = new Set<PermissionOperation>([
   "unknown",
 ]);
 
+function safeWorktreeCommand(command: string): boolean {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  const executable = tokens.shift();
+  if (!executable || tokens.some((token) => /[;&|`$]/.test(token) || token.includes("..") || /^[\\/]|^[A-Za-z]:/.test(token))) {
+    return false;
+  }
+  const normalizedExecutable = executable.toLowerCase();
+  if ([
+    "ls",
+    "dir",
+    "pwd",
+    "get-childitem",
+    "get-content",
+    "get-location",
+    "out-null",
+    "pnpm",
+    "resolve-path",
+    "select-object",
+    "test-path",
+  ].includes(normalizedExecutable)) return true;
+  if (normalizedExecutable === "new-item" || normalizedExecutable === "mkdir") return true;
+  if (normalizedExecutable === "git") return ["status", "diff", "log", "show"].includes(tokens[0]?.toLowerCase() ?? "");
+  if (executable === "mkdir") return tokens.length > 0;
+  if (executable === "node") return !tokens.includes("-e") && !tokens.includes("--eval");
+  return false;
+}
+
 export function decidePermission(
   request: PermissionRequest,
   context: PermissionPolicyContext,
@@ -63,7 +90,7 @@ export function decidePermission(
   }
   if (request.operation === "command") {
     const command = request.command?.trim();
-    if (command && context.allowedCommands.includes(command)) {
+    if (command && (context.allowedCommands.includes(command) || safeWorktreeCommand(command))) {
       return { outcome: "approve", reason: "command is explicitly allowlisted", optionId: "allow-once" };
     }
     return { outcome: "deny", reason: "command is not explicitly allowlisted" };

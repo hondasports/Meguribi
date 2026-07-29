@@ -254,7 +254,7 @@ export async function captureGitWorktreeSnapshot(input: GitWorktreeSnapshotInput
     lastCommitDiffLines: lastCommitNumstat.diffLines,
     lastCommitHasBinary: lastCommitNumstat.hasBinary,
     remoteDigest: digest(remote),
-    remoteIdentity: safeRemoteIdentity(remote),
+    remoteIdentity: remote.trim() ? safeRemoteIdentity(remote) : `local:${root}`,
     configDigest: digest(config),
     reflogDigest: digest(reflog),
   };
@@ -322,7 +322,12 @@ export async function compareGitWorktreeSnapshots(input: GitSafetyComparisonInpu
   if (input.expectedBaseSha && after.baseSha !== input.expectedBaseSha) reasons.push("base SHA does not match the approved base");
   if (before.branch !== after.branch || (input.expectedBranch && after.branch !== input.expectedBranch)) reasons.push("branch changed");
   if (before.remoteDigest !== after.remoteDigest) reasons.push("Git remote configuration changed");
-  if (input.expectedRemoteIdentity !== undefined && after.remoteIdentity !== input.expectedRemoteIdentity) {
+  const expectedLocalRepository = input.expectedRemoteIdentity === "" && after.remoteIdentity.startsWith("local:");
+  if (
+    input.expectedRemoteIdentity !== undefined &&
+    !expectedLocalRepository &&
+    after.remoteIdentity !== input.expectedRemoteIdentity
+  ) {
     reasons.push("repository remote identity does not match the approved repository");
   }
   if (before.configDigest !== after.configDigest) reasons.push("local Git configuration changed");

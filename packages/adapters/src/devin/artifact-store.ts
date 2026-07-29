@@ -74,6 +74,7 @@ export class DevinAgentArtifactStore {
 
   private sequence = 0;
   private initialized = false;
+  private readonly appendQueues = new Map<string, Promise<void>>();
 
   constructor(readonly root: string) {
     this.rawEventsPath = path.join(root, "raw-events.jsonl");
@@ -202,14 +203,23 @@ export class DevinAgentArtifactStore {
   }
 
   private async appendJsonl(filePath: string, value: unknown): Promise<void> {
+    const previous = this.appendQueues.get(filePath) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      try {
+        const line = `${JSON.stringify(value)}\n`;
+        JSON.parse(line);
+        await atomicAppendFile(filePath, line);
+      } catch (error) {
+        throw new DevinArtifactWriteError(`Failed to append JSONL: ${path.basename(filePath)}`, {
+          cause: error,
+        });
+      }
+    });
+    this.appendQueues.set(filePath, next);
     try {
-      const line = `${JSON.stringify(value)}\n`;
-      JSON.parse(line);
-      await atomicAppendFile(filePath, line);
-    } catch (error) {
-      throw new DevinArtifactWriteError(`Failed to append JSONL: ${path.basename(filePath)}`, {
-        cause: error,
-      });
+      await next;
+    } finally {
+      if (this.appendQueues.get(filePath) === next) this.appendQueues.delete(filePath);
     }
   }
 
@@ -275,20 +285,12 @@ async function atomicWriteFile(filePath: string, contents: string): Promise<void
 }
 
 /**
- * Append by rewriting through a temp file + rename so readers never see a
- * partially written JSONL line if the process crashes mid-write.
+ * Append a complete JSONL record while the per-file queue is held. Using the
+ * native append operation avoids Windows rename failures when another process
+ * is reading the artifact file during a live run.
  */
 async function atomicAppendFile(filePath: string, chunk: string): Promise<void> {
-  let existing = "";
-  try {
-    existing = await fs.readFile(filePath, "utf8");
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code !== "ENOENT") {
-      throw error;
-    }
-  }
-  await atomicWriteFile(filePath, `${existing}${chunk}`);
+  await fs.appendFile(filePath, chunk, "utf8");
 }
 
 function redactAgentEvent(event: AgentEvent): AgentEvent {

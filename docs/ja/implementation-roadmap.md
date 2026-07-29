@@ -71,9 +71,9 @@ tests/fixtures/
 - `run` と `resume` は CLI に登録され、delivery use case を呼び出す。
 - `AgentAdapter` は `createDevinAcpAdapter` と `createCursorAcpAdapter` が実装する。
 - ACP session は redaction 済み event、prompt、Git boundary、正規化 result、termination result を保存する。
-- 既定 wiring は実際の RunStore と PolicyEngine を使うが、専用アダプターが完成するまで GitHub / Git port は fake を使う。
+- 既定 wiring は実 GitHub / Git / Codex / Verifier、実際の RunStore と PolicyEngine、明示された実装エージェントを使う。fake は fixture test または `MEGURIBI_DELIVERY_FAKES=1` の明示時だけ使う。
 
-したがって Phase 1 の完了条件はまだ満たしていません。残作業は本番 GitHub / Git adapter と、計画済みの `init`、`plan`、`review`、`cleanup` の CLI surface です。
+したがって Phase 1 の完了条件はまだ満たしていません。残作業は計画済みの `init`、`plan`、`review`、`cleanup` の CLI surface と、実サービスを使う manual smoke です。
 
 ### 3.1 `init`
 

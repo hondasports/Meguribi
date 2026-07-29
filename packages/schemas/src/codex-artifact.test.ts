@@ -66,6 +66,34 @@ describe("Codex artifact schemas", () => {
     expect(result.success).toBe(false);
   });
 
+  it("normalizes nullable optional finding locations", () => {
+    const result = v.safeParse(ReviewContentSchema, {
+      status: "approved_with_notes",
+      summary: "summary",
+      requirementCoverage: [],
+      findings: [{
+        id: "F-1",
+        severity: "info",
+        path: null,
+        line: null,
+        problem: "note",
+        requiredChange: "none",
+      }],
+      missingTests: [],
+      scopeViolations: [],
+      recommendedAction: "proceed",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.output.findings[0]).toEqual({
+        id: "F-1",
+        severity: "info",
+        problem: "note",
+        requiredChange: "none",
+      });
+    }
+  });
+
   it("requires metadata on a full review artifact", () => {
     const result = v.safeParse(ReviewArtifactSchema, {
       schemaVersion: 1,

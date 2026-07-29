@@ -4,7 +4,7 @@ import type { VerificationLogWriter, VerificationResult, Verifier } from "@megur
 import { ProcessError, ProcessRunner } from "@meguribi/process";
 import { isSecretKey, redactDiagnosticText } from "../devin/redact.js";
 
-const SHELL_METACHARACTERS = /[&|<>^%]/;
+const SHELL_METACHARACTERS = /[&|<>^%()!"]/;
 export const DEFAULT_VERIFY_TIMEOUT_MS = 30 * 60 * 1000;
 export const DEFAULT_MAX_VERIFY_LOG_BYTES = 1_048_576;
 
@@ -39,9 +39,10 @@ export function createCommandVerifier(options?: {
         const startedAt = new Date().toISOString();
         const { executable, args } = parseVerifyCommand(command.run);
         const resolvedExecutable = resolveExecutable(executable);
+        const invocation = resolveVerifierInvocation(resolvedExecutable, args);
         let captured: { stdout: CollectedOutput; stderr: CollectedOutput } | undefined;
         try {
-          const child = runner.run(resolvedExecutable, args, {
+          const child = runner.run(invocation.executable, invocation.args, {
             cwd: input.worktreePath,
             env: process.env,
             abortSignal: input.abortSignal,
@@ -129,6 +130,41 @@ export function parseVerifyCommand(run: string): { executable: string; args: str
     throw new Error("Verify command must not be empty");
   }
   return { executable, args: parts.slice(1) };
+}
+
+export interface VerifierInvocationOptions {
+  platform?: NodeJS.Platform;
+  comSpec?: string;
+}
+
+/**
+ * Windows cannot spawn .cmd/.bat files with shell:false directly. Keep the
+ * verifier shell-free for normal executables and use the system command
+ * interpreter only for those script shims, after parseVerifyCommand has
+ * rejected shell metacharacters.
+ */
+export function resolveVerifierInvocation(
+  executable: string,
+  args: string[],
+  options: VerifierInvocationOptions = {},
+): { executable: string; args: string[] } {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(executable)) {
+    return { executable, args };
+  }
+  const comSpec = options.comSpec ?? process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe";
+  const commandLine = [executable, ...args].map(quoteCommandLineArg).join(" ");
+  return {
+    executable: comSpec,
+    args: ["/d", "/s", "/c", commandLine],
+  };
+}
+
+function quoteCommandLineArg(value: string): string {
+  if (/^[a-zA-Z0-9_./:=\\-]+$/.test(value)) {
+    return value;
+  }
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 export interface ResolvePlatformExecutableOptions {

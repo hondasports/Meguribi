@@ -5,6 +5,7 @@ import {
   createCommandVerifier,
   parseVerifyCommand,
   resolvePlatformExecutable,
+  resolveVerifierInvocation,
 } from "./command-verifier.js";
 
 describe("parseVerifyCommand", () => {
@@ -19,6 +20,31 @@ describe("parseVerifyCommand", () => {
     expect(() => parseVerifyCommand("pnpm test & calc.exe")).toThrow(/metacharacters/i);
     expect(() => parseVerifyCommand("pnpm test | cat")).toThrow(/metacharacters/i);
     expect(() => parseVerifyCommand("pnpm test > out.txt")).toThrow(/metacharacters/i);
+  });
+
+  it("rejects quoting that could change a Windows command line", () => {
+    expect(() => parseVerifyCommand('pnpm test "unsafe"')).toThrow(/metacharacters/i);
+  });
+});
+
+describe("resolveVerifierInvocation", () => {
+  it("wraps Windows command shims with ComSpec", () => {
+    expect(
+      resolveVerifierInvocation("C:\\Program Files\\pnpm.CMD", ["lint"], {
+        platform: "win32",
+        comSpec: "C:\\Windows\\System32\\cmd.exe",
+      }),
+    ).toEqual({
+      executable: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", '"C:\\Program Files\\pnpm.CMD" lint'],
+    });
+  });
+
+  it("leaves normal executables unchanged", () => {
+    expect(resolveVerifierInvocation("node.exe", ["test.mjs"], { platform: "win32" })).toEqual({
+      executable: "node.exe",
+      args: ["test.mjs"],
+    });
   });
 });
 

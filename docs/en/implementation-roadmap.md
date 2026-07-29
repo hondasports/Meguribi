@@ -70,9 +70,9 @@ The repository currently has a working foundation for the delivery loop:
 - `run` and `resume` are registered in the CLI and call the delivery use cases.
 - `AgentAdapter` is implemented by `createDevinAcpAdapter` and `createCursorAcpAdapter`.
 - ACP sessions persist redacted events, prompts, Git-boundary results, normalized results, and termination results.
-- The default wiring uses the real run store and policy engine, but GitHub and Git ports still use fakes until their dedicated adapters land.
+- The default wiring uses real GitHub / Git / Codex / Verifier components, the real run store and policy engine, and the explicitly selected implementation agent. Fakes are enabled only by fixture tests or an explicit `MEGURIBI_DELIVERY_FAKES=1`.
 
-The Phase 1 completion criteria are therefore not met yet. The remaining work includes the production GitHub/Git adapters and the planned `init`, `plan`, `review`, and `cleanup` command surfaces.
+The Phase 1 completion criteria are therefore not met yet. The remaining work includes the planned `init`, `plan`, `review`, and `cleanup` command surfaces and manual smoke tests against real services.
 
 ### 3.1 `init`
 

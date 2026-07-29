@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getDefaultUserConfigPath, loadDevinConfig } from "./config-loader.js";
+import { getDefaultUserConfigPath, loadDevinConfig, loadImplementerConfig } from "./config-loader.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -183,5 +183,16 @@ describe("loadDevinConfig", () => {
         cli: { executable: "devin --api-key=SECRET" },
       }),
     ).rejects.toThrow(/executable/);
+  });
+});
+
+describe("loadImplementerConfig", () => {
+  it("consumes the implementer selector before validating the Devin config", async () => {
+    await expect(
+      loadImplementerConfig({
+        cli: { implementer: "devin" },
+        environment: { HOME: "C:\\does-not-exist" },
+      }),
+    ).resolves.toMatchObject({ kind: "devin", config: { executable: "devin" } });
   });
 });

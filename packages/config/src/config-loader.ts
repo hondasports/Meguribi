@@ -40,6 +40,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function withoutImplementer(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const { implementer: _implementer, ...config } = value;
+  return config;
+}
+
 export function getDefaultUserConfigPath(
   environment: NodeJS.ProcessEnv,
   platform: NodeJS.Platform = process.platform,
@@ -221,12 +227,19 @@ export async function loadImplementerConfig(
     throw new ImplementerNotSpecifiedError();
   }
 
+  const configOptions = {
+    ...options,
+    // `implementer` selects the config family; it is not a key in either the
+    // Devin or Cursor config schema.
+    cli: withoutImplementer(options.cli),
+  };
+
   if (explicitImplementer === "cursor") {
-    const result = await loadCursorConfig(options);
+    const result = await loadCursorConfig(configOptions);
     return { kind: "cursor", ...result };
   }
 
-  const result = await loadDevinConfig(options);
+  const result = await loadDevinConfig(configOptions);
   return { kind: "devin", ...result };
 }
 

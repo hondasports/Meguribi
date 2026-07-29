@@ -65,6 +65,34 @@ describe("DevinAgentArtifactStore", () => {
     expect(eventLine.includes("supersecrettoken123")).toBe(false);
   });
 
+  it("serializes concurrent JSONL appends without losing events", async () => {
+    const root = await tempRoot();
+    const store = new DevinAgentArtifactStore(root);
+    await store.init();
+
+    await Promise.all(
+      Array.from({ length: 100 }, (_, index) =>
+        store.appendEvent(
+          {
+            type: "message.delta",
+            sessionId: "s-1",
+            text: `event-${index}`,
+            at: "2026-07-26T00:00:00.000Z",
+          },
+          index + 1,
+        ),
+      ),
+    );
+
+    const lines = (await fs.readFile(store.eventsPath, "utf8")).trim().split("\n");
+    const sequences = lines
+      .map((line) => (JSON.parse(line) as { sequence: number }).sequence)
+      .sort((left, right) => left - right);
+
+    expect(lines).toHaveLength(100);
+    expect(sequences).toEqual(Array.from({ length: 100 }, (_, index) => index + 1));
+  });
+
   it("round-trips session metadata and result.json", async () => {
     const root = await tempRoot();
     const store = new DevinAgentArtifactStore(root);
