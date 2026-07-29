@@ -60,6 +60,11 @@ GitHub Issue
 
 Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別します。
 
+`meguribi plan` は branch、worktree、Run state を作成しないため、生成した最新の計画を
+`~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json` に保存します。
+同じ Issue で再実行した場合はこのファイルを atomic write で更新します。実装を開始する Run の
+`plan.json` は、引き続き上記の Run ディレクトリ配下に保存されます。
+
 ## 3. 共通メタデータ
 
 各 JSON 成果物は共通メタデータを持ちます。

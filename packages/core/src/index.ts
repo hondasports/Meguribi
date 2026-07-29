@@ -83,6 +83,12 @@ export type {
   ReviewStatus,
 } from "./codex-artifact.js";
 export type {
+  PlanArtifactStore,
+  PlanDependencies,
+  PlanInput,
+  PlanResult,
+} from "./plan.js";
+export type {
   AgentDiagnosis,
   AcpDiagnosis,
   AuthenticationDiagnosis,
@@ -111,6 +117,7 @@ export {
   resumeDelivery,
   runDelivery,
 } from "./workflow/delivery.js";
+export { IMPLEMENTATION_PLAN_MARKER, planIssue } from "./workflow/plan.js";
 export type { PublishGateInput } from "./workflow/delivery.js";
 export { buildFixInstruction } from "./workflow/fix-instruction.js";
 export { matchesProtectedPath } from "./path-match.js";

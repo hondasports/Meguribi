@@ -18,6 +18,7 @@ import {
   type DeliveryCommandOptions,
 } from "./commands/run.js";
 import { runInit, type InitCommandDependencies, type InitCommandOptions } from "./commands/init.js";
+import { runPlanCommand, type PlanCommandDependencies, type PlanCommandOptions } from "./commands/plan.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -37,7 +38,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -156,6 +157,24 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (targetPath: string | undefined, cliOptions: InitCommandOptions) => {
       try {
         const result = await runInit(targetPath, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("plan")
+    .description("Create a read-only Codex implementation plan for an Issue")
+    .argument("<target>", "Issue target, e.g. owner/repo#123")
+    .option("--json", "Emit PlanResult JSON only", false)
+    .option("--local", "Use a local Issue document and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (target: string, cliOptions: PlanCommandOptions) => {
+      try {
+        const result = await runPlanCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

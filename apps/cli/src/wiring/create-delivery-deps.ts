@@ -19,13 +19,14 @@ import {
   diagnoseCursor,
   diagnoseDevin,
   FileSystemRunStore,
+  FileSystemPlanArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
   preflightDevin,
 } from "@meguribi/adapters";
 import { loadImplementerConfig } from "@meguribi/config";
-import type { DeliveryDependencies, InheritedMcpPolicy } from "@meguribi/core";
+import type { DeliveryDependencies, InheritedMcpPolicy, PlanDependencies } from "@meguribi/core";
 import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
 export interface CreateDeliveryDepsOptions {
@@ -41,6 +42,15 @@ export interface CreateDeliveryDepsOptions {
    * Devin ACP facade and FileSystemRunStore stay real so ACP implement works.
    * Also enabled when MEGURIBI_DELIVERY_FAKES=1.
    */
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreatePlanDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
   useLocalFakes?: boolean;
   runsRoot?: string;
 }
@@ -282,5 +292,27 @@ export async function createDeliveryDeps(
         });
       },
     },
+  };
+}
+
+/** Wiring for the read-only `plan` command; it does not diagnose an implementer. */
+export async function createPlanDependencies(
+  options: CreatePlanDepsOptions = {},
+): Promise<PlanDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+    planStore: new FileSystemPlanArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
   };
 }

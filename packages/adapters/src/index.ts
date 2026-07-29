@@ -2,6 +2,7 @@ export * from "./codex/index.js";
 export * from "./github/index.js";
 export * from "./git/index.js";
 export * from "./init/index.js";
+export * from "./plan-store/index.js";
 export {
   captureGitWorktreeSnapshot,
   compareGitWorktreeSnapshots,

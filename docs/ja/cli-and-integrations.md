@@ -141,6 +141,12 @@ Codex が対象リポジトリを読み取り、技術計画を作成します�
 meguribi plan owner/repo#125
 ```
 
+`plan` は実装エージェントを起動せず、計画を
+`~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json`
+（Windows は `%LOCALAPPDATA%\\meguribi\\plans\\...`）へ atomic write します。
+同時に `<!-- meguribi:implementation-plan -->` marker 付きの Issue コメントを作成または更新します。
+ローカル fixture では `--local --repo-path <path>` を使用できます。`--json` は計画と成果物パスを JSON で出力します。
+
 ### `meguribi run`
 
 承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`AgentAdapter` port（本番は `createDevinAcpAdapter` または `createCursorAcpAdapter`）へ実装を委譲します。
