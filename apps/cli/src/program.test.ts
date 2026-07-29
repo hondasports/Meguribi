@@ -4,9 +4,76 @@ import type { DevinDiagnosis } from "@meguribi/schemas";
 import type { CodexClient, CodexThreadEvent } from "@meguribi/adapters";
 import { runResumeCommand, runRunCommand } from "./commands/run.js";
 import { runInit } from "./commands/init.js";
+import { runPlanCommand } from "./commands/plan.js";
 import { runDoctor } from "./program.js";
 import { parseIssueTarget } from "./target.js";
 import { createCodexBridge } from "./wiring/create-delivery-deps.js";
+
+describe("runPlanCommand", () => {
+  it("creates a plan without requiring implementer diagnostics", async () => {
+    const chunks: string[] = [];
+    const calls: string[] = [];
+    const result = await runPlanCommand(
+      "owner/repo#12",
+      { json: true, repoPath: "C:/fixture/repository" },
+      {
+        cwd: "C:/fixture/repository",
+        stdout: (text) => chunks.push(text),
+        plan: {
+          github: {
+            getIssue: async (repository, issueNumber) => {
+              calls.push(`issue:${repository}#${String(issueNumber)}`);
+              return {
+                number: issueNumber,
+                title: "Planning",
+                body: "Create a plan.",
+                labels: [],
+                comments: [],
+                updatedAt: "2026-07-29T00:00:00.000Z",
+              };
+            },
+            upsertMarkerComment: async (input) => {
+              calls.push(input.marker);
+              return { commentId: 3 };
+            },
+          },
+          codex: {
+            createPlan: async () => ({
+              schemaVersion: 1,
+              artifactType: "implementation-plan",
+              summary: "Plan it",
+              requirements: [],
+              acceptanceCriteria: [],
+              outOfScope: [],
+              proposedFiles: [],
+              steps: ["Implement"],
+              risks: [],
+              tests: [],
+              humanDecisions: [],
+              unresolvedItems: [],
+              metadata: {
+                schemaVersion: 1,
+                artifactId: "plan-12",
+                createdAt: "2026-07-29T00:00:00.000Z",
+                durationMs: 1,
+                producer: { kind: "codex", role: "planner", threadId: "thread-12" },
+                sourceDigests: {},
+                eventLog: [],
+              },
+            }),
+          },
+          planStore: {
+            save: async () => "C:/data/plan.json",
+          },
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(chunks.join("")).artifactPath).toBe("C:/data/plan.json");
+    expect(calls).toEqual(["issue:owner/repo#12", "<!-- meguribi:implementation-plan -->"]);
+  });
+});
 
 const healthy: DevinDiagnosis = {
   executable: { status: "ok", path: "devin" },

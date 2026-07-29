@@ -132,6 +132,12 @@ Ask Codex to inspect the repository and produce a technical plan. `plan` is read
 meguribi plan owner/repo#125
 ```
 
+`plan` does not start an implementation agent. It atomically writes the plan to
+`~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json`
+(`%LOCALAPPDATA%\\meguribi\\plans\\...` on Windows), and creates or updates the Issue comment with the
+`<!-- meguribi:implementation-plan -->` marker. Use `--local --repo-path <path>` for a local fixture.
+`--json` emits the plan and artifact path as JSON.
+
 ### `meguribi run`
 
 Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `AgentAdapter` port (production: `createDevinAcpAdapter` or `createCursorAcpAdapter`).

@@ -47,6 +47,11 @@ This provides responsibility separation, schema validation, reproducibility, hum
 
 The Run ID contains a timestamp and random suffix so repeated execution of the same Issue is distinguishable.
 
+`meguribi plan` does not create a branch, worktree, or Run state. It stores the latest plan at
+`~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json` and atomically replaces that file
+when the same Issue is planned again. A delivery Run continues to store its `plan.json` under its Run
+directory above.
+
 ## 3. Common metadata
 
 Every JSON artifact includes common metadata:
