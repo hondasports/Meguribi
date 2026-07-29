@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createFakeDeliveryDeps } from "@meguribi/adapters";
 import type { DevinDiagnosis } from "@meguribi/schemas";
+import type { CodexClient, CodexThreadEvent } from "@meguribi/adapters";
 import { runResumeCommand, runRunCommand } from "./commands/run.js";
 import { runDoctor } from "./program.js";
 import { parseIssueTarget } from "./target.js";
+import { createCodexBridge } from "./wiring/create-delivery-deps.js";
 
 const healthy: DevinDiagnosis = {
   executable: { status: "ok", path: "devin" },
@@ -166,6 +168,8 @@ describe("run / resume DI", () => {
 
     // With DI, inherit warn unless tests override; allowInheritedMcp=true unblocks warn.
     expect(stderr.join("")).toContain("Starting delivery");
+    expect(stderr.join("")).toContain("status=planning");
+    expect(stderr.join("")).toContain("status=verifying");
     expect(result.exitCode).toBe(0);
     expect(result.result?.published).toBe(true);
     const parsed = JSON.parse(stdout.join("")) as { published: boolean; runId: string };
@@ -237,5 +241,118 @@ describe("run / resume DI", () => {
     expect(result.exitCode).toBe(0);
     expect(result.result?.published).toBe(true);
     expect(JSON.parse(stdout.join()).published).toBe(true);
+  });
+});
+
+function codexMessage(value: unknown): CodexThreadEvent {
+  return {
+    type: "item.completed",
+    item: { type: "agent_message", text: JSON.stringify(value) },
+  };
+}
+
+async function* codexEvents(events: CodexThreadEvent[]): AsyncGenerator<CodexThreadEvent> {
+  for (const event of events) {
+    yield event;
+  }
+}
+
+function createStructuredCodexClient(): CodexClient & { prompts: string[] } {
+  const prompts: string[] = [];
+  const plan = {
+    summary: "Implement the requested change.",
+    requirements: ["The requested change is implemented."],
+    acceptanceCriteria: ["Verification passes."],
+    outOfScope: ["No deployment changes."],
+    proposedFiles: ["src/feature.ts"],
+    steps: ["Implement the change.", "Run verification."],
+    risks: ["Existing behavior may change."],
+    tests: ["Add a regression test."],
+    humanDecisions: [],
+    unresolvedItems: [],
+  };
+  const review = {
+    status: "approved" as const,
+    summary: "The change is ready for human review.",
+    requirementCoverage: [],
+    findings: [],
+    missingTests: [],
+    scopeViolations: [],
+    recommendedAction: "proceed" as const,
+  };
+  const responses = [plan, review];
+  const thread = {
+    id: "codex-thread",
+    async runStreamed(prompt: string) {
+      prompts.push(prompt);
+      const response = responses.shift();
+      if (response === undefined) {
+        throw new Error("Codex response exhausted");
+      }
+      return {
+        events: codexEvents([
+          { type: "thread.started", thread_id: "codex-thread" },
+          codexMessage(response),
+          { type: "turn.completed" },
+        ]),
+      };
+    },
+  };
+  return {
+    prompts,
+    startThread: () => thread,
+    resumeThread: () => thread,
+  };
+}
+
+describe("Codex CLI bridge", () => {
+  it("runs real Codex adapter calls with normalized source digests and a read-only guard", async () => {
+    const client = createStructuredCodexClient();
+    const snapshots = ["before-plan", "before-plan", "before-plan", "before-review", "before-review", "before-review"];
+    const bridge = createCodexBridge({
+      client,
+      workspaceSnapshot: async () => {
+        const snapshot = snapshots.shift();
+        if (snapshot === undefined) {
+          throw new Error("workspace snapshot exhausted");
+        }
+        return snapshot;
+      },
+    });
+    const issue = {
+      number: 22,
+      title: "Add feature",
+      body: "Implement the requested change.",
+      labels: ["agent:ready"],
+      comments: [],
+      updatedAt: "2026-07-28T00:00:00.000Z",
+    };
+
+    const plan = await bridge.createPlan({
+      repositoryPath: "C:/fixture/repository",
+      issue,
+      repositoryRules: "Only change source and tests.",
+      completionCriteria: ["Verification passes."],
+      outOfScope: ["No deployment changes."],
+    });
+    const review = await bridge.review({
+      repositoryPath: "C:/fixture/worktree",
+      issue,
+      plan,
+      diff: "diff --git a/src/feature.ts b/src/feature.ts",
+      changedFiles: ["src/feature.ts"],
+      verification: {
+        schemaVersion: 1,
+        artifactType: "verification",
+        success: true,
+        commands: [{ name: "test", exitCode: 0, startedAt: "2026-07-28T00:00:00.000Z", finishedAt: "2026-07-28T00:00:01.000Z" }],
+      },
+      repositoryRules: "Only change source and tests.",
+    });
+
+    expect(plan.artifactType).toBe("implementation-plan");
+    expect(review.artifactType).toBe("code-review");
+    expect(client.prompts).toHaveLength(2);
+    expect(snapshots).toHaveLength(0);
   });
 });

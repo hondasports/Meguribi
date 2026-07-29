@@ -64,6 +64,23 @@ describe("delivery workflow fixtures", () => {
     expect(log).toContain("fake verification passed");
   });
 
+  it("passes the implementation worktree to Codex review", async () => {
+    const bundle = createFakeDeliveryDeps();
+    let reviewRepositoryPath: string | undefined;
+    const codex = {
+      ...bundle.deps.codex,
+      review: async (input: Parameters<typeof bundle.deps.codex.review>[0]) => {
+        reviewRepositoryPath = input.repositoryPath;
+        return bundle.deps.codex.review(input);
+      },
+    };
+
+    const result = await runDelivery(baseInput(), { ...bundle.deps, codex });
+
+    expect(result.published).toBe(true);
+    expect(reviewRepositoryPath).toBe("/worktree");
+  });
+
   it("blocks MCP warn policy in non-interactive mode", async () => {
     const bundle = createFakeDeliveryDeps();
     const result = await runDelivery(

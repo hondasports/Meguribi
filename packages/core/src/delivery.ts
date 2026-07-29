@@ -259,6 +259,8 @@ export interface DeliveryDependencies {
   assertImplementerReady?: () => Promise<void>;
   /** @deprecated Use {@link assertImplementerReady} instead. */
   assertDevinReady?: () => Promise<void>;
+  /** Optional non-functional observer for live CLI progress reporting. */
+  onStateChange?: (state: Readonly<RunState>) => void | Promise<void>;
   now?: () => Date;
 }
 

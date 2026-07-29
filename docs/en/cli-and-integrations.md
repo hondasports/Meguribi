@@ -155,7 +155,7 @@ Main options:
 
 With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into the selected agent session cancel / shutdown.
 
-Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) selects `createDevinAcpAdapter` or `createCursorAcpAdapter` from the explicit implementer setting, and uses `FileSystemRunStore` and `createDefaultPolicyEngine`. Until dedicated GitHub/Git adapters land, those ports use fakes. Set `MEGURIBI_DELIVERY_FAKES=1` to also fake Codex/Verifier; without that flag, Codex wiring fails closed if the Codex SDK cannot be constructed (no silent auto-approve fake). Fixture tests use fakes and do not call real `gh` or real agent CLIs.
+Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) uses real `gh` / `git` / Codex SDK / Verifier and selects `createDevinAcpAdapter` or `createCursorAcpAdapter` from the explicit implementer setting, together with `FileSystemRunStore` and `createDefaultPolicyEngine`. Only an explicit `MEGURIBI_DELIVERY_FAKES=1` enables GitHub/Git/Codex/Verifier fakes for fixtures. Without that flag, adapter construction fails closed rather than silently falling back to an auto-approve fake. Fixture tests use fakes and do not call real `gh` or real agent CLIs.
 
 ### `meguribi review`
 

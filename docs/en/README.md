@@ -30,7 +30,7 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 
 ## Current implementation scope
 
-The implemented delivery CLI currently consists of `doctor`, `run`, and `resume`. `doctor` diagnoses ACP readiness for Devin or Cursor, while `run` and `resume` use the explicitly selected `AgentAdapter`. Production GitHub and Git adapters, along with the product-growth commands, are still specification/foundation work.
+The implemented delivery CLI currently consists of `doctor`, `run`, and `resume`. `doctor` diagnoses ACP readiness for Devin or Cursor, while `run` and `resume` orchestrate real GitHub / Git / Codex / Verifier components with the explicitly selected `AgentAdapter`. The product-growth commands remain specification/foundation work.
 
 ## Key decisions
 

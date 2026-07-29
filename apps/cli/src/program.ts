@@ -52,7 +52,10 @@ export async function runDoctor(
     // 曖昧な MCP ポリシーは diagnose 側で構造化して返す。
     // config loader の nonInteractive throw には乗せない。
     nonInteractive: false,
-    cli: options,
+    // Output and diagnostic flags are CLI concerns, not implementer config.
+    // Passing the whole Commander options object makes strict config schemas
+    // reject valid invocations such as `doctor --json`.
+    cli: options.implementer ? { implementer: options.implementer } : {},
   });
 
   let diagnosis: AgentDiagnosis;
@@ -99,6 +102,7 @@ function deliveryFlags(command: Command): Command {
     .option("--json", "Emit DeliveryResult JSON on stdout", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
     .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
+    .option("--local", "Use a local Issue document and local Git repository; never call GitHub", false)
     .option("--allow-inherited-mcp", "Explicitly allow inherited MCP under warn policy", false)
     .option(
       "--max-fix-attempts <number>",

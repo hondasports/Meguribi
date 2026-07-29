@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createPermissionMediator,
@@ -52,5 +54,18 @@ describe("permission mediator", () => {
     });
     expect(request.summary).not.toContain("secretvalue");
     expect(toAcpPermissionResponse({ outcome: "deny", reason: "blocked" }, [])).toEqual({ outcome: { outcome: "cancelled" } });
+  });
+
+  it("normalizes Devin's duplicated tilde worktree path inside the assigned root", () => {
+    const root = path.join(homedir(), "AppData", "Local", "meguribi", "worktrees", "issue-1");
+    const request = normalizeAcpPermissionRequest({
+      sessionId: "s-1",
+      toolCall: {
+        toolCallId: "r-2",
+        locations: [{ path: "~\\AppData\\Local\\meguribi\\AppData\\Local\\meguribi\\worktrees\\issue-1\\public" }],
+      },
+      options: [{ optionId: "allow", name: "allow once", kind: "allow_once" }],
+    }, { cwd: root, protectedPaths: [] });
+    expect(request.targetWithinWorktree).toBe(true);
   });
 });

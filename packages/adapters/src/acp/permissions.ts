@@ -10,6 +10,7 @@ import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
+import { homedir } from "node:os";
 import path from "node:path";
 import { redactDiagnosticText } from "./redact.js";
 
@@ -52,21 +53,46 @@ function rawCommand(params: RequestPermissionRequest): string | undefined {
   return undefined;
 }
 
+function resolvePermissionPath(root: string, candidate: string): string {
+  const expanded = candidate.startsWith("~")
+    ? path.resolve(homedir(), candidate.slice(1).replace(/^[/\\]+/, ""))
+    : path.resolve(root, candidate);
+  if (!candidate.startsWith("~")) return expanded;
+
+  const normalizedRoot = path.resolve(root);
+  const expandedLower = expanded.toLowerCase();
+  const rootLower = normalizedRoot.toLowerCase();
+  const rootIndex = expandedLower.lastIndexOf(rootLower);
+  if (rootIndex >= 0) {
+    const suffix = expanded.slice(rootIndex + normalizedRoot.length).replace(/^[/\\]+/, "");
+    return path.resolve(normalizedRoot, suffix);
+  }
+  return expanded;
+}
+
+function optionCommand(params: RequestPermissionRequest): string | undefined {
+  for (const option of params.options) {
+    const match = /allow `([^`]+)` commands/i.exec(option.name);
+    if (match?.[1]) return redactDiagnosticText(match[1]);
+  }
+  return undefined;
+}
+
 export function normalizeAcpPermissionRequest(
   params: RequestPermissionRequest,
   options: NormalizePermissionOptions,
 ): PermissionRequest {
-  const operation = inferOperation(params);
+  const command = rawCommand(params) ?? optionCommand(params);
+  const operation = command ? "command" : inferOperation(params);
   const rawLocations = params.toolCall.locations ?? [];
   const root = path.resolve(options.cwd);
   const paths = rawLocations.flatMap((location) => typeof location.path === "string" ? [location.path] : []);
-  const absolutePaths = paths.map((candidate) => path.resolve(root, candidate));
+  const absolutePaths = paths.map((candidate) => resolvePermissionPath(root, candidate));
   const targetWithinWorktree = absolutePaths.length === 0
     ? operation === "command"
     : absolutePaths.every((candidate) => within(root, candidate));
   const relativePaths = absolutePaths.map((candidate) => path.relative(root, candidate));
-  const command = rawCommand(params);
-  const summary = redactDiagnosticText(params.toolCall.title ?? params.toolCall.name ?? operation);
+  const summary = redactDiagnosticText(params.toolCall.title ?? params.toolCall.name ?? command ?? operation);
   return {
     requestId: params.toolCall.toolCallId,
     sessionId: params.sessionId,

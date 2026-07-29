@@ -73,8 +73,8 @@ export const ReviewContentSchema = v.strictObject({
     v.strictObject({
       id: v.string(),
       severity: v.picklist(["critical", "high", "medium", "low", "info"]),
-      path: v.optional(v.string()),
-      line: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+      path: optionalNullableString(),
+      line: optionalNullableLine(),
       problem: v.string(),
       requiredChange: v.string(),
     }),
@@ -101,8 +101,8 @@ export const ReviewArtifactSchema = v.strictObject({
     v.strictObject({
       id: v.string(),
       severity: v.picklist(["critical", "high", "medium", "low", "info"]),
-      path: v.optional(v.string()),
-      line: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+      path: optionalNullableString(),
+      line: optionalNullableLine(),
       problem: v.string(),
       requiredChange: v.string(),
     }),
@@ -118,3 +118,17 @@ export type PlanContent = v.InferOutput<typeof PlanContentSchema>;
 export type PlanArtifact = v.InferOutput<typeof PlanArtifactSchema>;
 export type ReviewContent = v.InferOutput<typeof ReviewContentSchema>;
 export type ReviewArtifact = v.InferOutput<typeof ReviewArtifactSchema>;
+
+function optionalNullableString() {
+  return v.pipe(
+    v.optional(v.nullable(v.string())),
+    v.transform((value) => value ?? undefined),
+  );
+}
+
+function optionalNullableLine() {
+  return v.pipe(
+    v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)))),
+    v.transform((value) => value ?? undefined),
+  );
+}
