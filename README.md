@@ -79,6 +79,54 @@ meguribi measure owner/repo#125
 meguribi cleanup owner/repo#125
 ```
 
+### `meguribi discover owner/repo`
+
+English: Extracts candidate problems from existing Issues, specified documents, and optional usage data. Candidates are saved locally by default; Issues are not created automatically.
+
+日本語: 既存 Issue、指定した資料、任意の利用データから課題候補を抽出します。既定では候補をローカルに保存し、Issue を自動作成しません。`--since` と `--limit` で対象期間と候補数を指定できます。
+
+### `meguribi hypothesis owner/repo#123`
+
+English: Structures a hypothesis from a problem candidate or an existing Issue so that it can be reviewed and tested.
+
+日本語: 課題候補または既存 Issue から、検証・レビュー可能な仮説を構造化します。
+
+### `meguribi promote owner/repo#123`
+
+English: Generates a Problem Issue draft from a validated Hypothesis Issue. The default behavior displays the draft; `--create-issue` creates a new Issue after human confirmation.
+
+日本語: 検証済みの Hypothesis Issue から Problem Issue の草案を生成します。既定では草案を表示し、`--create-issue` を指定した場合だけ人間の確認後に新しい Issue を作成します。
+
+### `meguribi require owner/repo#124`
+
+English: Converts an adopted solution approach into a Requirement / Feature Issue draft. Use `--solution <number>` to select the solution to promote.
+
+日本語: 採用した解決方針を Requirement / Feature Issue の草案へ変換します。昇格する解決方針は `--solution <number>` で選択します。
+
+### `meguribi plan owner/repo#125`
+
+English: Asks Codex to read the target repository and produce a technical implementation plan. Planning is read-only and does not modify code.
+
+日本語: Codex が対象リポジトリを読み取り、技術的な実装計画を作成します。計画作成は読み取り専用で、コードを変更しません。
+
+### `meguribi review owner/repo#125`
+
+English: Asks Codex to review the diff for an existing pull request or the branch associated with an Issue, including requirement coverage, risks, and required changes.
+
+日本語: 既存 Pull Request、または Issue に紐づくブランチの差分を Codex にレビューさせます。要件の充足状況、リスク、必要な変更を確認します。
+
+### `meguribi measure owner/repo#125`
+
+English: Creates a Measurement Issue draft from a Requirement / Feature Issue and its pull request. Use `--period <duration>` to define the measurement period.
+
+日本語: Requirement / Feature Issue とその Pull Request から Measurement Issue の草案を作成します。測定期間は `--period <期間>` で指定します。
+
+### `meguribi cleanup owner/repo#125`
+
+English: Cleans up the worktree and temporary information for a completed run. It never deletes unmerged changes or unsaved work.
+
+日本語: 完了した Run の worktree と一時情報を整理します。未マージの変更や未保存の作業は削除しません。
+
 The MVP intentionally starts with a smaller subset. See the implementation roadmap in each language.
 
 ## Status
