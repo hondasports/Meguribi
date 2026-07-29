@@ -17,6 +17,7 @@ import {
   type DeliveryCommandDependencies,
   type DeliveryCommandOptions,
 } from "./commands/run.js";
+import { runInit, type InitCommandDependencies, type InitCommandOptions } from "./commands/init.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -35,7 +36,8 @@ export interface DoctorDependencies {
   stderr?: (text: string) => void;
 }
 
-export interface ProgramDependencies extends DoctorDependencies, DeliveryCommandDependencies {
+export interface ProgramDependencies
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -143,6 +145,24 @@ function normalizeDeliveryOptions(
 export function createProgram(deps: ProgramDependencies = {}): Command {
   const program = new Command();
   program.name("meguribi").description("Meguribi local CLI").version("0.0.0");
+
+  program
+    .command("init")
+    .description("Diagnose a repository and create a non-destructive Meguribi config template")
+    .argument("[path]", "Path to the target Git repository", ".")
+    .option("--json", "Emit initialization diagnostics JSON only", false)
+    .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
+    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
+    .action(async (targetPath: string | undefined, cliOptions: InitCommandOptions) => {
+      try {
+        const result = await runInit(targetPath, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
 
   program
     .command("doctor")

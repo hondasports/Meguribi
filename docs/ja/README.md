@@ -30,7 +30,7 @@ Meguribi は、既存の GitHub リポジトリに対して、仮説から Pull 
 
 ## 現在の実装範囲
 
-実装済みの delivery CLI は `doctor`、`run`、`resume` です。`doctor` は Devin / Cursor の ACP 実行可否を診断し、`run` と `resume` は実 GitHub / Git / Codex / Verifier と、明示的に選択した AgentAdapter をオーケストレーションします。成長ループ系コマンドは、現時点では仕様・土台の段階です。
+実装済みの CLI は `init`、`doctor`、`run`、`resume` です。`init` は対象リポジトリと依存関係を診断し、既存設定を保護したまま `.meguribi.yml` の雛形を生成します。`doctor` は Devin / Cursor の ACP 実行可否を診断し、`run` と `resume` は実 GitHub / Git / Codex / Verifier と、明示的に選択した AgentAdapter をオーケストレーションします。成長ループ系コマンドと `plan` / `review` / `cleanup` は、現時点では仕様・土台の段階です。
 
 ## 主要な設計判断
 
