@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `plan`, `review`, `run`, `resume`, and `cleanup`. `hypothesis`, `promote`, `explore`, `require`, and `measure` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `plan`, `review`, `run`, `resume`, and `cleanup`. `promote`, `explore`, `require`, and `measure` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -91,7 +91,7 @@ Candidates are stored locally by default. Issues are not created automatically.
 
 ### `meguribi hypothesis`
 
-Structure a hypothesis from a candidate or Issue.
+Structure only the Issue sections `Observations`, `Problem candidates`, `Cause hypotheses`, `Solution hypotheses`, `Counter hypotheses`, `Validation methods`, `Success conditions`, and `Rejection conditions` into a draft artifact. Missing sections are recorded as `missingEvidence` instead of being invented, human approval is required, and the Issue comment is idempotently updated with a stable marker.
 
 ```bash
 meguribi hypothesis owner/repo#123
@@ -356,7 +356,7 @@ export interface CodexAdapter {
 - Separate threads by role
 - Resume only follow-up work for the same task
 - Store thread IDs with the Run
-- discovery, hypothesis, requirements, planning, and review are read-only
+- discovery, requirements, planning, and review are read-only. hypothesis writes its local artifact and only updates the existing Issue's draft comment through a stable marker
 - network access is disabled by default
 - Codex does not modify code in the MVP
 

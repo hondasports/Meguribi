@@ -74,6 +74,16 @@ export {
   type ProblemCandidate,
 } from "./discover.js";
 export {
+  structureHypothesis,
+  type HypothesisArtifact,
+  type HypothesisArtifactStore,
+  type HypothesisConfidence,
+  type HypothesisDependencies,
+  type HypothesisInput,
+  type HypothesisObservation,
+  type HypothesisProblemCandidate,
+} from "./hypothesis.js";
+export {
   decideInheritedMcpPolicy,
   type McpDetection,
   type McpPolicyDecision,

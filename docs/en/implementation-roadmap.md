@@ -273,6 +273,8 @@ Add observation-to-requirement discovery and post-release learning.
 
 ### 4.2 `hypothesis`
 
+Implemented: structure an `owner/repo#123` Issue body from its defined sections and save `hypothesis.json` locally. Missing evidence is recorded in `missingEvidence`, and the existing Issue receives an idempotently updated draft comment with a stable marker. Hypothesis approval and Issue promotion remain manual.
+
 - Cause, solution, and counter-hypotheses
 - Validation methods
 - Success and rejection conditions
