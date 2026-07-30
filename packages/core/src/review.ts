@@ -60,7 +60,7 @@ export async function reviewIssue(
     await deps.runStore.readArtifact<unknown>(state.runId, "verification.json"),
     state.runId,
   );
-  const diff = await deps.git.getDiff(state.worktreePath);
+  const diff = await deps.git.getDiff(state.worktreePath, state.baseSha);
   const review = assertReviewArtifact(
     (await deps.codex.review({
       repositoryPath: input.repositoryPath,
@@ -73,7 +73,16 @@ export async function reviewIssue(
     })) as unknown,
   );
   const artifactPath = await deps.runStore.saveArtifact(state.runId, "review.json", review);
+  const reviewNeedsChanges = review.status === "changes_required" || review.status === "blocked";
   await deps.runStore.update(state.runId, {
+    status: reviewNeedsChanges ? "blocked" : "awaiting_human",
+    currentStep: reviewNeedsChanges ? "implementation_blocked" : "awaiting_human",
+    lastError: reviewNeedsChanges
+      ? {
+          code: "policy_blocked",
+          message: "review requires changes; resume after the implementation is fixed",
+        }
+      : undefined,
     agentSessions: {
       ...state.agentSessions,
       codexReview: review.metadata.producer.threadId,

@@ -261,7 +261,7 @@ export function createFakeGitAdapter(options: FakeGitOptions = {}): GitAdapter &
         remoteIdentity: identity.remoteIdentity,
       };
     },
-    async getDiff() {
+    async getDiff(_worktreePath: string, _baseSha?: string) {
       calls.track("getDiff");
       return options.diff
         ? { changedFiles: [...options.diff.changedFiles], patch: options.diff.patch }

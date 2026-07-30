@@ -187,7 +187,7 @@ export interface GitAdapter {
     headSha: string;
     remoteIdentity: string;
   }>;
-  getDiff(worktreePath: string): Promise<{ changedFiles: string[]; patch: string }>;
+  getDiff(worktreePath: string, baseSha?: string): Promise<{ changedFiles: string[]; patch: string }>;
   commit(input: {
     worktreePath: string;
     paths: readonly string[];

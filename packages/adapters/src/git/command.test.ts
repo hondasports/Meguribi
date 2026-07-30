@@ -99,6 +99,32 @@ describe("Git command adapter", () => {
     }
   });
 
+  it("includes committed changes from the supplied base SHA in a review diff", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-git-review-diff-"));
+    try {
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: "\0", stderr: "" },
+        { exitCode: 0, stdout: "diff --git a/src/feature.ts b/src/feature.ts\n", stderr: "" },
+        { exitCode: 0, stdout: "src/feature.ts\0", stderr: "" },
+        { exitCode: 0, stdout: "", stderr: "" },
+      ]);
+      const adapter = createGitAdapter({ runner });
+
+      await expect(adapter.getDiff(root, "base-sha")).resolves.toEqual({
+        changedFiles: ["src/feature.ts"],
+        patch: "diff --git a/src/feature.ts b/src/feature.ts",
+      });
+      expect(runner.calls.map(({ args }) => args)).toEqual([
+        ["status", "--porcelain=v1", "-z", "-uall"],
+        ["diff", "base-sha", "HEAD", "--no-ext-diff", "--binary"],
+        ["diff", "base-sha", "HEAD", "--name-only", "-z"],
+        ["diff", "HEAD", "--no-ext-diff", "--binary"],
+      ]);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("removes a clean worktree and only then deletes its local branch when requested", async () => {
     const runner = new QueueRunner([
       { exitCode: 0, stdout: "C:/repo\n", stderr: "" },
