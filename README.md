@@ -56,7 +56,7 @@ Meguribi CLI
 
 ## CLI status
 
-The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
+The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `promote`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. Promote turns a human-validated hypothesis into a Problem draft and only creates an Issue after explicit interactive confirmation. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
 
 日本語: 現在利用できる CLI は `init`、`doctor`、`discover`、`hypothesis`、`plan`、`review`、`run`、`resume`、`cleanup` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
@@ -71,7 +71,6 @@ meguribi resume owner/repo#125
 The following product-loop commands are specified but not yet implemented:
 
 ```bash
-meguribi promote owner/repo#123
 meguribi explore owner/repo#124
 meguribi require owner/repo#124
 meguribi measure owner/repo#125
@@ -85,9 +84,9 @@ English: Extracts candidate problems from existing Issues, specified documents, 
 
 ### `meguribi promote owner/repo#123`
 
-English: Generates a Problem Issue draft from a validated Hypothesis Issue. The default behavior displays the draft; `--create-issue` creates a new Issue after human confirmation.
+English: Turns a `product:validated` Hypothesis Issue into a solution-neutral Problem draft. `--create-issue` requires interactive human confirmation before creating a new Issue.
 
-日本語: 検証済みの Hypothesis Issue から Problem Issue の草案を生成します。既定では草案を表示し、`--create-issue` を指定した場合だけ人間の確認後に新しい Issue を作成します。
+日本語: `product:validated` の Hypothesis Issue から、解決策を固定しない Problem 草案を作成します。`--create-issue` を指定した場合も、対話的な人間確認なしに新規 Issue は作成しません。
 
 ### `meguribi require owner/repo#124`
 

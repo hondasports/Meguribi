@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`plan`、`review`、`run`、`resume`、`cleanup` です。`promote`、`explore`、`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`plan`、`review`、`run`、`resume`、`cleanup` です。`explore`、`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -100,7 +100,7 @@ meguribi hypothesis owner/repo#123
 
 ### `meguribi promote`
 
-検証済み Hypothesis Issue から Problem Issue の草案を生成します。
+`product:validated` ラベルの付いた Hypothesis Issue から、解決策を固定しない Problem Issue の草案を生成します。既定ではローカル成果物と元Issueのコメントだけを更新し、`--create-issue` を指定した場合だけ対話的な人間確認後に新規Issueを作成します。観測または課題候補が不足している場合は停止します。
 
 ```bash
 meguribi promote owner/repo#123

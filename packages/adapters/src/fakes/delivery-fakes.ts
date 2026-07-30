@@ -190,6 +190,11 @@ export function createFakeGitHubAdapter(options: FakeGitHubOptions = {}): GitHub
       calls.track("upsertMarkerComment");
       return { commentId: 1 };
     },
+    async createIssue() {
+      calls.track("createIssue");
+      nextPr += 1;
+      return { number: nextPr, url: `https://example.test/issues/${String(nextPr)}` };
+    },
     async createDraftPullRequest() {
       calls.track("createDraftPullRequest");
       nextPr += 1;

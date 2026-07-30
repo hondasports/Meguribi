@@ -280,6 +280,8 @@ tests/fixtures/
 
 ### 4.3 `promote`
 
+実装済み: `product:validated` の Hypothesis Issue から、解決策を固定しない Problem 草案を生成します。既定ではローカル成果物と元Issueのmarkerコメントだけを更新し、`--create-issue` は対話的な人間確認後だけ新規Issueを作成します。
+
 - validated evidence 確認
 - Problem Issue 草案
 - 元 Issue への関連リンク

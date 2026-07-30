@@ -147,6 +147,12 @@ export interface GitHubAdapter {
     marker: string;
     body: string;
   }): Promise<{ commentId: number }>;
+  createIssue(input: {
+    repository: string;
+    title: string;
+    body: string;
+    labels?: readonly string[];
+  }): Promise<{ number: number; url: string }>;
   createDraftPullRequest(input: {
     repository: string;
     title: string;

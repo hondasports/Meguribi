@@ -146,6 +146,21 @@ function normalizePullRequest(value: GhPullRequest): PullRequestRecord {
   };
 }
 
+function issueUrl(value: string, repository: string): { number: number; url: string } {
+  const url = value.trim().split(/\s+/u).find((part) => part.startsWith("https://github.com/"));
+  if (!url) throw new Error(`GitHub did not return a valid created Issue URL for ${repository}`);
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`GitHub did not return a valid created Issue URL for ${repository}`);
+  }
+  const escapedRepository = repository.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = new RegExp(`^/${escapedRepository}/issues/(\\d+)/?$`).exec(parsed.pathname);
+  if (parsed.origin !== "https://github.com" || !match) throw new Error(`GitHub did not return a valid created Issue URL for ${repository}`);
+  return { number: Number(match[1]), url };
+}
+
 export function createGitHubAdapter(options: GitHubAdapterOptions = {}): GitHubAdapter {
   const runner = options.runner ?? new ProcessGitHubCommandRunner(options.executable ?? "gh", options.cwd ?? process.cwd());
 
@@ -233,6 +248,22 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): GitHubA
         throw new Error(`GitHub did not return a valid comment id for ${input.repository}#${String(input.issueNumber)}`);
       }
       return { commentId };
+    },
+
+    async createIssue(input) {
+      const args = [
+        "issue",
+        "create",
+        "--repo",
+        input.repository,
+        "--title",
+        input.title,
+        "--body",
+        input.body,
+      ];
+      for (const label of input.labels ?? []) args.push("--label", label);
+      const output = await runGh(runner, input.repository, "creating a Problem Issue", args);
+      return issueUrl(output, input.repository);
     },
 
     async findDraftPullRequest(input) {

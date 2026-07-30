@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `plan`, `review`, `run`, `resume`, and `cleanup`. `promote`, `explore`, `require`, and `measure` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `plan`, `review`, `run`, `resume`, and `cleanup`. `explore`, `require`, and `measure` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -99,7 +99,7 @@ meguribi hypothesis owner/repo#123
 
 ### `meguribi promote`
 
-Generate a Problem Issue draft from a validated Hypothesis Issue.
+Generate a solution-neutral Problem Issue draft from a `product:validated` Hypothesis Issue. By default only the local artifact and the source Issue comment are updated; `--create-issue` creates a new Issue only after interactive human confirmation. The command stops when observations or problem candidates are missing.
 
 ```bash
 meguribi promote owner/repo#123

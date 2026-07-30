@@ -82,7 +82,17 @@ export {
   type HypothesisInput,
   type HypothesisObservation,
   type HypothesisProblemCandidate,
+  type HypothesisSections,
+  parseHypothesisSections,
 } from "./hypothesis.js";
+export {
+  promoteHypothesis,
+  type ProblemArtifact,
+  type ProblemArtifactStore,
+  type PromoteDependencies,
+  type PromoteInput,
+  type PromoteResult,
+} from "./promote.js";
 export {
   decideInheritedMcpPolicy,
   type McpDetection,

@@ -72,7 +72,7 @@ const SECTION_ALIASES: Record<SectionKey, readonly string[]> = {
   rejectionConditions: ["失敗・棄却条件", "失敗・却下条件", "rejection conditions", "rejection condition"],
 };
 
-interface ParsedSections {
+export interface HypothesisSections {
   sections: Partial<Record<SectionKey, string[]>>;
   present: Set<SectionKey>;
 }
@@ -98,7 +98,7 @@ function linesFromSection(lines: readonly string[]): string[] {
     .filter((line) => line.length > 0);
 }
 
-function parseSections(body: string): ParsedSections {
+export function parseHypothesisSections(body: string): HypothesisSections {
   const sections: Partial<Record<SectionKey, string[]>> = {};
   const present = new Set<SectionKey>();
   let current: SectionKey | undefined;
@@ -123,7 +123,7 @@ function parseSections(body: string): ParsedSections {
   return { sections, present };
 }
 
-function nonEmptySection(parsed: ParsedSections, key: SectionKey): string[] {
+function nonEmptySection(parsed: HypothesisSections, key: SectionKey): string[] {
   return parsed.sections[key] ?? [];
 }
 
@@ -135,7 +135,7 @@ function toProblemCandidates(values: readonly string[]): HypothesisProblemCandid
   return values.map((statement) => ({ statement, confidence: "reported" }));
 }
 
-function missingEvidence(parsed: ParsedSections): string[] {
+function missingEvidence(parsed: HypothesisSections): string[] {
   return (Object.keys(SECTION_NAMES) as SectionKey[])
     .filter((key) => !parsed.present.has(key) || (parsed.sections[key] ?? []).length === 0)
     .map((key) => SECTION_NAMES[key]);
@@ -167,7 +167,7 @@ export async function structureHypothesis(
 ): Promise<{ artifact: HypothesisArtifact; artifactPath: string; commentId: number }> {
   const now = deps.now ?? (() => new Date());
   const issue = await deps.github.getIssue(input.repository, input.issueNumber);
-  const parsed = parseSections(issue.body);
+  const parsed = parseHypothesisSections(issue.body);
   const source = `github:issue:${String(issue.number)}:body`;
   const artifact: HypothesisArtifact = {
     schemaVersion: 1,

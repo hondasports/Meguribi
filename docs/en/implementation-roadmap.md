@@ -283,6 +283,8 @@ Implemented: structure an `owner/repo#123` Issue body from its defined sections 
 
 ### 4.3 `promote`
 
+Implemented: generate a solution-neutral Problem draft from a `product:validated` Hypothesis Issue. By default only the local artifact and source Issue marker comment are updated; `--create-issue` creates a new Issue only after interactive human confirmation.
+
 - Confirm validated evidence.
 - Create a Problem Issue draft.
 - Link the original Hypothesis Issue.
