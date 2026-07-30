@@ -24,6 +24,7 @@ import { runCleanupCommand, type CleanupCommandDependencies, type CleanupCommand
 import { runDiscoverCommand, type DiscoverCommandDependencies, type DiscoverCommandOptions } from "./commands/discover.js";
 import { runHypothesisCommand, type HypothesisCommandDependencies, type HypothesisCommandOptions } from "./commands/hypothesis.js";
 import { runPromoteCommand, type PromoteCommandDependencies, type PromoteCommandOptions } from "./commands/promote.js";
+import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommandOptions } from "./commands/explore.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -43,7 +44,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -243,6 +244,24 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: PromoteCommandOptions) => {
       try {
         const result = await runPromoteCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("explore")
+    .description("Compare explicit solution directions without selecting a winner")
+    .argument("<target>", "Problem Issue target, e.g. owner/repo#124")
+    .option("--json", "Emit ExploreResult JSON only", false)
+    .option("--local", "Use local Issue documents and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (target: string, cliOptions: ExploreCommandOptions) => {
+      try {
+        const result = await runExploreCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

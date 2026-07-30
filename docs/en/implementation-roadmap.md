@@ -291,6 +291,8 @@ Implemented: generate a solution-neutral Problem draft from a `product:validated
 
 ### 4.4 `explore`
 
+Implemented: structure multiple explicit solution directions from a Problem Issue into a comparison artifact. Missing evaluation data remains `null`, and no winner is selected automatically.
+
 - Generate multiple solution directions.
 - Compare value, effort, risk, and reversibility.
 - Avoid selecting only the easiest implementation.
