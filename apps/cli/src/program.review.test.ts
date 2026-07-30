@@ -31,4 +31,9 @@ describe("CLI command registration", () => {
     const program = createProgram();
     expect(program.commands.map((command) => command.name())).toContain("require");
   });
+
+  it("registers the measure command", () => {
+    const program = createProgram();
+    expect(program.commands.map((command) => command.name())).toContain("measure");
+  });
 });

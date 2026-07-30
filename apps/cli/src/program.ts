@@ -26,6 +26,7 @@ import { runHypothesisCommand, type HypothesisCommandDependencies, type Hypothes
 import { runPromoteCommand, type PromoteCommandDependencies, type PromoteCommandOptions } from "./commands/promote.js";
 import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommandOptions } from "./commands/explore.js";
 import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
+import { runMeasureCommand, type MeasureCommandDependencies, type MeasureCommandOptions } from "./commands/measure.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -45,7 +46,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -286,6 +287,25 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: RequireCommandOptions) => {
       try {
         const result = await runRequireCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("measure")
+    .description("Create a human-reviewed post-release Measurement draft")
+    .argument("<target>", "Requirement or Feature Issue target, e.g. owner/repo#125")
+    .requiredOption("--period <duration>", "Measurement period, e.g. 14d or 2w")
+    .option("--json", "Emit MeasurementResult JSON only", false)
+    .option("--local", "Use local Issue documents and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (target: string, cliOptions: MeasureCommandOptions) => {
+      try {
+        const result = await runMeasureCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -25,6 +25,7 @@ import {
   FileSystemProblemArtifactStore,
   FileSystemExploreArtifactStore,
   FileSystemRequirementArtifactStore,
+  FileSystemMeasurementArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
@@ -38,6 +39,7 @@ import type {
   PromoteDependencies,
   ExploreDependencies,
   RequireDependencies,
+  MeasureDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -118,6 +120,7 @@ export interface CreatePromoteDepsOptions {
 
 export interface CreateExploreDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
 export interface CreateRequireDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
+export interface CreateMeasureDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
 
 function resolveRunsRoot(explicit?: string): string {
   if (explicit) {
@@ -500,4 +503,11 @@ export async function createRequireDependencies(options: CreateRequireDepsOption
   const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
   const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
   return { github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }), artifactStore: new FileSystemRequirementArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }) };
+}
+
+/** Wiring for human-gated post-release Measurement drafts. */
+export async function createMeasureDependencies(options: CreateMeasureDepsOptions = {}): Promise<MeasureDependencies> {
+  const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return { github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }), artifactStore: new FileSystemMeasurementArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }) };
 }

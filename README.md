@@ -68,10 +68,10 @@ meguribi run owner/repo#125 --implementer devin
 meguribi resume owner/repo#125
 ```
 
-The remaining product-loop command is:
+All product-loop commands in the current roadmap are implemented:
 
 ```bash
-meguribi measure owner/repo#125
+meguribi measure owner/repo#125 --period 14d
 ```
 
 ### `meguribi discover owner/repo`
@@ -112,9 +112,9 @@ English: Asks Codex to review the diff for an existing pull request or the branc
 
 ### `meguribi measure owner/repo#125`
 
-English: Creates a Measurement Issue draft from a Requirement / Feature Issue and its pull request. Use `--period <duration>` to define the measurement period.
+English: Creates a human-reviewed Measurement draft from a merged pull request linked in a Requirement / Feature Issue. Use `--period <duration>` to define the measurement period; missing evidence remains in `openQuestions`.
 
-日本語: Requirement / Feature Issue とその Pull Request から Measurement Issue の草案を作成します。測定期間は `--period <期間>` で指定します。
+日本語: Requirement / Feature Issue の delivery summary からマージ済み Pull Request を復元し、Measurement 草案を作成します。測定期間は `--period <期間>` で指定し、未提示の根拠は `openQuestions` に残します。結果判定は人間が行います。
 
 ### `meguribi cleanup owner/repo#125`
 
