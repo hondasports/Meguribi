@@ -101,6 +101,7 @@ export {
   type ExploreInput,
   type SolutionOption,
 } from "./explore.js";
+export { requireSolution, type RequirementArtifact, type RequirementArtifactStore, type RequireDependencies, type RequireInput } from "./require.js";
 export {
   decideInheritedMcpPolicy,
   type McpDetection,

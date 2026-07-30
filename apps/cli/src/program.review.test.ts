@@ -26,4 +26,9 @@ describe("CLI command registration", () => {
     const program = createProgram();
     expect(program.commands.map((command) => command.name())).toContain("explore");
   });
+
+  it("registers the require command", () => {
+    const program = createProgram();
+    expect(program.commands.map((command) => command.name())).toContain("require");
+  });
 });

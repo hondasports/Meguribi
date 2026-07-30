@@ -1,0 +1,3 @@
+import { describe, expect, it } from "vitest";
+import { runRequireCommand } from "./require.js";
+describe("runRequireCommand", () => { it("requires and passes the selected solution number", async () => { const output: string[] = []; const result = await runRequireCommand("owner/repo#12", { json: true, solution: 1 }, { stdout: (text) => output.push(text), require: { github: { getIssue: async () => ({ number: 12, title: "Problem", body: "## 解決方針\n- A", labels: ["product:approved"], comments: [], updatedAt: "2026-07-30T00:00:00.000Z" }), upsertMarkerComment: async () => ({ commentId: 1 }) }, artifactStore: { save: async () => "requirements.json" } } }); expect(result.exitCode).toBe(0); expect(JSON.parse(output.join("")).artifact.selectedSolution.number).toBe(1); }); });

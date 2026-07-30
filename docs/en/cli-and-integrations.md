@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `plan`, `review`, `run`, `resume`, and `cleanup`. `require` and `measure` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, and `cleanup`. `measure` remains a specified interface and is not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -119,7 +119,7 @@ Comparison dimensions include user value, validation power, implementation and o
 
 ### `meguribi require`
 
-Convert a selected solution into a Requirement / Feature Issue draft.
+Convert a selected solution from a `product:approved` Issue into a Requirement / Feature Issue draft with `--solution <number>`. Missing requirements, acceptance criteria, scope, metrics, or guardrails are recorded in `openQuestions` instead of being invented.
 
 ```bash
 meguribi require owner/repo#124 --solution 2

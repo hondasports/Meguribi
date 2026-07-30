@@ -299,6 +299,8 @@ Implemented: structure multiple explicit solution directions from a Problem Issu
 
 ### 4.5 `require`
 
+Selects an approved solution with `--solution <number>` and generates a Requirement draft that records unresolved details in `openQuestions`.
+
 - Requirements
 - Acceptance criteria
 - Out of scope
