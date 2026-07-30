@@ -22,6 +22,7 @@ import { runPlanCommand, type PlanCommandDependencies, type PlanCommandOptions }
 import { runReviewCommand, type ReviewCommandDependencies, type ReviewCommandOptions } from "./commands/review.js";
 import { runCleanupCommand, type CleanupCommandDependencies, type CleanupCommandOptions } from "./commands/cleanup.js";
 import { runDiscoverCommand, type DiscoverCommandDependencies, type DiscoverCommandOptions } from "./commands/discover.js";
+import { runHypothesisCommand, type HypothesisCommandDependencies, type HypothesisCommandOptions } from "./commands/hypothesis.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -41,7 +42,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -204,6 +205,24 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: PlanCommandOptions) => {
       try {
         const result = await runPlanCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("hypothesis")
+    .description("Structure an Issue hypothesis without inventing missing evidence")
+    .argument("<target>", "Issue target, e.g. owner/repo#123")
+    .option("--json", "Emit HypothesisResult JSON only", false)
+    .option("--local", "Use a local Issue document and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (target: string, cliOptions: HypothesisCommandOptions) => {
+      try {
+        const result = await runHypothesisCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

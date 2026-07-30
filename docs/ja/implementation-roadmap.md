@@ -270,6 +270,8 @@ tests/fixtures/
 
 ### 4.2 `hypothesis`
 
+実装済み: `owner/repo#123` の Issue 本文を決められた節から構造化し、`hypothesis.json` をローカル保存します。未提示の証拠は `missingEvidence` に記録し、既存 Issue には stable marker 付きの草案コメントを冪等更新します。仮説の承認や Issue の昇格は自動化しません。
+
 - cause / solution / counter hypotheses
 - validation method
 - success / rejection conditions

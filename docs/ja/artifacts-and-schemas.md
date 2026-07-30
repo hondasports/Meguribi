@@ -68,6 +68,8 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 
 `meguribi discover` は `~/.local/share/meguribi/discoveries/<owner>/<repo>/discovery.json` に、観測と課題候補を atomic write で保存します。`discovery.json` の `observations` は `statement`、`source`、`confidence` を持ち、候補の `evidenceRefs` は観測 IDだけを参照します。候補の順位は証拠の整理順であり、プロダクト優先度の自動決定ではありません。
 
+`meguribi hypothesis owner/repo#123` は `~/.local/share/meguribi/hypotheses/<owner>/<repo>/issue-123/hypothesis.json` に、Issue 本文の明示された節だけを atomic write で保存します。不足する節は `missingEvidence` に記録し、`humanApprovalRequired` は常に `true` です。
+
 ## 3. 共通メタデータ
 
 各 JSON 成果物は共通メタデータを持ちます。
@@ -168,10 +170,15 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 ## 6. `hypothesis.json`
 
 ```json
-{
-  "schemaVersion": 1,
-  "artifactType": "hypothesis",
-  "observations": [
+  {
+    "schemaVersion": 1,
+    "artifactType": "hypothesis",
+    "repository": "owner/repo",
+    "issueNumber": 123,
+    "generatedAt": "2026-07-30T00:00:00Z",
+    "status": "draft",
+    "humanApprovalRequired": true,
+    "observations": [
     {
       "statement": "入力画面を開いた利用者の25%が登録を完了していない",
       "source": "analytics-report.md",

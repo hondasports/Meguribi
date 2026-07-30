@@ -21,6 +21,7 @@ import {
   FileSystemRunStore,
   FileSystemPlanArtifactStore,
   FileSystemDiscoveryArtifactStore,
+  FileSystemHypothesisArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
@@ -30,6 +31,7 @@ import { loadImplementerConfig } from "@meguribi/config";
 import type {
   CleanupDependencies,
   DiscoverDependencies,
+  HypothesisDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -82,6 +84,15 @@ export interface CreateCleanupDepsOptions {
 }
 
 export interface CreateDiscoverDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreateHypothesisDepsOptions {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -419,5 +430,22 @@ export async function createDiscoverDependencies(
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
     artifactStore: new FileSystemDiscoveryArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+  };
+}
+
+/** Wiring for deterministic hypothesis structuring from an existing Issue. */
+export async function createHypothesisDependencies(
+  options: CreateHypothesisDepsOptions = {},
+): Promise<HypothesisDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemHypothesisArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }

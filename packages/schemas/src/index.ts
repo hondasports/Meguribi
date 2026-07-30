@@ -1,5 +1,10 @@
 export { AgentCapabilitySchema } from "./agent-capability.js";
 export type { AgentCapability } from "./agent-capability.js";
+export {
+  HypothesisArtifactSchema,
+  HypothesisObservationSchema,
+  HypothesisProblemCandidateSchema,
+} from "./hypothesis.js";
 export { AgentErrorCodeSchema, AgentErrorSchema } from "./agent-error.js";
 export type { AgentError, AgentErrorCode } from "./agent-error.js";
 export { AgentEventSchema } from "./agent-event.js";

@@ -56,9 +56,9 @@ Meguribi CLI
 
 ## CLI status
 
-The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
+The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
 
-日本語: 現在利用できる CLI は `init`、`doctor`、`run`、`resume` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
+日本語: 現在利用できる CLI は `init`、`doctor`、`discover`、`hypothesis`、`plan`、`review`、`run`、`resume`、`cleanup` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
 ```bash
 meguribi init --implementer cursor
@@ -71,7 +71,6 @@ meguribi resume owner/repo#125
 The following product-loop commands are specified but not yet implemented:
 
 ```bash
-meguribi hypothesis owner/repo#123
 meguribi promote owner/repo#123
 meguribi explore owner/repo#124
 meguribi require owner/repo#124
@@ -83,12 +82,6 @@ meguribi measure owner/repo#125
 English: Extracts candidate problems from existing Issues, specified documents, and optional usage data. Candidates are saved locally by default; Issues are not created automatically.
 
 日本語: 既存 Issue、指定した資料、任意の利用データから課題候補を抽出します。既定では候補をローカルに保存し、Issue を自動作成しません。`--since` と `--limit` で対象期間と候補数を指定できます。
-
-### `meguribi hypothesis owner/repo#123`
-
-English: Structures a hypothesis from a problem candidate or an existing Issue so that it can be reviewed and tested.
-
-日本語: 課題候補または既存 Issue から、検証・レビュー可能な仮説を構造化します。
 
 ### `meguribi promote owner/repo#123`
 

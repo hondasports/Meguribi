@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`plan`、`review`、`run`、`resume`、`cleanup` です。`hypothesis`、`promote`、`explore`、`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`plan`、`review`、`run`、`resume`、`cleanup` です。`promote`、`explore`、`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -92,7 +92,7 @@ meguribi discover owner/repo --input observations.md --label product:discovery -
 
 ### `meguribi hypothesis`
 
-課題候補または Issue から仮説を構造化します。
+Issue 本文の `観測`、`課題候補`、`原因仮説`、`解決仮説`、`反対仮説`、`検証方法`、`成功条件`、`失敗・棄却条件` の節だけを仮説成果物へ構造化します。未提示の内容は推測せず `missingEvidence` に記録し、人間承認が必要な草案としてローカル保存します。Issue コメントは stable marker で冪等更新します。
 
 ```bash
 meguribi hypothesis owner/repo#123
@@ -365,7 +365,7 @@ export interface CodexAdapter {
 - ロールごとに Thread を分ける
 - 同じタスクの修正だけ既存 Thread を再開する
 - Thread ID を Run に保存する
-- discovery / hypothesis / require / plan / review は読み取り専用
+- discovery / require / plan / review は読み取り専用。hypothesis は成果物を保存し、既存 Issue の草案コメントだけを stable marker で更新する
 - network access は既定で無効
 - コード変更を Codex に許可しないのが MVP の標準
 

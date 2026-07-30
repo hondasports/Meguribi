@@ -1,5 +1,6 @@
 export * from "./codex/index.js";
 export * from "./discovery-store/index.js";
+export * from "./hypothesis-store/index.js";
 export * from "./github/index.js";
 export * from "./git/index.js";
 export * from "./init/index.js";

@@ -55,6 +55,8 @@ directory above.
 
 `meguribi discover` atomically writes observations and problem candidates to `~/.local/share/meguribi/discoveries/<owner>/<repo>/discovery.json`. Each `observations` entry has a `statement`, `source`, and `confidence`; candidate `evidenceRefs` contain observation IDs only. Candidate ranking is an evidence-organization order, not an automatic product-priority decision.
 
+`meguribi hypothesis owner/repo#123` atomically writes only the explicit Issue sections to `~/.local/share/meguribi/hypotheses/<owner>/<repo>/issue-123/hypothesis.json`. Missing sections are recorded in `missingEvidence`, and `humanApprovalRequired` is always `true`.
+
 ## 3. Common metadata
 
 Every JSON artifact includes common metadata:
@@ -151,10 +153,15 @@ If an input changes before resume, Meguribi requires replanning or human confirm
 ## 6. `hypothesis.json`
 
 ```json
-{
-  "schemaVersion": 1,
-  "artifactType": "hypothesis",
-  "observations": [
+  {
+    "schemaVersion": 1,
+    "artifactType": "hypothesis",
+    "repository": "owner/repo",
+    "issueNumber": 123,
+    "generatedAt": "2026-07-30T00:00:00Z",
+    "status": "draft",
+    "humanApprovalRequired": true,
+    "observations": [
     {
       "statement": "25% of users who opened the form did not finish",
       "source": "analytics-report.md",
