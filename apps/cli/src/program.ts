@@ -23,6 +23,7 @@ import { runReviewCommand, type ReviewCommandDependencies, type ReviewCommandOpt
 import { runCleanupCommand, type CleanupCommandDependencies, type CleanupCommandOptions } from "./commands/cleanup.js";
 import { runDiscoverCommand, type DiscoverCommandDependencies, type DiscoverCommandOptions } from "./commands/discover.js";
 import { runHypothesisCommand, type HypothesisCommandDependencies, type HypothesisCommandOptions } from "./commands/hypothesis.js";
+import { runPromoteCommand, type PromoteCommandDependencies, type PromoteCommandOptions } from "./commands/promote.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -42,7 +43,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -223,6 +224,25 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: HypothesisCommandOptions) => {
       try {
         const result = await runHypothesisCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("promote")
+    .description("Create a human-reviewed Problem Issue draft from a validated Hypothesis")
+    .argument("<target>", "Issue target, e.g. owner/repo#123")
+    .option("--json", "Emit PromoteResult JSON only", false)
+    .option("--local", "Use local Issue documents and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--create-issue", "Create a Problem Issue after interactive human confirmation", false)
+    .action(async (target: string, cliOptions: PromoteCommandOptions) => {
+      try {
+        const result = await runPromoteCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

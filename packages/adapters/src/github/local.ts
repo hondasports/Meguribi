@@ -147,6 +147,23 @@ export function createLocalGitHubAdapter(options: LocalGitHubAdapterOptions): Gi
       return { commentId };
     },
 
+    async createIssue(input) {
+      const issueRoot = path.join(options.cwd, ".meguribi");
+      const issueList = (await readJson<LocalIssueDocument[]>(path.join(issueRoot, "issues.json"))) ?? [];
+      const existing = [...issueList];
+      const number = existing.reduce((maximum, issue) => Math.max(maximum, issue.number), 0) + 1;
+      const document: LocalIssueDocument = {
+        number,
+        title: input.title,
+        body: input.body,
+        labels: [...(input.labels ?? [])],
+        comments: [],
+        updatedAt: new Date().toISOString(),
+      };
+      await writeJson(path.join(issueRoot, `issue-${String(number)}.json`), document);
+      return { number, url: `local://issues/${String(number)}` };
+    },
+
     async findDraftPullRequest(input) {
       const pullRequests = (await readJson<Array<{ number: number; url: string; head: string }>>(localStatePath(options.cwd, "draft-prs.json"))) ?? [];
       const match = pullRequests.find((pullRequest) => pullRequest.head === input.head);

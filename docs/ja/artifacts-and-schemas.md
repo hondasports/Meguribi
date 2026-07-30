@@ -70,6 +70,8 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 
 `meguribi hypothesis owner/repo#123` は `~/.local/share/meguribi/hypotheses/<owner>/<repo>/issue-123/hypothesis.json` に、Issue 本文の明示された節だけを atomic write で保存します。不足する節は `missingEvidence` に記録し、`humanApprovalRequired` は常に `true` です。
 
+`meguribi promote owner/repo#123` は `~/.local/share/meguribi/problems/<owner>/<repo>/from-issue-123/problem.json` に Problem 草案を atomic write で保存し、元Issueの marker コメントを更新します。`--create-issue` を指定して確認が承認されるまで、新規Issueは作成しません。
+
 ## 3. 共通メタデータ
 
 各 JSON 成果物は共通メタデータを持ちます。
@@ -204,7 +206,32 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 
 観測には必ず出所と確度を持たせます。
 
-## 7. `requirements.json`
+## 7. `problem.json`
+
+`promote` が生成する Problem 草案は、元 Hypothesis への URL、観測根拠、未確認事項を保持します。`targetUser`、`userImpact`、`currentWorkaround` は入力にない場合 `null` とし、解決策を自動で埋めません。
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactType": "problem",
+  "repository": "owner/repo",
+  "sourceIssueNumber": 123,
+  "sourceIssueUrl": "https://github.com/owner/repo/issues/123",
+  "generatedAt": "2026-07-30T00:00:00Z",
+  "status": "draft",
+  "humanApprovalRequired": true,
+  "title": "Problem: 登録を完了できない",
+  "problem": "一部利用者が登録を完了できない",
+  "targetUser": null,
+  "evidence": ["登録画面で離脱が報告された"],
+  "userImpact": null,
+  "currentWorkaround": null,
+  "unconfirmedItems": ["対象ユーザー", "ユーザーへの影響", "現在の回避方法"],
+  "relatedHypothesis": "https://github.com/owner/repo/issues/123"
+}
+```
+
+## 8. `requirements.json`
 
 ```json
 {

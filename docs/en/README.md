@@ -30,7 +30,7 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 
 ## Current implementation scope
 
-The implemented CLI currently consists of `init`, `doctor`, `discover`, `hypothesis`, `plan`, `review`, `run`, `resume`, and `cleanup`. `discover` extracts evidence-backed candidates from Issues and optional Markdown/JSON observations without creating Issues. `hypothesis` structures only explicit Issue sections, records missing evidence, and requires human approval. `plan` and `review` run Codex planning and re-review, `run` and `resume` orchestrate the delivery workflow, and `cleanup` validates GitHub and Git safety conditions before removing a completed Run's worktree. `promote`, `explore`, `require`, and `measure` remain specification/foundation work.
+The implemented CLI currently consists of `init`, `doctor`, `discover`, `hypothesis`, `promote`, `plan`, `review`, `run`, `resume`, and `cleanup`. `discover` extracts evidence-backed candidates from Issues and optional Markdown/JSON observations without creating Issues. `hypothesis` structures only explicit Issue sections, records missing evidence, and requires human approval. `promote` turns a `product:validated` hypothesis into a Problem draft and never creates an Issue without explicit interactive confirmation. `plan` and `review` run Codex planning and re-review, `run` and `resume` orchestrate the delivery workflow, and `cleanup` validates GitHub and Git safety conditions before removing a completed Run's worktree. `explore`, `require`, and `measure` remain specification/foundation work.
 
 ## Key decisions
 

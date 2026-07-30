@@ -118,4 +118,20 @@ describe("GitHub CLI adapter", () => {
       headSha: "head-sha",
     });
   });
+
+  it("creates a Problem Issue with explicit labels", async () => {
+    const runner = new QueueRunner([{ exitCode: 0, stdout: "https://github.com/owner/repo/issues/24\n", stderr: "" }]);
+    const adapter = createGitHubAdapter({ runner });
+
+    await expect(adapter.createIssue({
+      repository: "owner/repo",
+      title: "Problem: Registration",
+      body: "## 課題\n登録できない",
+      labels: ["type:problem", "product:approved"],
+    })).resolves.toEqual({ number: 24, url: "https://github.com/owner/repo/issues/24" });
+    expect(runner.calls[0]).toEqual([
+      "issue", "create", "--repo", "owner/repo", "--title", "Problem: Registration",
+      "--body", "## 課題\n登録できない", "--label", "type:problem", "--label", "product:approved",
+    ]);
+  });
 });

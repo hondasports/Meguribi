@@ -22,6 +22,7 @@ import {
   FileSystemPlanArtifactStore,
   FileSystemDiscoveryArtifactStore,
   FileSystemHypothesisArtifactStore,
+  FileSystemProblemArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
@@ -32,6 +33,7 @@ import type {
   CleanupDependencies,
   DiscoverDependencies,
   HypothesisDependencies,
+  PromoteDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -93,6 +95,15 @@ export interface CreateDiscoverDepsOptions {
 }
 
 export interface CreateHypothesisDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreatePromoteDepsOptions {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -447,5 +458,22 @@ export async function createHypothesisDependencies(
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
     artifactStore: new FileSystemHypothesisArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+  };
+}
+
+/** Wiring for human-gated Problem draft promotion. */
+export async function createPromoteDependencies(
+  options: CreatePromoteDepsOptions = {},
+): Promise<PromoteDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemProblemArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }
