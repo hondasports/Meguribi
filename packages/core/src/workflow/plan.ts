@@ -12,6 +12,7 @@ export async function planIssue(
     await deps.codex.createPlan({
       repositoryPath: input.repositoryPath,
       issue,
+      userRequest: input.userRequest,
       repositoryRules: input.repositoryRules,
       completionCriteria: input.completionCriteria,
       outOfScope: input.outOfScope,

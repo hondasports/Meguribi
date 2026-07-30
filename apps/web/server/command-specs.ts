@@ -51,6 +51,7 @@ export function buildCliArgs(request: CommandRequest): string[] {
     args.push(request.target.trim());
   }
   const repoPath = optionString(options, "repoPath");
+  const userRequest = optionString(options, "userRequest");
   if (request.command === "doctor") {
     const implementer = optionString(options, "implementer");
     if (implementer) args.push("--implementer", implementer);
@@ -67,6 +68,7 @@ export function buildCliArgs(request: CommandRequest): string[] {
   }
   if (optionBoolean(options, "local")) args.push("--local");
   if (repoPath) args.push("--repo-path", assertSafePath(repoPath, "repoPath"));
+  if (request.command === "plan" && userRequest) args.push("--request", userRequest);
   const implementer = optionString(options, "implementer");
   if (["run", "resume"].includes(request.command) && implementer)
     args.push("--implementer", implementer);

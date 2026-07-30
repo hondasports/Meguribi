@@ -49,6 +49,30 @@ describe("command bridge", () => {
     expect(() => buildCliArgs({ command: "plan" })).toThrow(/target is required/);
   });
 
+  it("passes a plan user request as a dedicated CLI option", () => {
+    expect(
+      buildCliArgs({
+        command: "plan",
+        target: "local/todo#1",
+        options: {
+          userRequest: "WEBでTODOアプリを作って。",
+          repoPath: "C:\\workspace\\todo",
+        },
+      }),
+    ).toEqual([
+      "exec",
+      "tsx",
+      "apps/cli/src/index.ts",
+      "plan",
+      "local/todo#1",
+      "--repo-path",
+      "C:\\workspace\\todo",
+      "--request",
+      "WEBでTODOアプリを作って。",
+      "--json",
+    ]);
+  });
+
   it("uses the repository path as init's positional path", () => {
     expect(
       buildCliArgs({

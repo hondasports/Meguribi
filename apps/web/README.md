@@ -18,11 +18,14 @@ Windows の PowerShell で `pnpm` が Execution Policy により拒否される�
 
 1. 左側から `doctor`、`plan`、`run` などのコマンドを選択する
 2. Repository path と Target を入力する
-3. ローカル検証では `Local mode` を有効にする
-4. `run` では必要に応じて `Non-interactive`、`Inherited MCP`、`Pushしない`、`PRを作成しない` を設定する
-5. `コマンドを実行` を押し、右側のログと終了結果を確認する
+3. `plan` を選んだ場合は User request に、Issue本文へ追加したい要望を入力する（例: `WEBでTODOアプリを作って。`）
+4. ローカル検証では `Local mode` を有効にする
+5. `run` では必要に応じて `Non-interactive`、`Inherited MCP`、`Pushしない`、`PRを作成しない` を設定する
+6. `コマンドを実行` を押し、右側のログと終了結果を確認する
 
 画面は任意のシェルコマンドを受け付けません。コマンド名とオプションを検証したうえで、Meguribi CLI を引数配列として起動します。実行ログは画面へ SSE で流れ、成果物は通常の Meguribi RunStore に保存されます。
+
+`plan` の User request は CLI の `--request` として渡され、Issue本文・リポジトリ・AGENTS.md のルールと合わせてCodexの読み取り専用計画へ反映されます。12,000文字を超える入力や空入力は受け付けません。
 
 ## 本番ビルド
 

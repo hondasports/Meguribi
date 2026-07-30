@@ -93,4 +93,30 @@ describe("planIssue", () => {
       ),
     ).rejects.toThrow("invalid implementation plan");
   });
+
+  it("passes a separate user request to Codex", async () => {
+    let receivedRequest: string | undefined;
+    await planIssue(
+      {
+        repository: "owner/repo",
+        issueNumber: 12,
+        repositoryPath: "C:/repo",
+        repositoryRules: "Follow AGENTS.md",
+        userRequest: "WEBでTODOアプリを作って。",
+        completionCriteria: [],
+        outOfScope: [],
+      },
+      {
+        github: { getIssue: async () => issue, upsertMarkerComment: async () => ({ commentId: 1 }) },
+        codex: {
+          createPlan: async (input) => {
+            receivedRequest = input.userRequest;
+            return plan;
+          },
+        },
+        planStore: { save: async () => "C:/data/plan.json" },
+      },
+    );
+    expect(receivedRequest).toBe("WEBでTODOアプリを作って。");
+  });
 });

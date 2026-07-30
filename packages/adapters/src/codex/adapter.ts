@@ -427,6 +427,9 @@ export function createCodexAdapter(options: CodexAdapterOptions): CodexAdapter {
 
   async function createPlan(input: PlanningInput): Promise<PlanArtifact> {
     assertSourceDigest("issue", input.issue, input.sourceDigests);
+    if (input.userRequest !== undefined) {
+      assertSourceDigest("userRequest", input.userRequest, input.sourceDigests);
+    }
     const execution = await verifyWorkspace(
       input.workspaceGuard,
       input.sourceDigests.repository,

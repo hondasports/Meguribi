@@ -143,6 +143,7 @@ Ask Codex to inspect the repository and produce a technical plan. `plan` is read
 
 ```bash
 meguribi plan owner/repo#125
+meguribi plan owner/repo#125 --request "Build a TODO web app."
 ```
 
 `plan` does not start an implementation agent. It atomically writes the plan to
@@ -150,6 +151,7 @@ meguribi plan owner/repo#125
 (`%LOCALAPPDATA%\\meguribi\\plans\\...` on Windows), and creates or updates the Issue comment with the
 `<!-- meguribi:implementation-plan -->` marker. Use `--local --repo-path <path>` for a local fixture.
 `--json` emits the plan and artifact path as JSON.
+Use `--request <text>` to provide an additional user request separately from the Issue body, such as `Build a TODO web app.`. The request is treated as read-only planning input; it cannot grant permission to modify files or change policy. Empty requests are rejected and the request is limited to 12,000 characters.
 
 ### `meguribi run`
 

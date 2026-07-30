@@ -9,6 +9,8 @@ export interface PlanCommandOptions {
   json?: boolean;
   local?: boolean;
   repoPath?: string;
+  request?: string;
+  userRequest?: string;
 }
 
 export interface PlanCommandDependencies {
@@ -31,6 +33,7 @@ export async function runPlanCommand(
   const parsed = parseIssueTarget(target);
   const cwd = deps.cwd ?? process.cwd();
   const repositoryPath = options.repoPath ?? cwd;
+  const userRequest = normalizeUserRequest(options.userRequest ?? options.request);
   const planDependencies = deps.plan ?? await (
     deps.createPlanDependencies ?? (async (wiringOptions) => {
       const wiring = await import("../wiring/create-delivery-deps.js");
@@ -48,6 +51,7 @@ export async function runPlanCommand(
       issueNumber: parsed.issueNumber,
       repositoryPath,
       repositoryRules: "Follow AGENTS.md",
+      userRequest,
       completionCriteria: ["Verification commands pass", "Codex review does not require changes"],
       outOfScope: [],
     },
@@ -56,6 +60,18 @@ export async function runPlanCommand(
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   writeOut(options.json ? `${JSON.stringify(result, null, 2)}\n` : formatHuman(result));
   return { exitCode: 0, result };
+}
+
+const MAX_USER_REQUEST_LENGTH = 12_000;
+
+function normalizeUserRequest(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  if (!normalized) throw new Error("--request must not be empty");
+  if (normalized.length > MAX_USER_REQUEST_LENGTH) {
+    throw new Error(`--request must be ${String(MAX_USER_REQUEST_LENGTH)} characters or fewer`);
+  }
+  return normalized;
 }
 
 function formatHuman(result: PlanResult): string {
