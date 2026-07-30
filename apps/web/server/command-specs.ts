@@ -46,7 +46,7 @@ function assertSafePath(value: string, label: string): string {
 export function buildCliArgs(request: CommandRequest): string[] {
   const options = request.options ?? {};
   const args = ["exec", "tsx", "apps/cli/src/index.ts", request.command];
-  if (request.command !== "doctor") {
+  if (request.command !== "doctor" && request.command !== "init") {
     if (!request.target?.trim()) throw new Error("target is required for this command");
     args.push(request.target.trim());
   }
@@ -58,9 +58,10 @@ export function buildCliArgs(request: CommandRequest): string[] {
     return args;
   }
   if (request.command === "init") {
-    if (repoPath) args[args.length - 1] = assertSafePath(repoPath, "repoPath");
+    args.push(repoPath ? assertSafePath(repoPath, "repoPath") : ".");
     const implementer = optionString(options, "implementer");
     if (implementer) args.push("--implementer", implementer);
+    if (optionBoolean(options, "nonInteractive")) args.push("--non-interactive");
     args.push("--json");
     return args;
   }
