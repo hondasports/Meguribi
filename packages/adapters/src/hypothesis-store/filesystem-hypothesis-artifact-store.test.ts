@@ -1,11 +1,12 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FileSystemHypothesisArtifactStore } from "./filesystem-hypothesis-artifact-store.js";
 
 describe("FileSystemHypothesisArtifactStore", () => {
   it("atomically stores an Issue-scoped artifact under a safe repository path", async () => {
-    const root = await fs.mkdtemp(path.join(process.env.TEMP ?? process.env.TMP ?? ".", "meguribi-hypothesis-"));
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-hypothesis-"));
     try {
       const store = new FileSystemHypothesisArtifactStore({ rootDir: root });
       const artifact = {
