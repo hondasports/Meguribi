@@ -26,7 +26,12 @@ import {
   preflightDevin,
 } from "@meguribi/adapters";
 import { loadImplementerConfig } from "@meguribi/config";
-import type { DeliveryDependencies, InheritedMcpPolicy, PlanDependencies } from "@meguribi/core";
+import type {
+  DeliveryDependencies,
+  InheritedMcpPolicy,
+  PlanDependencies,
+  ReviewDependencies,
+} from "@meguribi/core";
 import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
 export interface CreateDeliveryDepsOptions {
@@ -47,6 +52,15 @@ export interface CreateDeliveryDepsOptions {
 }
 
 export interface CreatePlanDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreateReviewDepsOptions {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -314,5 +328,31 @@ export async function createPlanDependencies(
     planStore: new FileSystemPlanArtifactStore({
       rootDir: resolveRunsRoot(options.runsRoot),
     }),
+  };
+}
+
+/** Wiring for re-reviewing an existing delivery Run without starting an agent. */
+export async function createReviewDependencies(
+  options: CreateReviewDepsOptions = {},
+): Promise<ReviewDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    git: useLocalFakes
+      ? createFakeGitAdapter()
+      : createGitAdapter({
+          expectedRepository: options.repository,
+          allowMissingRemote: options.localOnly,
+        }),
+    codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+    runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }

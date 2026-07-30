@@ -89,6 +89,11 @@ export type {
   PlanResult,
 } from "./plan.js";
 export type {
+  ReviewDependencies,
+  ReviewInput,
+  ReviewResult,
+} from "./review.js";
+export type {
   AgentDiagnosis,
   AcpDiagnosis,
   AuthenticationDiagnosis,
@@ -118,6 +123,7 @@ export {
   runDelivery,
 } from "./workflow/delivery.js";
 export { IMPLEMENTATION_PLAN_MARKER, planIssue } from "./workflow/plan.js";
+export { CODE_REVIEW_MARKER, reviewIssue } from "./review.js";
 export type { PublishGateInput } from "./workflow/delivery.js";
 export { buildFixInstruction } from "./workflow/fix-instruction.js";
 export { matchesProtectedPath } from "./path-match.js";

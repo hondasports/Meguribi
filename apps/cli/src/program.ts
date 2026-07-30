@@ -19,6 +19,7 @@ import {
 } from "./commands/run.js";
 import { runInit, type InitCommandDependencies, type InitCommandOptions } from "./commands/init.js";
 import { runPlanCommand, type PlanCommandDependencies, type PlanCommandOptions } from "./commands/plan.js";
+import { runReviewCommand, type ReviewCommandDependencies, type ReviewCommandOptions } from "./commands/review.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -38,7 +39,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -175,6 +176,25 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: PlanCommandOptions) => {
       try {
         const result = await runPlanCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("review")
+    .description("Re-run a read-only Codex review for an existing delivery Run")
+    .argument("<target>", "Issue target, e.g. owner/repo#123")
+    .option("--json", "Emit ReviewResult JSON only", false)
+    .option("--local", "Use a local Issue document and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--run-id <id>", "Specific delivery Run ID to review")
+    .action(async (target: string, cliOptions: ReviewCommandOptions) => {
+      try {
+        const result = await runReviewCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
