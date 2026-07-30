@@ -12,6 +12,7 @@ import type {
   IssueRecord,
   PlanArtifact,
   PolicyEngine,
+  PullRequestRecord,
   PublishDecision,
   ReviewArtifact,
   RunState,
@@ -136,6 +137,7 @@ function defaultReview(
 
 export interface FakeGitHubOptions {
   issue?: Partial<IssueRecord> & Pick<IssueRecord, "number">;
+  pullRequest?: Partial<PullRequestRecord> & Pick<PullRequestRecord, "number">;
   now?: () => Date;
 }
 
@@ -152,6 +154,14 @@ export function createFakeGitHubAdapter(options: FakeGitHubOptions = {}): GitHub
     comments: options.issue?.comments ?? [],
     updatedAt: options.issue?.updatedAt ?? isoNow(now),
   };
+  const pullRequest: PullRequestRecord = {
+    number: options.pullRequest?.number ?? 101,
+    url: options.pullRequest?.url ?? "https://example.test/pr/101",
+    state: options.pullRequest?.state ?? "closed",
+    merged: options.pullRequest?.merged ?? true,
+    head: options.pullRequest?.head ?? "meguribi/issue-22",
+    headSha: options.pullRequest?.headSha ?? "head-sha",
+  };
   let nextPr = 100;
 
   return {
@@ -162,6 +172,13 @@ export function createFakeGitHubAdapter(options: FakeGitHubOptions = {}): GitHub
         throw new Error(`Issue not found: ${repository}#${String(issueNumber)}`);
       }
       return issue;
+    },
+    async getPullRequest(repository, pullRequestNumber) {
+      calls.track("getPullRequest");
+      if (pullRequestNumber !== pullRequest.number) {
+        throw new Error(`Pull Request not found: ${repository}#${String(pullRequestNumber)}`);
+      }
+      return pullRequest;
     },
     async upsertMarkerComment() {
       calls.track("upsertMarkerComment");
@@ -246,6 +263,10 @@ export function createFakeGitAdapter(options: FakeGitOptions = {}): GitAdapter &
     },
     async push() {
       calls.track("push");
+    },
+    async removeWorktree() {
+      calls.track("removeWorktree");
+      return { worktreeRemoved: true, branchRemoved: false };
     },
   };
 }

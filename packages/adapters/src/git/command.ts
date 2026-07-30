@@ -180,5 +180,27 @@ export function createGitAdapter(options: GitAdapterOptions = {}): GitAdapter {
       if (identity.branch !== input.branch) throw new Error(`Git branch changed before push: expected ${input.branch}, found ${identity.branch}`);
       await gitValue(runner, input.worktreePath, ["push", "origin", input.branch]);
     },
+
+    async removeWorktree(input) {
+      assertWorktreeBranch(input.branch);
+      const root = await gitValue(runner, input.repositoryPath, ["rev-parse", "--show-toplevel"]);
+      if (path.resolve(root) !== path.resolve(input.repositoryPath)) {
+        throw new Error(`Repository path must be the checkout root: ${input.repositoryPath}`);
+      }
+      const remove = await runner.run(["worktree", "remove", input.worktreePath], root);
+      if (remove.exitCode !== 0 || remove.exitCode === null) {
+        const detail = redactDiagnosticText(remove.stderr.trim()).slice(0, 500);
+        throw new Error(`Git worktree removal failed for ${input.worktreePath}${detail ? `: ${detail}` : ""}`);
+      }
+      if (!input.deleteBranch) {
+        return { worktreeRemoved: true, branchRemoved: false };
+      }
+      const branch = await runner.run(["branch", "-d", input.branch], root);
+      if (branch.exitCode !== 0 || branch.exitCode === null) {
+        const detail = redactDiagnosticText(branch.stderr.trim()).slice(0, 500);
+        throw new Error(`Git local branch deletion failed for ${input.branch}${detail ? `: ${detail}` : ""}`);
+      }
+      return { worktreeRemoved: true, branchRemoved: true };
+    },
   };
 }

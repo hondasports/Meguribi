@@ -42,6 +42,7 @@ export type {
   GitHubAdapter,
   IssueRecord,
   PolicyEngine,
+  PullRequestRecord,
   PublishDecision,
   ResumeDeliveryInput,
   RunCommand,
@@ -55,6 +56,13 @@ export type {
   VerificationResult,
   Verifier,
 } from "./delivery.js";
+export {
+  cleanupRun,
+  type CleanupArtifact,
+  type CleanupDependencies,
+  type CleanupInput,
+  type CleanupResult,
+} from "./cleanup.js";
 export {
   decideInheritedMcpPolicy,
   type McpDetection,

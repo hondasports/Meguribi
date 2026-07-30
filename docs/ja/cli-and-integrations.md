@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`plan`、`review`、`run`、`resume` です。成長ループ系コマンド、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`plan`、`review`、`run`、`resume`、`cleanup` です。成長ループ系コマンドと `measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -209,11 +209,15 @@ meguribi measure owner/repo#125 --period 14d
 
 ### `meguribi cleanup`
 
-終了した Run の worktree と一時情報を整理します。未マージ・未保存の変更は削除しません。
+終了した Run の worktree を整理します。PR がクローズまたはマージ済みで、保存済みの branch / HEAD / remote と PR の HEAD が一致し、作業ツリーが clean の場合だけ削除します。未マージ・未保存・識別子不一致の変更は削除しません。Run artifact は保持します。
 
 ```bash
 meguribi cleanup owner/repo#125
+meguribi cleanup owner/repo#125 --dry-run
+meguribi cleanup owner/repo#125 --delete-branch
 ```
+
+`--delete-branch` はマージ済み PR のローカル branch だけを追加で削除します。remote branch は削除しません。
 
 ## 3. 共通オプション
 
@@ -225,6 +229,7 @@ meguribi cleanup owner/repo#125
 --non-interactive
 --dry-run
 --run-id <id>
+--delete-branch
 ```
 
 `--json` は stdout に最終 JSON だけを出し、進行ログは stderr へ出します。

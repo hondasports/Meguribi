@@ -1,5 +1,5 @@
 import { ProcessError, ProcessRunner } from "@meguribi/process";
-import type { GitHubAdapter, IssueRecord } from "@meguribi/core";
+import type { GitHubAdapter, IssueRecord, PullRequestRecord } from "@meguribi/core";
 import { redactDiagnosticText } from "../devin/redact.js";
 
 interface CommandResult {
@@ -101,7 +101,11 @@ interface GhIssue {
 interface GhPullRequest {
   number: number;
   url: string;
-  isDraft: boolean;
+  isDraft?: boolean;
+  state?: string;
+  mergedAt?: string | null;
+  headRefName?: string;
+  headRefOid?: string;
 }
 
 function normalizeIssue(value: GhIssue): IssueRecord {
@@ -119,6 +123,26 @@ function normalizeIssue(value: GhIssue): IssueRecord {
       body: comment.body,
     })),
     updatedAt: value.updatedAt,
+  };
+}
+
+function normalizePullRequest(value: GhPullRequest): PullRequestRecord {
+  if (
+    !Number.isInteger(value.number) ||
+    typeof value.url !== "string" ||
+    (value.state !== "OPEN" && value.state !== "CLOSED") ||
+    typeof value.headRefName !== "string" ||
+    typeof value.headRefOid !== "string"
+  ) {
+    throw new Error("GitHub Pull Request response is missing required fields; retry after checking gh version");
+  }
+  return {
+    number: value.number,
+    url: value.url,
+    state: value.state === "OPEN" ? "open" : "closed",
+    merged: typeof value.mergedAt === "string" && value.mergedAt.length > 0,
+    head: value.headRefName,
+    headSha: value.headRefOid,
   };
 }
 
@@ -141,6 +165,19 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): GitHubA
   return {
     async getIssue(repository, issueNumber) {
       return getIssue(repository, issueNumber);
+    },
+
+    async getPullRequest(repository, pullRequestNumber) {
+      const output = await runGh(runner, repository, `reading Pull Request #${String(pullRequestNumber)}`, [
+        "pr",
+        "view",
+        String(pullRequestNumber),
+        "--repo",
+        repository,
+        "--json",
+        "number,url,state,mergedAt,headRefName,headRefOid",
+      ]);
+      return normalizePullRequest(parseJson<GhPullRequest>(output, `reading Pull Request #${String(pullRequestNumber)}`));
     },
 
     async upsertMarkerComment(input) {
