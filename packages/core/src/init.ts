@@ -1,7 +1,7 @@
 export type InitDependencyStatus = "available" | "missing" | "failed";
 
 export interface InitDependencyCheck {
-  name: "git" | "gh" | "codex";
+  name: "git" | "gh";
   status: InitDependencyStatus;
   version?: string;
   nextAction?: string;

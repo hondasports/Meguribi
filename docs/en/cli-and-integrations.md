@@ -35,12 +35,14 @@ Pass `--implementer devin` or `--implementer cursor` to select the implementatio
 Checks include:
 
 - Git repository and remote identity
-- `git`, `gh`, Codex, and the selected implementation-agent availability
+- `git`, `gh`, and the selected implementation-agent availability
 - GitHub and the selected implementation-agent authentication
 - default branch
-- `git`, `gh`, and Codex versions
+- `git` and `gh` versions
 - ACP readiness for the selected implementation agent
 - whether `.meguribi.yml` exists and the config action taken
+
+Codex is used through Meguribi's `@openai/codex-sdk` dependency inside the adapter, not as a `codex` executable discovered on `PATH`. Therefore `init` does not run `codex --version`; the SDK's real connection is exercised by `plan` and `review`.
 
 Detailed package-manager, verification-command, `AGENTS.md`, and required-label checks remain part of the later delivery CLI work.
 

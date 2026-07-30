@@ -22,7 +22,6 @@ describe("repository init diagnostics", () => {
     const runner = new QueueRunner([
       { exitCode: 0, stdout: "git version 2.50.0\n", stderr: "" },
       { exitCode: 0, stdout: "gh version 2.75.0\n", stderr: "" },
-      { exitCode: 0, stdout: "codex-cli 0.1.0\n", stderr: "" },
       { exitCode: 0, stdout: "C:\\repo\n", stderr: "" },
       { exitCode: 0, stdout: "git@github.com:Owner/Repo.git\n", stderr: "" },
       { exitCode: 0, stdout: "origin/main\n", stderr: "" },
@@ -41,8 +40,13 @@ describe("repository init diagnostics", () => {
     expect(result.githubRepository).toBe("owner/repo");
     expect(result.defaultBranch).toBe("main");
     expect(result.githubAuthenticated).toBe(true);
+    expect(result.dependencies).toEqual([
+      { name: "git", status: "available", version: "git version 2.50.0" },
+      { name: "gh", status: "available", version: "gh version 2.75.0" },
+    ]);
+    expect(runner.calls.every((call) => call.executable !== "codex")).toBe(true);
     expect(runner.calls.every((call) => call.executable !== "cmd.exe")).toBe(true);
-    expect(runner.calls[6]?.args).toEqual(["auth", "status"]);
+    expect(runner.calls[5]?.args).toEqual(["auth", "status"]);
   });
 
   it("fails closed with a concrete next action when gh is missing", async () => {
@@ -74,7 +78,6 @@ describe("repository init diagnostics", () => {
     const runner = new QueueRunner([
       { exitCode: 0, stdout: "git version\n", stderr: "" },
       { exitCode: 0, stdout: "gh version\n", stderr: "" },
-      { exitCode: 0, stdout: "codex version\n", stderr: "" },
       { exitCode: 0, stdout: "C:\\repo\n", stderr: "" },
       { exitCode: 0, stdout: "https://github.com/owner/repo.git\n", stderr: "" },
       { exitCode: 0, stdout: "origin/main\n", stderr: "" },

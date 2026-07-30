@@ -203,7 +203,6 @@ describe("runInit", () => {
     dependencies: [
       { name: "git" as const, status: "available" as const, version: "git version" },
       { name: "gh" as const, status: "available" as const, version: "gh version" },
-      { name: "codex" as const, status: "available" as const, version: "codex version" },
     ],
     warnings: [],
     errors: [],
