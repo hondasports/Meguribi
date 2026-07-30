@@ -25,6 +25,7 @@ import { runDiscoverCommand, type DiscoverCommandDependencies, type DiscoverComm
 import { runHypothesisCommand, type HypothesisCommandDependencies, type HypothesisCommandOptions } from "./commands/hypothesis.js";
 import { runPromoteCommand, type PromoteCommandDependencies, type PromoteCommandOptions } from "./commands/promote.js";
 import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommandOptions } from "./commands/explore.js";
+import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -44,7 +45,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -262,6 +263,29 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (target: string, cliOptions: ExploreCommandOptions) => {
       try {
         const result = await runExploreCommand(target, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("require")
+    .description("Create a human-reviewed Requirement draft from an explicitly selected solution")
+    .argument("<target>", "Problem Issue target, e.g. owner/repo#124")
+    .requiredOption("--solution <number>", "1-based solution number", (value) => {
+      const number = Number(value);
+      if (!Number.isInteger(number) || number < 1) throw new Error(`Invalid --solution: ${value}`);
+      return number;
+    })
+    .option("--json", "Emit RequirementResult JSON only", false)
+    .option("--local", "Use local Issue documents and local repository; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (target: string, cliOptions: RequireCommandOptions) => {
+      try {
+        const result = await runRequireCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

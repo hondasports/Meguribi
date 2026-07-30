@@ -296,6 +296,8 @@ tests/fixtures/
 
 ### 4.5 `require`
 
+`product:approved` の Issue から `--solution <number>` で採用案を選び、未確定事項を `openQuestions` に残した Requirement 草案を生成します。
+
 - requirements
 - acceptance criteria
 - out of scope

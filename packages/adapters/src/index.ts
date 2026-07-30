@@ -3,6 +3,7 @@ export * from "./discovery-store/index.js";
 export * from "./explore-store/index.js";
 export * from "./hypothesis-store/index.js";
 export * from "./problem-store/index.js";
+export * from "./require-store/index.js";
 export * from "./github/index.js";
 export * from "./git/index.js";
 export * from "./init/index.js";

@@ -1,0 +1,6 @@
+import * as v from "valibot";
+import type { RequirementArtifact as CoreRequirementArtifact } from "@meguribi/core";
+export const RequirementArtifactSchema = v.strictObject({
+  schemaVersion: v.literal(1), artifactType: v.literal("requirements"), repository: v.string(), sourceIssueNumber: v.pipe(v.number(), v.integer(), v.minValue(1)), sourceIssueUrl: v.string(), generatedAt: v.pipe(v.string(), v.isoTimestamp()), status: v.literal("draft"), humanApprovalRequired: v.literal(true),
+  selectedSolution: v.strictObject({ number: v.pipe(v.number(), v.integer(), v.minValue(1)), statement: v.string() }), problem: v.nullable(v.string()), targetUsers: v.array(v.string()), requirements: v.array(v.strictObject({ id: v.string(), statement: v.string(), priority: v.picklist(["must", "should", "could"]) })), acceptanceCriteria: v.array(v.strictObject({ id: v.string(), statement: v.string(), mapsTo: v.array(v.string()) })), outOfScope: v.array(v.string()), successMetrics: v.array(v.string()), guardrails: v.array(v.string()), openQuestions: v.array(v.string()), relatedIssues: v.strictObject({ hypothesis: v.array(v.pipe(v.number(), v.integer(), v.minValue(1))), problem: v.array(v.pipe(v.number(), v.integer(), v.minValue(1))) }),
+}) satisfies v.GenericSchema<unknown, CoreRequirementArtifact>;

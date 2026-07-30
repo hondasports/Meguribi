@@ -24,6 +24,7 @@ import {
   FileSystemHypothesisArtifactStore,
   FileSystemProblemArtifactStore,
   FileSystemExploreArtifactStore,
+  FileSystemRequirementArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
@@ -36,6 +37,7 @@ import type {
   HypothesisDependencies,
   PromoteDependencies,
   ExploreDependencies,
+  RequireDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -115,6 +117,7 @@ export interface CreatePromoteDepsOptions {
 }
 
 export interface CreateExploreDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
+export interface CreateRequireDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
 
 function resolveRunsRoot(explicit?: string): string {
   if (explicit) {
@@ -490,4 +493,11 @@ export async function createExploreDependencies(options: CreateExploreDepsOption
     github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }),
     artifactStore: new FileSystemExploreArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
+}
+
+/** Wiring for human-gated Requirement / Feature drafts. */
+export async function createRequireDependencies(options: CreateRequireDepsOptions = {}): Promise<RequireDependencies> {
+  const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return { github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }), artifactStore: new FileSystemRequirementArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }) };
 }

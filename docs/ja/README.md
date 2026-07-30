@@ -30,7 +30,7 @@ Meguribi は、既存の GitHub リポジトリに対して、仮説から Pull 
 
 ## 現在の実装範囲
 
-実装済みの CLI は `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`plan`、`review`、`run`、`resume`、`cleanup` です。`discover` は Issue と指定資料から観測と課題候補を抽出してローカル保存し、Issueを自動作成しません。`hypothesis` は Issue 本文の明示された節を仮説成果物へ構造化し、不足情報を記録して人間承認を要求します。`promote` は `product:validated` の仮説から Problem 草案を作り、明示的な確認なしに新規 Issue を作成しません。`explore` は複数の明示された解決方針を比較し、採用案を自動選択しません。`plan` / `review` は Codex の計画・再レビューを、`run` と `resume` は delivery workflow を、`cleanup` は安全な worktree 整理を担当します。`require`、`measure` は、現時点では仕様・土台の段階です。
+実装済みの CLI は `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。`discover` は Issue と指定資料から観測と課題候補を抽出してローカル保存し、Issueを自動作成しません。`hypothesis` は Issue 本文の明示された節を仮説成果物へ構造化し、不足情報を記録して人間承認を要求します。`promote` は `product:validated` の仮説から Problem 草案を作り、明示的な確認なしに新規 Issue を作成しません。`explore` は複数の明示された解決方針を比較し、採用案を自動選択しません。`require` は `product:approved` の解決方針を番号で選択し、未提示の要件を `openQuestions` に残します。`plan` / `review` は Codex の計画・再レビューを、`run` と `resume` は delivery workflow を、`cleanup` は安全な worktree 整理を担当します。`measure` は、現時点では仕様・土台の段階です。
 
 ## 主要な設計判断
 

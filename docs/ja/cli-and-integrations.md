@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`plan`、`review`、`run`、`resume`、`cleanup` です。`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -128,7 +128,7 @@ meguribi explore owner/repo#124
 
 ### `meguribi require`
 
-採用した解決方針を Requirement / Feature Issue の草案へ変換します。
+`product:approved` の Issue から、`--solution <number>` で選択した解決方針を Requirement / Feature Issue の草案へ変換します。要件、受け入れ条件、スコープ、指標などの不足情報は `openQuestions` に残し、推測で補完しません。
 
 ```bash
 meguribi require owner/repo#124 --solution 2
