@@ -195,4 +195,24 @@ describe("loadImplementerConfig", () => {
       }),
     ).resolves.toMatchObject({ kind: "devin", config: { executable: "devin" } });
   });
+
+  it("lets an explicit CLI MCP policy override repository configuration", async () => {
+    const root = await createTemporaryDirectory();
+    await writeFile(
+      path.join(root, ".meguribi.yml"),
+      ["implementer: devin", "devin:", "  inheritedMcpPolicy: warn", ""].join("\n"),
+    );
+
+    await expect(
+      loadImplementerConfig({
+        repositoryPath: root,
+        userConfigPath: path.join(root, "missing-user.yml"),
+        nonInteractive: true,
+        cli: { implementer: "devin", inheritedMcpPolicy: "allow" },
+      }),
+    ).resolves.toMatchObject({
+      kind: "devin",
+      config: { inheritedMcpPolicy: "allow" },
+    });
+  });
 });

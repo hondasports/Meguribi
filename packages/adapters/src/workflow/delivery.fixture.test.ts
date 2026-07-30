@@ -186,6 +186,17 @@ describe("delivery workflow fixtures", () => {
     expect(bundle.codex.calls.counts.review).toBeGreaterThanOrEqual(2);
   });
 
+  it("uses the remaining fix attempts when review still requires changes", async () => {
+    const bundle = createFakeDeliveryDeps({
+      codex: { changesRequiredFirstN: 2 },
+    });
+    const result = await runDelivery(baseInput({ maxFixAttempts: 2 }), bundle.deps);
+
+    expect(result.published).toBe(true);
+    expect(bundle.devin.calls.counts.fix).toBe(2);
+    expect(bundle.codex.calls.counts.review).toBe(3);
+  });
+
   it("resumes from implementation_completed", async () => {
     const bundle = createFakeDeliveryDeps();
     const first = await runDelivery(baseInput({ noCommit: true, noPush: true, noPr: true }), bundle.deps);
