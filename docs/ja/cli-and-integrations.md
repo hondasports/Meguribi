@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`plan`、`review`、`run`、`resume`、`cleanup` です。成長ループ系コマンドと `measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`plan`、`review`、`run`、`resume`、`cleanup` です。`hypothesis`、`promote`、`explore`、`require`、`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -81,10 +81,11 @@ Runnable: yes
 
 ### `meguribi discover`
 
-既存 Issue、指定資料、任意の利用データから課題候補を抽出します。
+既存 Issue、指定資料、任意の利用データから、根拠への参照を持つ課題候補を抽出します。観測と推測を分離し、候補はローカルの `discoveries/<owner>/<repo>/discovery.json` に保存します。Issue は自動作成しません。
 
 ```bash
 meguribi discover owner/repo --since 30d --limit 5
+meguribi discover owner/repo --input observations.md --label product:discovery --json
 ```
 
 既定では候補をローカルに保存し、Issue を自動作成しません。

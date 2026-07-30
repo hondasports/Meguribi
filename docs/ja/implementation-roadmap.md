@@ -73,7 +73,7 @@ tests/fixtures/
 - ACP session は redaction 済み event、prompt、Git boundary、正規化 result、termination result を保存する。
 - 既定 wiring は実 GitHub / Git / Codex / Verifier、実際の RunStore と PolicyEngine、明示された実装エージェントを使う。fake は fixture test または `MEGURIBI_DELIVERY_FAKES=1` の明示時だけ使う。
 
-したがって Phase 1 の完了条件はまだ満たしていません。残作業は実サービスを使う manual smoke です。`init`、`plan`、`review`、`cleanup` は、対象リポジトリの診断、依存確認、既存設定を保護した雛形生成、Codex による計画生成・再レビュー、安全な worktree 整理まで実装済みです。
+したがって Phase 1 の完了条件はまだ満たしていません。残作業は実サービスを使う manual smoke です。`init`、`plan`、`review`、`cleanup` に加えて、Phase 2 の `discover` は、対象リポジトリの診断、Codex による計画生成・再レビュー、安全な worktree 整理、観測からの課題候補抽出まで実装済みです。
 
 ### 3.1 `init`
 

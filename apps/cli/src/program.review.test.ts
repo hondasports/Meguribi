@@ -11,4 +11,9 @@ describe("CLI command registration", () => {
     const program = createProgram();
     expect(program.commands.map((command) => command.name())).toContain("cleanup");
   });
+
+  it("registers the discover command", () => {
+    const program = createProgram();
+    expect(program.commands.map((command) => command.name())).toContain("discover");
+  });
 });

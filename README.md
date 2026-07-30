@@ -56,28 +56,26 @@ Meguribi CLI
 
 ## CLI status
 
-The implemented CLI surface currently consists of `init`, `doctor`, `run`, and `resume`. The default delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine. Temporary fakes are used only when explicitly enabled with `MEGURIBI_DELIVERY_FAKES=1`.
+The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
 
 日本語: 現在利用できる CLI は `init`、`doctor`、`run`、`resume` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
 ```bash
 meguribi init --implementer cursor
 meguribi doctor --implementer cursor
+meguribi discover owner/repo --since 30d --limit 5
 meguribi run owner/repo#125 --implementer devin
 meguribi resume owner/repo#125
 ```
 
-The following commands are specified but not yet implemented:
+The following product-loop commands are specified but not yet implemented:
 
 ```bash
-meguribi discover owner/repo
 meguribi hypothesis owner/repo#123
 meguribi promote owner/repo#123
+meguribi explore owner/repo#124
 meguribi require owner/repo#124
-meguribi plan owner/repo#125
-meguribi review owner/repo#125
 meguribi measure owner/repo#125
-meguribi cleanup owner/repo#125
 ```
 
 ### `meguribi discover owner/repo`

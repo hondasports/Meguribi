@@ -64,6 +64,16 @@ export {
   type CleanupResult,
 } from "./cleanup.js";
 export {
+  discoverProblems,
+  type DiscoverDependencies,
+  type DiscoveryArtifact,
+  type DiscoveryArtifactStore,
+  type DiscoveryObservation,
+  type DiscoverInput,
+  type ObservationConfidence,
+  type ProblemCandidate,
+} from "./discover.js";
+export {
   decideInheritedMcpPolicy,
   type McpDetection,
   type McpPolicyDecision,

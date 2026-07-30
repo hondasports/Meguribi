@@ -134,6 +134,12 @@ export interface PublishDecision {
 
 export interface GitHubAdapter {
   getIssue(repository: string, issueNumber: number): Promise<IssueRecord>;
+  listIssues(input: {
+    repository: string;
+    updatedSince: string;
+    label?: string;
+    limit: number;
+  }): Promise<readonly IssueRecord[]>;
   getPullRequest(repository: string, pullRequestNumber: number): Promise<PullRequestRecord>;
   upsertMarkerComment(input: {
     repository: string;

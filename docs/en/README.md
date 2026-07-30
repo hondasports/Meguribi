@@ -30,7 +30,7 @@ It deliberately remains small. It coordinates GitHub Issues, Git worktrees, Code
 
 ## Current implementation scope
 
-The implemented CLI currently consists of `init`, `doctor`, `plan`, `review`, `run`, `resume`, and `cleanup`. `init` diagnoses the repository and dependencies, then creates a `.meguribi.yml` template without overwriting an existing file. `doctor` diagnoses ACP readiness for Devin or Cursor, `plan` and `review` run Codex planning and re-review, while `run` and `resume` orchestrate real GitHub / Git / Codex / Verifier components with the explicitly selected `AgentAdapter`. `cleanup` validates GitHub and Git safety conditions before removing a completed Run's worktree. The product-growth commands and `measure` remain specification/foundation work.
+The implemented CLI currently consists of `init`, `doctor`, `discover`, `plan`, `review`, `run`, `resume`, and `cleanup`. `discover` extracts evidence-backed candidates from Issues and optional Markdown/JSON observations without creating Issues. `plan` and `review` run Codex planning and re-review, `run` and `resume` orchestrate the delivery workflow, and `cleanup` validates GitHub and Git safety conditions before removing a completed Run's worktree. `hypothesis`, `promote`, `explore`, `require`, and `measure` remain specification/foundation work.
 
 ## Key decisions
 

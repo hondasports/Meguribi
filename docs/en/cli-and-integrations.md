@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `plan`, `review`, `run`, `resume`, and `cleanup`. Product-growth commands and `measure` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `plan`, `review`, `run`, `resume`, and `cleanup`. `hypothesis`, `promote`, `explore`, `require`, and `measure` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -80,10 +80,11 @@ Runnable: yes
 
 ### `meguribi discover`
 
-Extract candidate problems from Issues, supplied documents, or optional usage data.
+Extract evidence-referenced problem candidates from Issues, supplied documents, or optional usage data. Observations and inferences remain separate; candidates are stored at `discoveries/<owner>/<repo>/discovery.json`, and Issues are never created automatically.
 
 ```bash
 meguribi discover owner/repo --since 30d --limit 5
+meguribi discover owner/repo --input observations.md --label product:discovery --json
 ```
 
 Candidates are stored locally by default. Issues are not created automatically.

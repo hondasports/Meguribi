@@ -21,6 +21,7 @@ import { runInit, type InitCommandDependencies, type InitCommandOptions } from "
 import { runPlanCommand, type PlanCommandDependencies, type PlanCommandOptions } from "./commands/plan.js";
 import { runReviewCommand, type ReviewCommandDependencies, type ReviewCommandOptions } from "./commands/review.js";
 import { runCleanupCommand, type CleanupCommandDependencies, type CleanupCommandOptions } from "./commands/cleanup.js";
+import { runDiscoverCommand, type DiscoverCommandDependencies, type DiscoverCommandOptions } from "./commands/discover.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -40,7 +41,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -159,6 +160,32 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .action(async (targetPath: string | undefined, cliOptions: InitCommandOptions) => {
       try {
         const result = await runInit(targetPath, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("discover")
+    .description("Extract evidence-backed problem candidates without creating Issues")
+    .argument("<target>", "Repository target, e.g. owner/repo")
+    .option("--json", "Emit DiscoveryResult JSON only", false)
+    .option("--local", "Use local Issue documents and local files; never call GitHub", false)
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--input <path>", "Markdown or JSON observations to include")
+    .option("--since <duration>", "Updated Issue window, e.g. 30d", "30d")
+    .option("--label <name>", "Filter Issues by label")
+    .option("--limit <number>", "Maximum number of Issues to inspect", (value) => {
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) throw new Error(`Invalid --limit: ${value}`);
+      return parsed;
+    }, 5)
+    .action(async (target: string, cliOptions: DiscoverCommandOptions) => {
+      try {
+        const result = await runDiscoverCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

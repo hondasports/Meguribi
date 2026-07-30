@@ -34,4 +34,20 @@ describe("local Issue adapter", () => {
     expect(second).toEqual(first);
     await expect(adapter.getIssue("local/todo", 1)).resolves.toMatchObject({ comments: [{ body: "<!-- marker -->\nsecond" }] });
   });
+
+  it("lists local Issues by date and label for discovery", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "meguribi-local-discovery-"));
+    roots.push(root);
+    await mkdir(path.join(root, ".meguribi"), { recursive: true });
+    await writeFile(
+      path.join(root, ".meguribi", "issues.json"),
+      JSON.stringify([
+        { number: 1, title: "Recent", body: "body", labels: ["product:discovery"], updatedAt: "2026-07-02T00:00:00.000Z" },
+        { number: 2, title: "Old", body: "body", labels: ["product:discovery"], updatedAt: "2026-06-01T00:00:00.000Z" },
+      ]),
+    );
+
+    const adapter = createLocalGitHubAdapter({ cwd: root });
+    await expect(adapter.listIssues({ repository: "local/todo", updatedSince: "2026-07-01", label: "product:discovery", limit: 5 })).resolves.toMatchObject([{ number: 1 }]);
+  });
 });

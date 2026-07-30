@@ -29,6 +29,23 @@ export function parseIssueTarget(raw: string): {
   );
 }
 
+export function parseRepositoryTarget(raw: string): { repository: string } {
+  const trimmed = raw.trim();
+  const shorthand = /^([^/\s]+\/[^/\s#]+)$/.exec(trimmed);
+  if (shorthand) {
+    const repository = shorthand[1]!;
+    assertSafeRepository(repository);
+    return { repository };
+  }
+  const url = /^https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/?$/i.exec(trimmed);
+  if (url) {
+    const repository = `${url[1]!}/${url[2]!}`;
+    assertSafeRepository(repository);
+    return { repository };
+  }
+  throw new Error(`Invalid repository target "${raw}". Expected owner/repo or https://github.com/owner/repo`);
+}
+
 function assertSafeRepository(repository: string): void {
   const [owner, repo, ...rest] = repository.split("/");
   if (rest.length > 0 || !owner || !repo) {
