@@ -22,6 +22,16 @@ The repository may be omitted only when the current directory is a Git repositor
 
 The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `measure`, and `cleanup`.
 
+### Command Desk (local UI)
+
+When typing CLI arguments is inconvenient, start the Vite + Vue UI in `apps/web`:
+
+```powershell
+pnpm.cmd --filter @meguribi/web dev
+```
+
+Open `http://127.0.0.1:4173` to select and run the supported Meguribi commands. The UI does not accept arbitrary shell commands; it validates command names and options, then passes an argument array to the local Meguribi CLI. stdout / stderr are streamed over SSE, and artifacts are saved in the normal RunStore. Authentication, remote exposure, and multi-user operation are intentionally out of scope. See `apps/web/README.md` for details.
+
 ### `meguribi init`
 
 Diagnose whether a repository can be managed by Meguribi and generate a configuration skeleton.

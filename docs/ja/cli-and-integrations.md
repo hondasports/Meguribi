@@ -22,6 +22,16 @@ https://github.com/owner/repo/pull/456
 
 現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`measure`、`cleanup` です。
 
+### Command Desk（ローカル UI）
+
+コマンドライン入力を省略したい場合は、`apps/web` の Vite + Vue UI を起動できます。
+
+```powershell
+pnpm.cmd --filter @meguribi/web dev
+```
+
+ブラウザで `http://127.0.0.1:4173` を開くと、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。stdout / stderr は SSE で表示され、成果物は通常の RunStore に保存されます。認証・リモート公開・マルチユーザー運用は提供しません。詳細は `apps/web/README.md` を参照してください。
+
 ### `meguribi init`
 
 対象リポジトリを Meguribi で扱えるか診断し、設定ファイルの雛形を生成します。
