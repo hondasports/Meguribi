@@ -134,6 +134,7 @@ export interface PublishDecision {
 
 export interface GitHubAdapter {
   getIssue(repository: string, issueNumber: number): Promise<IssueRecord>;
+  getPullRequest(repository: string, pullRequestNumber: number): Promise<PullRequestRecord>;
   upsertMarkerComment(input: {
     repository: string;
     issueNumber: number;
@@ -151,6 +152,15 @@ export interface GitHubAdapter {
     repository: string;
     head: string;
   }): Promise<{ number: number; url: string } | null>;
+}
+
+export interface PullRequestRecord {
+  number: number;
+  url: string;
+  state: "open" | "closed";
+  merged: boolean;
+  head: string;
+  headSha: string;
 }
 
 export interface GitAdapter {
@@ -172,6 +182,12 @@ export interface GitAdapter {
     message: string;
   }): Promise<{ headSha: string }>;
   push(input: { worktreePath: string; branch: string }): Promise<void>;
+  removeWorktree(input: {
+    repositoryPath: string;
+    worktreePath: string;
+    branch: string;
+    deleteBranch: boolean;
+  }): Promise<{ worktreeRemoved: boolean; branchRemoved: boolean }>;
 }
 
 export interface Verifier {

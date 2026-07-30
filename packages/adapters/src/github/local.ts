@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { GitHubAdapter, IssueRecord } from "@meguribi/core";
+import type { GitHubAdapter, IssueRecord, PullRequestRecord } from "@meguribi/core";
 
 export interface LocalGitHubAdapterOptions {
   cwd: string;
@@ -19,6 +19,15 @@ interface LocalComment {
   id: number;
   author: string;
   body: string;
+}
+
+interface LocalPullRequest {
+  number: number;
+  url: string;
+  head: string;
+  headSha: string;
+  state: "open" | "closed";
+  merged: boolean;
 }
 
 function issuePath(cwd: string, issueNumber: number): string {
@@ -76,6 +85,22 @@ export function createLocalGitHubAdapter(options: LocalGitHubAdapterOptions): Gi
 
   return {
     getIssue,
+
+    async getPullRequest(_repository, pullRequestNumber) {
+      const pullRequest = await readJson<LocalPullRequest>(localStatePath(options.cwd, `draft-pr-${String(pullRequestNumber)}.json`));
+      if (
+        !pullRequest ||
+        pullRequest.number !== pullRequestNumber ||
+        typeof pullRequest.url !== "string" ||
+        typeof pullRequest.head !== "string" ||
+        typeof pullRequest.headSha !== "string" ||
+        (pullRequest.state !== "open" && pullRequest.state !== "closed") ||
+        typeof pullRequest.merged !== "boolean"
+      ) {
+        throw new Error(`Invalid local Pull Request document for #${String(pullRequestNumber)}; update .meguribi-local/draft-pr-${String(pullRequestNumber)}.json`);
+      }
+      return pullRequest satisfies PullRequestRecord;
+    },
 
     async upsertMarkerComment(input) {
       const issue = await getIssue(input.repository, input.issueNumber);

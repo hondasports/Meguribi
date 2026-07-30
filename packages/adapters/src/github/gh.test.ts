@@ -82,4 +82,31 @@ describe("GitHub CLI adapter", () => {
     ).resolves.toEqual({ number: 23, url: "https://github.com/owner/repo/pull/23" });
     expect(runner.calls[0]).toContain("--draft");
   });
+
+  it("normalizes Pull Request merge state and head identity", async () => {
+    const runner = new QueueRunner([
+      {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          number: 23,
+          url: "https://github.com/owner/repo/pull/23",
+          state: "CLOSED",
+          mergedAt: "2026-07-30T00:00:00Z",
+          headRefName: "meguribi/issue-22",
+          headRefOid: "head-sha",
+        }),
+        stderr: "",
+      },
+    ]);
+    const adapter = createGitHubAdapter({ runner });
+
+    await expect(adapter.getPullRequest("owner/repo", 23)).resolves.toEqual({
+      number: 23,
+      url: "https://github.com/owner/repo/pull/23",
+      state: "closed",
+      merged: true,
+      head: "meguribi/issue-22",
+      headSha: "head-sha",
+    });
+  });
 });

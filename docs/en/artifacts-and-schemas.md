@@ -41,6 +41,7 @@ This provides responsibility separation, schema validation, reproducibility, hum
               +-- diff.patch
               +-- review.json
               +-- pull-request.json
+              +-- cleanup.json
               +-- logs/
               `-- lock
 ```
@@ -424,6 +425,8 @@ Suggested defaults:
 - Failed Run: 60 days
 - Diff, review, and state may be retained until manual deletion
 - Worktree is removed after PR merge or close through cleanup
+
+`cleanup.json` records the dry-run or completed cleanup result. Its `artifactType` is `cleanup` and its `status` is `dry_run` or `completed`. The audit artifact and Run state remain after the worktree is removed.
 
 Retention is user-configurable.
 

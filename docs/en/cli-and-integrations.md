@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `plan`, `review`, `run`, and `resume`. Product-growth commands, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `plan`, `review`, `run`, `resume`, and `cleanup`. Product-growth commands and `measure` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -200,11 +200,15 @@ meguribi measure owner/repo#125 --period 14d
 
 ### `meguribi cleanup`
 
-Remove temporary state and completed worktrees without deleting unmerged or unsaved work.
+Remove a completed Run's worktree only when its PR is closed or merged, the saved branch / HEAD / remote identity matches the PR head, and the worktree is clean. Unmerged, unsaved, or mismatched work is never deleted. Run artifacts are retained.
 
 ```bash
 meguribi cleanup owner/repo#125
+meguribi cleanup owner/repo#125 --dry-run
+meguribi cleanup owner/repo#125 --delete-branch
 ```
+
+`--delete-branch` additionally removes the local branch only for a merged PR. Remote branches are never removed.
 
 ## 3. Common options
 
@@ -216,6 +220,7 @@ meguribi cleanup owner/repo#125
 --non-interactive
 --dry-run
 --run-id <id>
+--delete-branch
 ```
 
 With `--json`, stdout contains only the final JSON result and progress logs go to stderr.

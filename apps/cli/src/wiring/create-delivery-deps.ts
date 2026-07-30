@@ -27,6 +27,7 @@ import {
 } from "@meguribi/adapters";
 import { loadImplementerConfig } from "@meguribi/config";
 import type {
+  CleanupDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -61,6 +62,15 @@ export interface CreatePlanDepsOptions {
 }
 
 export interface CreateReviewDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreateCleanupDepsOptions {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -353,6 +363,31 @@ export async function createReviewDependencies(
           allowMissingRemote: options.localOnly,
         }),
     codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+    runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+  };
+}
+
+/** Wiring for the safety-checked `cleanup` command; it never starts an agent. */
+export async function createCleanupDependencies(
+  options: CreateCleanupDepsOptions = {},
+): Promise<CleanupDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    git: useLocalFakes
+      ? createFakeGitAdapter()
+      : createGitAdapter({
+          expectedRepository: options.repository,
+          allowMissingRemote: options.localOnly,
+        }),
     runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }

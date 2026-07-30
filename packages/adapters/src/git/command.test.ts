@@ -98,4 +98,27 @@ describe("Git command adapter", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("removes a clean worktree and only then deletes its local branch when requested", async () => {
+    const runner = new QueueRunner([
+      { exitCode: 0, stdout: "C:/repo\n", stderr: "" },
+      { exitCode: 0, stdout: "", stderr: "" },
+      { exitCode: 0, stdout: "", stderr: "" },
+    ]);
+    const adapter = createGitAdapter({ runner });
+
+    await expect(
+      adapter.removeWorktree({
+        repositoryPath: "C:/repo",
+        worktreePath: "C:/worktree",
+        branch: "meguribi/issue-22",
+        deleteBranch: true,
+      }),
+    ).resolves.toEqual({ worktreeRemoved: true, branchRemoved: true });
+    expect(runner.calls.map(({ args }) => args)).toEqual([
+      ["rev-parse", "--show-toplevel"],
+      ["worktree", "remove", "C:/worktree"],
+      ["branch", "-d", "meguribi/issue-22"],
+    ]);
+  });
 });

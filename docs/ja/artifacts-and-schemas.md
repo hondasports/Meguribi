@@ -50,6 +50,7 @@ GitHub Issue
               +-- diff.patch
               +-- review.json
               +-- pull-request.json
+              +-- cleanup.json
               +-- logs/
               |   +-- codex-plan.jsonl
               |   +-- devin.stdout.log
@@ -442,6 +443,8 @@ packages/schemas/
 - 失敗 Run: 60 日
 - diff / review / state: 手動削除まで保持可能
 - worktree: PR merge / close 後に cleanup
+
+`cleanup.json` は cleanup の dry-run または完了結果を保存します。`artifactType` は `cleanup`、`status` は `dry_run` または `completed` です。worktree を削除しても、この監査成果物と Run state は保持します。
 
 保持期間はユーザー設定で変更可能にします。
 
