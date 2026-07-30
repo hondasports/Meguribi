@@ -376,7 +376,7 @@ async function runVerifyReviewPublish(input: {
       },
     });
 
-    if (review.status === "changes_required") {
+    while (review.status === "changes_required") {
       try {
         const fixResult = await maybeFix({
           deps,
@@ -401,6 +401,9 @@ async function runVerifyReviewPublish(input: {
           });
         }
         throw error;
+      }
+      if (review.status === "changes_required" && state.fixAttempts < state.maxFixAttempts) {
+        continue;
       }
       if (review.status === "changes_required" || !verification.success) {
         state = await mark(deps, state.runId, {

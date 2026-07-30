@@ -235,7 +235,13 @@ export async function createDeliveryDeps(
   const config = await loadImplementerConfig({
     repositoryPath: cwd,
     nonInteractive,
-    cli: options.implementer !== undefined ? { implementer: options.implementer } : {},
+    cli: {
+      ...(options.implementer !== undefined ? { implementer: options.implementer } : {}),
+      // The explicit run flag must win over repository config so that a
+      // non-interactive local run can proceed when the repository still uses
+      // the interactive default (`warn`).
+      ...(allowInheritedMcp ? { inheritedMcpPolicy: "allow" } : {}),
+    },
   });
 
   if (config.kind === "cursor") {
