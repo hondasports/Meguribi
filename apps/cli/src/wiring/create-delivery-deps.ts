@@ -20,6 +20,7 @@ import {
   diagnoseDevin,
   FileSystemRunStore,
   FileSystemPlanArtifactStore,
+  FileSystemDiscoveryArtifactStore,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
@@ -28,6 +29,7 @@ import {
 import { loadImplementerConfig } from "@meguribi/config";
 import type {
   CleanupDependencies,
+  DiscoverDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
   PlanDependencies,
@@ -71,6 +73,15 @@ export interface CreateReviewDepsOptions {
 }
 
 export interface CreateCleanupDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+
+export interface CreateDiscoverDepsOptions {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -389,5 +400,24 @@ export async function createCleanupDependencies(
           allowMissingRemote: options.localOnly,
         }),
     runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+  };
+}
+
+/** Wiring for deterministic discovery from GitHub/local Issues plus supplied observations. */
+export async function createDiscoverDependencies(
+  options: CreateDiscoverDepsOptions = {},
+): Promise<DiscoverDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemDiscoveryArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }

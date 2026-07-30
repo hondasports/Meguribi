@@ -72,7 +72,7 @@ The repository currently has a working foundation for the delivery loop:
 - ACP sessions persist redacted events, prompts, Git-boundary results, normalized results, and termination results.
 - The default wiring uses real GitHub / Git / Codex / Verifier components, the real run store and policy engine, and the explicitly selected implementation agent. Fakes are enabled only by fixture tests or an explicit `MEGURIBI_DELIVERY_FAKES=1`.
 
-The Phase 1 completion criteria are therefore not met yet. The remaining work is manual smoke testing against real services. `init`, `plan`, `review`, and `cleanup` now cover repository diagnostics, dependency checks, non-destructive config-template creation, read-only Codex plan generation, re-review of existing delivery Runs, and safe worktree cleanup.
+The Phase 1 completion criteria are therefore not met yet. The remaining work is manual smoke testing against real services. `init`, `plan`, `review`, and `cleanup`, together with the Phase 2 `discover` command, now cover repository diagnostics, read-only Codex plan generation, re-review of existing delivery Runs, safe worktree cleanup, and evidence-backed candidate extraction.
 
 ### 3.1 `init`
 

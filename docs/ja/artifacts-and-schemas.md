@@ -66,6 +66,8 @@ Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別
 同じ Issue で再実行した場合はこのファイルを atomic write で更新します。実装を開始する Run の
 `plan.json` は、引き続き上記の Run ディレクトリ配下に保存されます。
 
+`meguribi discover` は `~/.local/share/meguribi/discoveries/<owner>/<repo>/discovery.json` に、観測と課題候補を atomic write で保存します。`discovery.json` の `observations` は `statement`、`source`、`confidence` を持ち、候補の `evidenceRefs` は観測 IDだけを参照します。候補の順位は証拠の整理順であり、プロダクト優先度の自動決定ではありません。
+
 ## 3. 共通メタデータ
 
 各 JSON 成果物は共通メタデータを持ちます。

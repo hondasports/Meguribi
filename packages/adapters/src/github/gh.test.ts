@@ -41,6 +41,15 @@ describe("GitHub CLI adapter", () => {
     expect(runner.calls[0]).toContain("--json");
   });
 
+  it("searches Issues with an updated window and label", async () => {
+    const runner = new QueueRunner([{ exitCode: 0, stdout: JSON.stringify([JSON.parse(issueJson())]), stderr: "" }]);
+    const adapter = createGitHubAdapter({ runner });
+
+    await expect(adapter.listIssues({ repository: "owner/repo", updatedSince: "2026-07-01", label: "product:discovery", limit: 5 })).resolves.toHaveLength(1);
+    expect(runner.calls[0]).toContain("updated:>=2026-07-01 label:product:discovery");
+    expect(runner.calls[0]).toContain("5");
+  });
+
   it("fails closed when duplicate Meguribi markers exist", async () => {
     const runner = new QueueRunner([
       {

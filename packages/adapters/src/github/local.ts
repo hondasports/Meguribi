@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { GitHubAdapter, IssueRecord, PullRequestRecord } from "@meguribi/core";
 
@@ -85,6 +85,33 @@ export function createLocalGitHubAdapter(options: LocalGitHubAdapterOptions): Gi
 
   return {
     getIssue,
+
+    async listIssues(input) {
+      const issueRoot = path.join(options.cwd, ".meguribi");
+      let documents: LocalIssueDocument[] = [];
+      const issueList = await readJson<LocalIssueDocument[]>(path.join(issueRoot, "issues.json"));
+      if (Array.isArray(issueList)) {
+        documents = issueList;
+      } else {
+        let names: string[] = [];
+        try {
+          names = await readdir(issueRoot);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        for (const name of names.filter((candidate) => /^issue-\d+\.json$/.test(candidate))) {
+          const document = await readJson<LocalIssueDocument>(path.join(issueRoot, name));
+          if (document) documents.push(document);
+        }
+      }
+      const since = Date.parse(`${input.updatedSince}T00:00:00Z`);
+      return documents
+        .map((document) => validateIssue(document, document.number))
+        .filter((issue) => Number.isNaN(since) || Date.parse(issue.updatedAt) >= since)
+        .filter((issue) => input.label === undefined || issue.labels.includes(input.label))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, input.limit);
+    },
 
     async getPullRequest(_repository, pullRequestNumber) {
       const pullRequest = await readJson<LocalPullRequest>(localStatePath(options.cwd, `draft-pr-${String(pullRequestNumber)}.json`));

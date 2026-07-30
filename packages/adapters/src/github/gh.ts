@@ -167,6 +167,27 @@ export function createGitHubAdapter(options: GitHubAdapterOptions = {}): GitHubA
       return getIssue(repository, issueNumber);
     },
 
+    async listIssues(input) {
+      const search = [`updated:>=${input.updatedSince}`, ...(input.label ? [`label:${input.label}`] : [])].join(" ");
+      const output = await runGh(runner, input.repository, "searching Issues for discovery", [
+        "issue",
+        "list",
+        "--repo",
+        input.repository,
+        "--state",
+        "all",
+        "--limit",
+        String(input.limit),
+        "--search",
+        search,
+        "--json",
+        "number,title,body,labels,comments,updatedAt",
+      ]);
+      const issues = parseJson<GhIssue[]>(output, "searching Issues for discovery");
+      if (!Array.isArray(issues)) throw new Error("GitHub returned an invalid Issue list for discovery");
+      return issues.map(normalizeIssue);
+    },
+
     async getPullRequest(repository, pullRequestNumber) {
       const output = await runGh(runner, repository, `reading Pull Request #${String(pullRequestNumber)}`, [
         "pr",

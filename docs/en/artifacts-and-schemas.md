@@ -53,6 +53,8 @@ The Run ID contains a timestamp and random suffix so repeated execution of the s
 when the same Issue is planned again. A delivery Run continues to store its `plan.json` under its Run
 directory above.
 
+`meguribi discover` atomically writes observations and problem candidates to `~/.local/share/meguribi/discoveries/<owner>/<repo>/discovery.json`. Each `observations` entry has a `statement`, `source`, and `confidence`; candidate `evidenceRefs` contain observation IDs only. Candidate ranking is an evidence-organization order, not an automatic product-priority decision.
+
 ## 3. Common metadata
 
 Every JSON artifact includes common metadata:

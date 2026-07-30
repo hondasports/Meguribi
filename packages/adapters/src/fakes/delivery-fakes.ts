@@ -137,6 +137,7 @@ function defaultReview(
 
 export interface FakeGitHubOptions {
   issue?: Partial<IssueRecord> & Pick<IssueRecord, "number">;
+  issues?: readonly IssueRecord[];
   pullRequest?: Partial<PullRequestRecord> & Pick<PullRequestRecord, "number">;
   now?: () => Date;
 }
@@ -154,6 +155,7 @@ export function createFakeGitHubAdapter(options: FakeGitHubOptions = {}): GitHub
     comments: options.issue?.comments ?? [],
     updatedAt: options.issue?.updatedAt ?? isoNow(now),
   };
+  const issues = options.issues ?? [issue];
   const pullRequest: PullRequestRecord = {
     number: options.pullRequest?.number ?? 101,
     url: options.pullRequest?.url ?? "https://example.test/pr/101",
@@ -172,6 +174,10 @@ export function createFakeGitHubAdapter(options: FakeGitHubOptions = {}): GitHub
         throw new Error(`Issue not found: ${repository}#${String(issueNumber)}`);
       }
       return issue;
+    },
+    async listIssues(input) {
+      calls.track("listIssues");
+      return issues.filter((candidate) => input.label === undefined || candidate.labels.includes(input.label)).slice(0, input.limit);
     },
     async getPullRequest(repository, pullRequestNumber) {
       calls.track("getPullRequest");
