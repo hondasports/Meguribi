@@ -60,6 +60,16 @@ The implemented CLI surface currently consists of `init`, `doctor`, `discover`, 
 
 日本語: 現在利用できる CLI は `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
+## Command Desk
+
+コマンドライン入力を UI から行う場合は、Vite + Vue のローカル画面を起動できます。画面は許可された Meguribi コマンドだけを引数配列で実行し、stdout / stderr と Run の完了状態を表示します。
+
+```powershell
+pnpm.cmd --filter @meguribi/web dev
+```
+
+<http://127.0.0.1:4173> を開いてください。詳しい使い方は [`apps/web/README.md`](apps/web/README.md) を参照してください。
+
 ```bash
 meguribi init --implementer cursor
 meguribi doctor --implementer cursor
