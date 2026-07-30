@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`run`、`resume` です。成長ループ系コマンド、`plan`、`review`、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`plan`、`review`、`run`、`resume` です。成長ループ系コマンド、`measure`、`cleanup` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
 
 ### `meguribi init`
 
@@ -178,12 +178,17 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 
 ### `meguribi review`
 
-既存 PR または Issue に紐づくブランチ差分を Codex でレビューします。
+既存の delivery Run の worktree 差分を Codex で再レビューします。`implementation_completed` と
+`plan.json`、`implementation-result.json`、`verification.json` が必要です。Run の branch、HEAD、remote
+identity が保存状態と一致しない場合は停止します。`review` はコードを変更せず、`review.json` と
+`<!-- meguribi:code-review -->` marker 付き Issue コメントだけを更新します。
 
 ```bash
 meguribi review owner/repo#125
-meguribi review https://github.com/owner/repo/pull/456
+meguribi review owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
+
+主要オプションは `--run-id`、`--repo-path <path>`、`--local`、`--json` です。
 
 ### `meguribi resume`
 

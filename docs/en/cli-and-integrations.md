@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `run`, and `resume`. The product-growth commands, `plan`, `review`, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `plan`, `review`, `run`, and `resume`. Product-growth commands, `measure`, and `cleanup` remain specified interfaces and are not registered by the current CLI entry point.
 
 ### `meguribi init`
 
@@ -169,12 +169,17 @@ Production GitHub / Git / Verifier adapters are injected via ports. The default 
 
 ### `meguribi review`
 
-Review an existing PR or an Issue-associated branch with Codex.
+Re-run a read-only Codex review for an existing delivery Run worktree. The Run must have
+`implementation_completed`, `plan.json`, `implementation-result.json`, and `verification.json`.
+The command stops when the saved branch, HEAD, or remote identity differs. It changes no code and
+only updates `review.json` plus the Issue comment with the `<!-- meguribi:code-review -->` marker.
 
 ```bash
 meguribi review owner/repo#125
-meguribi review https://github.com/owner/repo/pull/456
+meguribi review owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
+
+Main options are `--run-id`, `--repo-path <path>`, `--local`, and `--json`.
 
 ### `meguribi resume`
 
