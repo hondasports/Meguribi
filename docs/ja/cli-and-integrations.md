@@ -152,6 +152,7 @@ Codex が対象リポジトリを読み取り、技術計画を作成します�
 
 ```bash
 meguribi plan owner/repo#125
+meguribi plan owner/repo#125 --request "WEBでTODOアプリを作って。"
 ```
 
 `plan` は実装エージェントを起動せず、計画を
@@ -159,6 +160,7 @@ meguribi plan owner/repo#125
 （Windows は `%LOCALAPPDATA%\\meguribi\\plans\\...`）へ atomic write します。
 同時に `<!-- meguribi:implementation-plan -->` marker 付きの Issue コメントを作成または更新します。
 ローカル fixture では `--local --repo-path <path>` を使用できます。`--json` は計画と成果物パスを JSON で出力します。
+`--request <text>` を指定すると、Issue 本文とは別に今回のユーザー要望をCodexへ渡せます。例えば「WEBでTODOアプリを作って。」のような追加要件を入力できます。要望は読み取り専用の計画材料として扱われ、コード変更や権限変更を許可するものではありません。空文字は受け付けず、12,000文字以内です。
 
 ### `meguribi run`
 

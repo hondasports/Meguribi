@@ -262,6 +262,7 @@ export interface DeliveryDependencies {
     createPlan(input: {
       repositoryPath: string;
       issue: IssueRecord;
+      userRequest?: string;
       repositoryRules: string;
       completionCriteria: string[];
       outOfScope: string[];

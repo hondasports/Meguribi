@@ -39,6 +39,7 @@ export interface CodexWorkspaceGuard {
 export interface PlanningInput {
   repositoryPath: string;
   issue: CodexIssueContext;
+  userRequest?: string;
   repositoryRules: string;
   productContext?: string;
   completionCriteria: string[];

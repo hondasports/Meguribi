@@ -177,12 +177,16 @@ export function createCodexBridge(
       return adapter.createPlan({
         repositoryPath: input.repositoryPath,
         issue,
+        userRequest: input.userRequest,
         repositoryRules: input.repositoryRules,
         completionCriteria: input.completionCriteria,
         outOfScope: input.outOfScope,
         sourceDigests: {
           issue: digestSource(issue),
           repository: workspace.sourceDigest,
+          ...(input.userRequest === undefined
+            ? {}
+            : { userRequest: digestSource(input.userRequest) }),
         },
         workspaceGuard: workspace.guard,
       });

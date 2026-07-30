@@ -189,6 +189,19 @@ describe("CodexAdapter", () => {
     expect(client.thread.prompts[0]).toContain("untrusted-content");
   });
 
+  it("includes the user's request in the planning prompt and source metadata", async () => {
+    const client = new FakeClient([[jsonMessage(planContent), { type: "turn.completed" }]]);
+    const adapter = createCodexAdapter({ client, now: () => new Date(now) });
+    const input = planningInput(new FakeWorkspaceGuard(["same", "same"]));
+    input.userRequest = "WEBでTODOアプリを作って。";
+    input.sourceDigests.userRequest = digestSource(input.userRequest);
+
+    const result = await adapter.createPlan(input);
+
+    expect(client.thread.prompts[0]).toContain("WEBでTODOアプリを作って。");
+    expect(result.metadata.sourceDigests.userRequest).toBe(digestSource(input.userRequest));
+  });
+
   it("repairs one invalid structured response and then succeeds", async () => {
     const client = new FakeClient([
       [jsonMessage({ summary: "missing required fields" }), { type: "turn.completed" }],

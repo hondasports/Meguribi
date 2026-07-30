@@ -73,6 +73,67 @@ describe("runPlanCommand", () => {
     expect(JSON.parse(chunks.join("")).artifactPath).toBe("C:/data/plan.json");
     expect(calls).toEqual(["issue:owner/repo#12", "<!-- meguribi:implementation-plan -->"]);
   });
+
+  it("passes the user's request to the planning dependency", async () => {
+    let receivedRequest: string | undefined;
+    await runPlanCommand(
+      "owner/repo#12",
+      { json: true, repoPath: "C:/fixture/repository", request: "WEBでTODOアプリを作って。" },
+      {
+        cwd: "C:/fixture/repository",
+        stdout: () => undefined,
+        plan: {
+          github: {
+            getIssue: async () => ({
+              number: 12,
+              title: "Planning",
+              body: "Create a plan.",
+              labels: [],
+              comments: [],
+              updatedAt: "2026-07-29T00:00:00.000Z",
+            }),
+            upsertMarkerComment: async () => ({ commentId: 3 }),
+          },
+          codex: {
+            createPlan: async (input) => {
+              receivedRequest = input.userRequest;
+              return {
+                schemaVersion: 1,
+                artifactType: "implementation-plan",
+                summary: "Plan it",
+                requirements: [],
+                acceptanceCriteria: [],
+                outOfScope: [],
+                proposedFiles: [],
+                steps: ["Implement"],
+                risks: [],
+                tests: [],
+                humanDecisions: [],
+                unresolvedItems: [],
+                metadata: {
+                  schemaVersion: 1,
+                  artifactId: "plan-12",
+                  createdAt: "2026-07-29T00:00:00.000Z",
+                  durationMs: 1,
+                  producer: { kind: "codex", role: "planner", threadId: "thread-12" },
+                  sourceDigests: {},
+                  eventLog: [],
+                },
+              };
+            },
+          },
+          planStore: { save: async () => "C:/data/plan.json" },
+        },
+      },
+    );
+    expect(receivedRequest).toBe("WEBでTODOアプリを作って。");
+  });
+
+  it("rejects an empty user request before starting planning", async () => {
+    await expect(
+      runPlanCommand("owner/repo#12", { request: "   " }, { cwd: "C:/fixture/repository" }),
+    ).rejects.toThrow("--request must not be empty");
+  });
 });
 
 const healthy: DevinDiagnosis = {

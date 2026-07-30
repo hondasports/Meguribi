@@ -110,9 +110,9 @@ English: Converts a `product:approved` solution into an incomplete Requirement /
 
 ### `meguribi plan owner/repo#125`
 
-English: Asks Codex to read the target repository and produce a technical implementation plan. Planning is read-only and does not modify code.
+English: Asks Codex to read the target repository and produce a technical implementation plan. Use `--request <text>` to add a separate user request such as `Build a TODO web app.`. Planning is read-only and does not modify code.
 
-日本語: Codex が対象リポジトリを読み取り、技術的な実装計画を作成します。計画作成は読み取り専用で、コードを変更しません。
+日本語: Codex が対象リポジトリを読み取り、技術的な実装計画を作成します。`--request <text>` で「WEBでTODOアプリを作って。」のような今回のユーザー要望を追加できます。計画作成は読み取り専用で、コードを変更しません。
 
 ### `meguribi review owner/repo#125`
 

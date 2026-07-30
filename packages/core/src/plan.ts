@@ -20,6 +20,7 @@ export interface PlanInput {
   issueNumber: number;
   repositoryPath: string;
   repositoryRules: string;
+  userRequest?: string;
   completionCriteria: string[];
   outOfScope: string[];
 }

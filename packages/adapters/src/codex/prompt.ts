@@ -19,6 +19,7 @@ export function buildPlanningPrompt(input: PlanningInput): string {
     `Repository path: ${input.repositoryPath}`,
     `Repository rules:\n${untrustedContent(input.repositoryRules)}`,
     `Product context:\n${untrustedContent(input.productContext ?? "")}`,
+    `User request:\n${untrustedContent(input.userRequest ?? "")}`,
     `Completion criteria:\n${untrustedContent(input.completionCriteria)}`,
     `Out of scope:\n${untrustedContent(input.outOfScope)}`,
     `Issue context:\n${untrustedContent(input.issue)}`,

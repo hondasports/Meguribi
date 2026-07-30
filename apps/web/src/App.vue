@@ -134,6 +134,7 @@ const error = ref<string | null>(null);
 const form = reactive({
   repoPath: "",
   target: "local/todo#1",
+  userRequest: "",
   implementer: "devin",
   solution: "1",
   period: "14d",
@@ -167,6 +168,7 @@ function append(stream: OutputLine["stream"], text: string): void {
 function buildOptions(): Record<string, unknown> {
   return {
     repoPath: form.repoPath || undefined,
+    userRequest: form.userRequest || undefined,
     implementer: form.implementer,
     local: form.local,
     nonInteractive: form.nonInteractive,
@@ -308,6 +310,17 @@ onMounted(async () => {
                 placeholder="C:\\Users\\tatsuya\\Documents\\sourcecode\\todo"
               /><small v-if="selectedCommand === 'init'"
                 >initではこのパスのルートに .meguribi.yml を作成します。</small
+              ></label
+            >
+            <label v-if="selectedCommand === 'plan'" class="request-field"
+              >User request<textarea
+                v-model="form.userRequest"
+                rows="5"
+                maxlength="12000"
+                placeholder="例: WEBでTODOアプリを作って。"
+              ></textarea
+              ><small
+                >Issueの内容に加えて、今回作りたいものや重視したい条件を入力します。</small
               ></label
             >
             <div class="two-col">

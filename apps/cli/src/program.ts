@@ -206,6 +206,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .option("--json", "Emit PlanResult JSON only", false)
     .option("--local", "Use a local Issue document and local repository; never call GitHub", false)
     .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--request <text>", "Additional user request to guide the plan")
     .action(async (target: string, cliOptions: PlanCommandOptions) => {
       try {
         const result = await runPlanCommand(target, cliOptions, deps);
