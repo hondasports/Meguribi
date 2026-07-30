@@ -288,6 +288,8 @@ tests/fixtures/
 
 ### 4.4 `explore`
 
+実装済み: Problem Issue の本文に明示された複数の解決方針を比較成果物へ構造化します。評価情報がない場合は `null` とし、採用案を自動選択しません。
+
 - 複数解決案
 - value / effort / risk / reversibility 比較
 - 一案への過度な誘導を避ける

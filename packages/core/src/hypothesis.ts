@@ -59,7 +59,7 @@ const SECTION_NAMES = {
   rejectionConditions: "失敗・棄却条件",
 } as const;
 
-type SectionKey = keyof typeof SECTION_NAMES;
+type SectionKey = keyof typeof SECTION_NAMES | "solutionDirections";
 
 const SECTION_ALIASES: Record<SectionKey, readonly string[]> = {
   observations: ["観測", "observations", "observation"],
@@ -70,6 +70,7 @@ const SECTION_ALIASES: Record<SectionKey, readonly string[]> = {
   validationMethods: ["検証方法", "validation methods", "validation method"],
   successConditions: ["成功条件", "success conditions", "success condition"],
   rejectionConditions: ["失敗・棄却条件", "失敗・却下条件", "rejection conditions", "rejection condition"],
+  solutionDirections: ["解決方針", "solution directions", "solution direction"],
 };
 
 export interface HypothesisSections {
@@ -136,7 +137,7 @@ function toProblemCandidates(values: readonly string[]): HypothesisProblemCandid
 }
 
 function missingEvidence(parsed: HypothesisSections): string[] {
-  return (Object.keys(SECTION_NAMES) as SectionKey[])
+  return (Object.keys(SECTION_NAMES) as (keyof typeof SECTION_NAMES)[])
     .filter((key) => !parsed.present.has(key) || (parsed.sections[key] ?? []).length === 0)
     .map((key) => SECTION_NAMES[key]);
 }

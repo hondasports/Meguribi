@@ -94,6 +94,14 @@ export {
   type PromoteResult,
 } from "./promote.js";
 export {
+  exploreSolutions,
+  type ExploreArtifact,
+  type ExploreArtifactStore,
+  type ExploreDependencies,
+  type ExploreInput,
+  type SolutionOption,
+} from "./explore.js";
+export {
   decideInheritedMcpPolicy,
   type McpDetection,
   type McpPolicyDecision,

@@ -56,7 +56,7 @@ Meguribi CLI
 
 ## CLI status
 
-The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `promote`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. Promote turns a human-validated hypothesis into a Problem draft and only creates an Issue after explicit interactive confirmation. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
+The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. Promote turns a human-validated hypothesis into a Problem draft and only creates an Issue after explicit interactive confirmation. Explore compares multiple explicit solution directions without selecting a winner. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
 
 日本語: 現在利用できる CLI は `init`、`doctor`、`discover`、`hypothesis`、`plan`、`review`、`run`、`resume`、`cleanup` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
 
@@ -87,6 +87,12 @@ English: Extracts candidate problems from existing Issues, specified documents, 
 English: Turns a `product:validated` Hypothesis Issue into a solution-neutral Problem draft. `--create-issue` requires interactive human confirmation before creating a new Issue.
 
 日本語: `product:validated` の Hypothesis Issue から、解決策を固定しない Problem 草案を作成します。`--create-issue` を指定した場合も、対話的な人間確認なしに新規 Issue は作成しません。
+
+### `meguribi explore owner/repo#124`
+
+English: Compares multiple explicit solution directions across value, cost, risk, reversibility, and measurement dimensions without choosing a winner.
+
+日本語: 複数の明示された解決方針を、価値・コスト・リスク・可逆性・測定難易度などで比較します。採用案は自動選択しません。
 
 ### `meguribi require owner/repo#124`
 
