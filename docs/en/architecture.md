@@ -142,7 +142,7 @@ Responsibilities:
 - Request JSON-Schema-constrained output.
 - Store thread IDs, usage, and event logs.
 
-The Codex TypeScript SDK launches the Codex CLI and exchanges JSONL events. SDK-specific shapes remain inside the adapter.
+Meguribi calls the `@openai/codex-sdk` API only inside the adapter and keeps SDK-specific types behind that boundary. The SDK's internal transport or process implementation is outside Meguribi's dependency boundary, so `init` does not require a `codex` executable on `PATH`.
 
 ### `AgentAdapter`
 

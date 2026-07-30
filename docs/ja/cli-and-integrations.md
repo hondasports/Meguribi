@@ -36,10 +36,12 @@ meguribi init --implementer devin ./path/to/repository
 
 - Git リポジトリか
 - remote と GitHub リポジトリが一致するか
-- `git`、`gh`、Codex、選択した実装エージェントの利用可否
+- `git`、`gh`、選択した実装エージェントの利用可否
 - GitHub と選択した実装エージェントの認証状態
 - default branch
-- `git`、`gh`、Codex の version
+- `git` と `gh` の version
+
+Codex は PATH 上の `codex` CLI としてではなく、Meguribi の `@openai/codex-sdk` 依存として adapter 内から利用します。そのため `init` は `codex --version` を実行しません。SDK の実接続は `plan` / `review` の実行時に確認します。
 - 選択した実装エージェントの ACP readiness
 - `.meguribi.yml` の存在と生成結果
 

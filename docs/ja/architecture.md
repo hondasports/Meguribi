@@ -151,7 +151,7 @@ async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
 - JSON Schema を指定して構造化出力を得る。
 - Thread ID と利用量を保存する。
 
-Codex TypeScript SDK は Codex CLI を子プロセスとして起動し、JSONL イベントを交換します。Meguribi は SDK 固有型をアダプター内に閉じ込めます。
+Meguribi は `@openai/codex-sdk` の API を adapter 内だけで呼び出し、SDK 固有型を外へ漏らしません。SDK 内部の transport / process 実装は Meguribi の外部依存境界であり、`init` は PATH 上の `codex` 実行ファイルを要求しません。
 
 ### AgentAdapter
 

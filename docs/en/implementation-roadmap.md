@@ -81,7 +81,8 @@ Implement:
 - Local Git repository resolution
 - Remote URL normalization
 - GitHub repository resolution
-- `git`, `gh`, Codex, and selected-agent diagnostics
+- `git`, `gh`, and selected-agent diagnostics
+- Use `@openai/codex-sdk` as an adapter dependency; do not require an external `codex` CLI
 - Authentication check
 - Default branch detection
 - `.meguribi.yml` draft generation

@@ -40,7 +40,6 @@ export interface RepositoryInitDiagnosticsOptions {
   runner?: InitCommandRunner;
   gitExecutable?: string;
   githubExecutable?: string;
-  codexExecutable?: string;
 }
 
 interface GhRepositoryResponse {
@@ -141,11 +140,9 @@ export async function diagnoseRepository(
   const runner = options.runner ?? new ProcessInitCommandRunner();
   const gitExecutable = options.gitExecutable ?? "git";
   const githubExecutable = options.githubExecutable ?? "gh";
-  const codexExecutable = options.codexExecutable ?? "codex";
   const dependencies = await Promise.all([
     runDependency(runner, "git", gitExecutable, ["--version"], repositoryPath),
     runDependency(runner, "gh", githubExecutable, ["--version"], repositoryPath),
-    runDependency(runner, "codex", codexExecutable, ["--version"], repositoryPath),
   ]);
   const warnings: string[] = [];
   const errors: string[] = [];

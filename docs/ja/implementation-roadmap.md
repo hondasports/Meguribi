@@ -82,7 +82,8 @@ tests/fixtures/
 - ローカル Git リポジトリ解決
 - remote URL 正規化
 - GitHub repository 解決
-- `git` / `gh` / Codex / 選択した Agent の存在確認
+- `git` / `gh` / 選択した Agent の存在確認
+- `@openai/codex-sdk` は Meguribi の adapter 依存として利用し、外部 `codex` CLI の存在は要求しない
 - 認証診断
 - default branch 取得
 - `.meguribi.yml` 草案生成
