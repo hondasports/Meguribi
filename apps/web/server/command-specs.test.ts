@@ -48,4 +48,47 @@ describe("command bridge", () => {
   it("rejects a missing target", () => {
     expect(() => buildCliArgs({ command: "plan" })).toThrow(/target is required/);
   });
+
+  it("uses the repository path as init's positional path", () => {
+    expect(
+      buildCliArgs({
+        command: "init",
+        target: "local/todo#1",
+        options: {
+          repoPath: "C:\\workspace\\todo",
+          implementer: "devin",
+          nonInteractive: true,
+        },
+      }),
+    ).toEqual([
+      "exec",
+      "tsx",
+      "apps/cli/src/index.ts",
+      "init",
+      "C:\\workspace\\todo",
+      "--implementer",
+      "devin",
+      "--non-interactive",
+      "--json",
+    ]);
+  });
+
+  it("defaults init to the server working directory instead of an issue target", () => {
+    expect(
+      buildCliArgs({
+        command: "init",
+        target: "local/todo#1",
+        options: { implementer: "devin" },
+      }),
+    ).toEqual([
+      "exec",
+      "tsx",
+      "apps/cli/src/index.ts",
+      "init",
+      ".",
+      "--implementer",
+      "devin",
+      "--json",
+    ]);
+  });
 });

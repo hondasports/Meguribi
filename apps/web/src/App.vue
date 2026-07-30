@@ -43,7 +43,7 @@ const commands: CommandDefinition[] = [
     label: "init",
     description: "リポジトリと設定を診断",
     group: "準備",
-    requiresTarget: true,
+    requiresTarget: false,
   },
   {
     id: "discover",
@@ -304,8 +304,12 @@ onMounted(async () => {
             <label
               >Repository path<input
                 v-model="form.repoPath"
+                :required="selectedCommand === 'init'"
                 placeholder="C:\\Users\\tatsuya\\Documents\\sourcecode\\todo"
-            /></label>
+              /><small v-if="selectedCommand === 'init'"
+                >initではこのパスのルートに .meguribi.yml を作成します。</small
+              ></label
+            >
             <div class="two-col">
               <label
                 >Implementer<select v-model="form.implementer">
