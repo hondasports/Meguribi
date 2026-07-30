@@ -17,7 +17,8 @@ const state: RunState = {
   repository: "owner/repo",
   issueNumber: 8,
   command: "run",
-  status: "awaiting_human",
+  status: "blocked",
+  currentStep: "implementation_blocked",
   completedSteps: ["implementation_completed", "verifying", "reviewing"],
   branch: "meguribi/issue-8",
   worktreePath: "C:/worktrees/issue-8",
@@ -31,6 +32,10 @@ const state: RunState = {
   maxFixAttempts: 2,
   createdAt: "2026-07-30T00:00:00.000Z",
   updatedAt: "2026-07-30T00:00:00.000Z",
+  lastError: {
+    code: "policy_blocked",
+    message: "review still requires changes after fix attempts",
+  },
 };
 
 const plan: PlanArtifact = {
@@ -151,6 +156,9 @@ describe("reviewIssue", () => {
     expect(bundle.saved["review.json"]).toEqual(review);
     expect((bundle.saved.comment as { marker: string }).marker).toBe(CODE_REVIEW_MARKER);
     expect(bundle.updated?.agentSessions.codexReview).toBe("review-thread");
+    expect(bundle.updated?.status).toBe("awaiting_human");
+    expect(bundle.updated?.currentStep).toBe("awaiting_human");
+    expect(bundle.updated?.lastError).toBeUndefined();
     expect(bundle.requestedBaseSha).toBe(state.baseSha);
   });
 
