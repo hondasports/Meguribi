@@ -430,6 +430,8 @@ Codex のレビューは補助判断です。人間の PR レビューを置き�
 }
 ```
 
+CLI の `measure` は `~/.local/share/meguribi/measurements/<owner>/<repo>/from-issue-<n>/measurement.json`（Windows は `%LOCALAPPDATA%\\meguribi\\measurements\\...`）へ草案を atomic write し、元の Issue の `<!-- meguribi:measure -->` コメントを更新します。PR が未マージ、リンクが曖昧、または根拠が不足している場合は停止または `openQuestions` への記録を行い、結果を推測しません。
+
 ## 13. スキーマ管理
 
 ```text

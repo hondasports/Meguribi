@@ -309,6 +309,8 @@ Selects an approved solution with `--solution <number>` and generates a Requirem
 
 ### 4.6 `measure`
 
+Recovers a merged PR from the Requirement / Feature Issue delivery summary and generates a Measurement draft with the requested period and explicit missing evidence. Result classification and the next decision are not automated.
+
 - Restore the original hypothesis.
 - Create a Measurement Issue draft.
 - Classify the result.

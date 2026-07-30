@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。`measure` は仕様として定義されていますが、現在の CLI entry point にはまだ登録されていません。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`measure`、`cleanup` です。
 
 ### `meguribi init`
 
@@ -202,7 +202,7 @@ meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 
 ### `meguribi measure`
 
-Requirement / Feature Issue と PR から Measurement Issue の草案を作ります。
+Requirement / Feature Issue の delivery summary からマージ済み PR を復元し、指定期間の Measurement 草案を作ります。元の仮説、指標、定性的反応が無い場合は推測せず `openQuestions` に残し、結果と判断は人間に委ねます。
 
 ```bash
 meguribi measure owner/repo#125 --period 14d

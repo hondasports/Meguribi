@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, and `cleanup`. `measure` remains a specified interface and is not registered by the current CLI entry point.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `measure`, and `cleanup`.
 
 ### `meguribi init`
 
@@ -193,7 +193,7 @@ meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 
 ### `meguribi measure`
 
-Create a Measurement Issue draft from a Requirement / Feature Issue and PR.
+Create a human-reviewed Measurement draft from a merged PR referenced by the Requirement / Feature Issue delivery summary. Missing hypothesis, metrics, or qualitative evidence are recorded in `openQuestions`; result and decision remain human judgments.
 
 ```bash
 meguribi measure owner/repo#125 --period 14d

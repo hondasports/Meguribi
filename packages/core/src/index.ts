@@ -102,6 +102,7 @@ export {
   type SolutionOption,
 } from "./explore.js";
 export { requireSolution, type RequirementArtifact, type RequirementArtifactStore, type RequireDependencies, type RequireInput } from "./require.js";
+export { measureRelease, type MeasurementArtifact, type MeasurementArtifactStore, type MeasureDependencies, type MeasureInput } from "./measure.js";
 export {
   decideInheritedMcpPolicy,
   type McpDetection,

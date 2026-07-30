@@ -306,6 +306,8 @@ tests/fixtures/
 
 ### 4.6 `measure`
 
+Requirement / Feature Issue の delivery summary からマージ済み PR を復元し、指定期間と不足情報を持つ Measurement 草案を生成します。結果分類と次の判断は自動化しません。
+
 - 元仮説の復元
 - Measurement Issue 草案
 - result classification

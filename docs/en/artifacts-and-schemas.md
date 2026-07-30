@@ -413,6 +413,8 @@ Codex review assists but does not replace human review.
 }
 ```
 
+The `measure` CLI atomically writes drafts to `~/.local/share/meguribi/measurements/<owner>/<repo>/from-issue-<n>/measurement.json` (`%LOCALAPPDATA%\\meguribi\\measurements\\...` on Windows) and updates the source Issue comment with `<!-- meguribi:measure -->`. It stops for an unmerged or ambiguous PR and records missing evidence in `openQuestions` rather than inventing a result.
+
 ## 13. Schema management
 
 ```text
