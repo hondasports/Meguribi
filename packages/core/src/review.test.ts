@@ -81,6 +81,7 @@ const review: ReviewArtifact = {
 function dependencies(overrides: { identity?: Partial<typeof state>; review?: ReviewArtifact } = {}) {
   const saved: Record<string, unknown> = {};
   let updated: RunState | undefined;
+  let requestedBaseSha: string | undefined;
   const identity = {
     branch: overrides.identity?.branch ?? state.branch,
     headSha: overrides.identity?.headSha ?? state.headSha,
@@ -90,6 +91,9 @@ function dependencies(overrides: { identity?: Partial<typeof state>; review?: Re
     saved,
     get updated() {
       return updated;
+    },
+    get requestedBaseSha() {
+      return requestedBaseSha;
     },
     deps: {
       github: {
@@ -101,7 +105,10 @@ function dependencies(overrides: { identity?: Partial<typeof state>; review?: Re
       },
       git: {
         getIdentity: async () => identity,
-        getDiff: async () => ({ changedFiles: ["src/feature.ts"], patch: "diff --git a/src/feature.ts b/src/feature.ts" }),
+        getDiff: async (_worktreePath: string, baseSha?: string) => {
+          requestedBaseSha = baseSha;
+          return { changedFiles: ["src/feature.ts"], patch: "diff --git a/src/feature.ts b/src/feature.ts" };
+        },
       },
       codex: { review: async () => overrides.review ?? review },
       runStore: {
@@ -144,6 +151,7 @@ describe("reviewIssue", () => {
     expect(bundle.saved["review.json"]).toEqual(review);
     expect((bundle.saved.comment as { marker: string }).marker).toBe(CODE_REVIEW_MARKER);
     expect(bundle.updated?.agentSessions.codexReview).toBe("review-thread");
+    expect(bundle.requestedBaseSha).toBe(state.baseSha);
   });
 
   it("stops before Codex when the saved worktree identity changed", async () => {

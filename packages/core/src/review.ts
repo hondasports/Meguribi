@@ -60,7 +60,7 @@ export async function reviewIssue(
     await deps.runStore.readArtifact<unknown>(state.runId, "verification.json"),
     state.runId,
   );
-  const diff = await deps.git.getDiff(state.worktreePath);
+  const diff = await deps.git.getDiff(state.worktreePath, state.baseSha);
   const review = assertReviewArtifact(
     (await deps.codex.review({
       repositoryPath: input.repositoryPath,

@@ -73,6 +73,10 @@ function parseStatus(output: string): string[] {
   return files;
 }
 
+function parseNulSeparatedFiles(output: string): string[] {
+  return output.split("\0").filter(Boolean);
+}
+
 function untrackedPatch(file: string, contents: string): string {
   const lines = contents.split(/\r?\n/);
   const body = lines.map((line) => `+${line}`).join("\n");
@@ -147,17 +151,26 @@ export function createGitAdapter(options: GitAdapterOptions = {}): GitAdapter {
       };
     },
 
-    async getDiff(worktreePath) {
+    async getDiff(worktreePath, baseSha) {
       const status = await gitValue(runner, worktreePath, ["status", "--porcelain=v1", "-z", "-uall"]);
       const changedFiles = parseStatus(status);
+      const committedPatch = baseSha
+        ? await gitValue(runner, worktreePath, ["diff", baseSha, "HEAD", "--no-ext-diff", "--binary"])
+        : "";
+      const committedFiles = baseSha
+        ? parseNulSeparatedFiles(await gitValue(runner, worktreePath, ["diff", baseSha, "HEAD", "--name-only", "-z"]))
+        : [];
       const trackedPatch = await gitValue(runner, worktreePath, ["diff", "HEAD", "--no-ext-diff", "--binary"]);
       const untracked = changedFiles.filter((file) => status.includes(`?? ${file}`));
-      const patches = [trackedPatch];
+      const patches = [committedPatch, trackedPatch];
       for (const file of untracked) {
         const contents = await fs.readFile(path.join(worktreePath, file), "utf8");
         patches.push(untrackedPatch(file.replaceAll("\\", "/"), contents));
       }
-      return { changedFiles: [...new Set(changedFiles)].sort(), patch: patches.filter(Boolean).join("\n") };
+      return {
+        changedFiles: [...new Set([...committedFiles, ...changedFiles])].sort(),
+        patch: patches.filter(Boolean).join("\n"),
+      };
     },
 
     async commit(input) {
