@@ -223,3 +223,4 @@ export type {
   WorkflowRunResult,
 } from "./workflow-engine/engine.js";
 export type { WorkflowEvent } from "./workflow-engine/events.js";
+export { createRunStoreStepStateStore } from "./workflow-engine/run-store-step-state.js";

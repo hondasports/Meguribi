@@ -113,6 +113,38 @@ describe("FileSystemRunStore", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("saves and reads back artifacts in subdirectories like steps/verify.json", async () => {
+    const root = await tempRoot();
+    const store = new FileSystemRunStore({ rootDir: root });
+    const created = await store.create({
+      repository: "owner/repo",
+      issueNumber: 22,
+      command: "run",
+      maxFixAttempts: 1,
+      identity: {
+        repository: "owner/repo",
+        issueNumber: 22,
+        branch: "b",
+        worktreePath: "/tmp/wt",
+        baseRef: "origin/main",
+        baseSha: "a",
+        headSha: "b",
+        remoteIdentity: "remote",
+      },
+    });
+
+    const record = {
+      stepId: "verify",
+      kind: "verify",
+      status: "completed",
+      visit: 1,
+      startedAt: "2026-07-26T12:00:00.000Z",
+    };
+    await store.saveArtifact(created.runId, "steps/verify.json", record);
+    const read = await store.readArtifact<typeof record>(created.runId, "steps/verify.json");
+    expect(read).toEqual(record);
+  });
+
   it("rejects repository path traversal outside rootDir", async () => {
     const root = await tempRoot();
     const store = new FileSystemRunStore({ rootDir: root });
