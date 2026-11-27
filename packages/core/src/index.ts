@@ -160,6 +160,22 @@ export type {
   DevinVersionDiagnosis,
 } from "./devin-diagnosis.js";
 export type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+export {
+  agentDisplayName,
+  RoleAssignmentError,
+  validateRoleAssignments,
+  type AgentKind,
+  type AgentProfile,
+  type AgentRole,
+  type AgentTransport,
+  type AgentTurnResult,
+  type OpenRoleSessionInput,
+  type RoleAgent,
+  type RoleAssignments,
+  type RoleAssignmentErrorCode,
+  type RoleSession,
+  type RoleSessionMode,
+} from "./role-agent.js";
 export type {
   InitDependencyCheck,
   InitDependencyStatus,
