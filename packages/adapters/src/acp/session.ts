@@ -125,6 +125,14 @@ export interface StartAcpSessionInput extends StartAcpInput {
   promptArtifact?: AcpPromptArtifact;
   gitBoundary?: AcpGitBoundaryConfig;
   transport?: AcpTransport;
+  /**
+   * When true, the session process stays alive after each completed turn so
+   * callers can send multiple sequential prompts on the same session.
+   * Shutdown still happens when a turn fails, when iteration is abandoned
+   * mid-turn, or via cancel/terminate. Implementer sessions leave this unset
+   * and keep the single-turn lifecycle.
+   */
+  multiTurn?: boolean;
 }
 
 export interface AcpSession {
@@ -218,6 +226,7 @@ class AcpSessionImpl implements AcpSession {
     private readonly promptArtifact?: AcpPromptArtifact,
     private readonly gitBoundaryConfig?: AcpGitBoundaryConfig,
     private readonly gitBoundaryBefore?: GitWorktreeSnapshot,
+    private readonly multiTurn?: boolean,
   ) {}
 
   private gitBoundaryResultPromise: Promise<GitSafetyComparison | undefined> | undefined;
@@ -231,13 +240,17 @@ class AcpSessionImpl implements AcpSession {
         "ACP prompt requires built implementationContext or explicit content",
       );
     }
+    let turnFinished = false;
     try {
       yield* mapRawEvents(this.connection.prompt({ content }), this.artifacts, {
         cwd: this.cwd,
         protocolVersion: this.protocolVersion,
         startedAt: this.startedAt,
       });
-      await this.shutdown("completed", { gracefulShutdownMs: 1, terminateTimeoutMs: 1_000 });
+      turnFinished = true;
+      if (!this.multiTurn) {
+        await this.shutdown("completed", { gracefulShutdownMs: 1, terminateTimeoutMs: 1_000 });
+      }
     } catch (error) {
       const agentError =
         error instanceof AcpTransportError
@@ -267,7 +280,12 @@ class AcpSessionImpl implements AcpSession {
       throw error;
     } finally {
       // Closing an async generator early must not leave the ACP process alive.
-      await this.shutdown("cancelled", { gracefulShutdownMs: 50, terminateTimeoutMs: 1_000 }).catch(() => undefined);
+      // Multi-turn sessions keep the process alive only when the turn reached
+      // completion; abandoning a turn mid-stream leaves an untrustworthy
+      // process state, so the session is shut down in that case.
+      if (!this.multiTurn || !turnFinished) {
+        await this.shutdown("cancelled", { gracefulShutdownMs: 50, terminateTimeoutMs: 1_000 }).catch(() => undefined);
+      }
     }
   }
 
@@ -324,7 +342,12 @@ class AcpSessionImpl implements AcpSession {
   ): Promise<AgentTerminationResult> {
     const result = await this.shutdownController.shutdown(reason, options);
     this.permissionMediator?.endSession(this.sessionId);
-    await this.validateGitBoundary();
+    // Multi-turn sessions without a git boundary configuration (role sessions)
+    // detect writes with their own snapshot comparison, so the fail-closed
+    // implementer boundary artifact is not written for them.
+    if (!this.multiTurn || this.gitBoundaryConfig) {
+      await this.validateGitBoundary();
+    }
     await this.artifacts.writeTermination(result);
     await this.persistStderr();
     return result;
@@ -430,6 +453,7 @@ export async function startAcpSession(
     promptArtifact,
     gitBoundary,
     transport: transportOverride,
+    multiTurn,
     ...transportInput
   } = input;
 
@@ -475,6 +499,7 @@ export async function startAcpSession(
     promptArtifact,
     gitBoundary,
     gitBoundaryBefore,
+    multiTurn,
   );
 }
 
