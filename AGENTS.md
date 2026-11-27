@@ -295,7 +295,7 @@ Cloud Agent 環境（VM）で Meguribi を開発・検証するための、非�
 ### プロダクト構成（サービス）
 
 - これは **local-first の CLI**（pnpm monorepo）です。常駐サーバーと DB はありません。Web UI（`apps/web`）は利用者が起動したときだけ動くローカルサーバーであり、起動しておくべき常駐サービスはありません（README / §1・§6 参照）。
-- アプリ本体は `@meguribi/cli`。現時点で実装済みのコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。
+- アプリ本体は `@meguribi/cli`。現時点で実装済みのコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`measure`、`cleanup` です。
   - dev 実行: `pnpm exec tsx apps/cli/src/index.ts doctor`（`--json` / `--non-interactive` 可）
   - build 済み実行: `pnpm build` 後に `node apps/cli/dist/index.js doctor`
 - `doctor` は Devin CLI が PATH に無いと `runnable: no` を出力し **exit code 1** で終了します。これは環境不具合ではなく **正常な診断結果** です（`executable_not_found` と nextAction を返す）。実際に runnable にしたい場合のみ Devin CLI を用意してください。
