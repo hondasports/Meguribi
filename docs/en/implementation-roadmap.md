@@ -35,7 +35,7 @@ Create the minimum TypeScript CLI repository that can be built and tested.
 - Add configuration schema foundation.
 - Add fixture-based test support.
 
-Recommended layout:
+### Recommended layout
 
 ```text
 apps/

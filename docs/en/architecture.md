@@ -216,6 +216,8 @@ Use XDG Base Directory conventions and keep temporary execution logs outside tar
 
 ## 5. Delivery sequence
 
+### 5.1 Plan to draft PR
+
 ```text
   Human        CLI        GitHub       Git        Codex       Agent       CI
   |           |            |           |           |           |          |
@@ -234,7 +236,7 @@ Use XDG Base Directory conventions and keep temporary execution logs outside tar
   |           |                         GitHub CI ------------------------->|
 ```
 
-## 6. Fix loop
+### 5.2 Fix loop
 
 The MVP defaults to zero automatic fix attempts and allows at most one when explicitly configured.
 
@@ -247,7 +249,7 @@ verification failure or review changes_required
   -> Meguribi stops when the attempt limit is reached
 ```
 
-## 7. Dependency direction
+## 6. Dependency direction
 
 ```text
 CLI -> Workflows -> Ports <- Adapters
@@ -260,7 +262,7 @@ CLI -> Workflows -> Ports <- Adapters
 - Prompt builders have no side effects.
 - Policy evaluation is deterministic and side-effect free.
 
-## 8. Recommended stack
+## 7. Recommended stack
 
 - Node.js 24.x (the repository pins `>=24 <25`)
 - TypeScript strict mode
@@ -276,7 +278,7 @@ CLI -> Workflows -> Ports <- Adapters
 
 Final library choices are confirmed in implementation Issues. Prefer standard APIs and small dependencies.
 
-## 9. Run status
+## 8. Run status
 
 Meguribi does not build a generic state machine. A Run stores a coarse `status` plus fine-grained `currentStep` / `completedSteps` in `state.json`.
 
@@ -313,7 +315,7 @@ interrupted
 
 `state.json` updates use temp-file + rename atomic writes. `FileSystemRunStore` owns atomic writes and per-Issue locks.
 
-## 10. Concurrency
+## 9. Concurrency
 
 MVP constraints:
 
@@ -322,7 +324,7 @@ MVP constraints:
 - Steps within a Run are sequential.
 - Cross-Issue fetch sharing is postponed.
 
-## 11. Extension points
+## 10. Extension points
 
 Potential future adapters:
 

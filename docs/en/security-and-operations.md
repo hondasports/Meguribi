@@ -207,11 +207,15 @@ A stale lock may be removed after confirming the process no longer exists. Do no
 
 ## 13. Retry policy
 
+### Automatic retry allowed
+
 Automatic retry may be used for:
 
 - Temporary GitHub or network failure
 - One invalid Codex structured-output response
 - Temporary read-only operation failure
+
+### No automatic retry
 
 Do not automatically retry:
 

@@ -488,7 +488,7 @@ packages/schemas/
 
 ## 14. Logging
 
-Store:
+### Store
 
 - Executable and non-secret arguments
 - Start and end time
@@ -498,7 +498,7 @@ Store:
 - Git diff
 - GitHub update result
 
-Do not store:
+### Do not store
 
 - API keys or OAuth tokens
 - Complete environment variables
