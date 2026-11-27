@@ -69,6 +69,12 @@ export async function runDoctor(
     cli: options.implementer ? { implementer: options.implementer } : {},
   });
 
+  if (config.kind === "acp-server") {
+    throw new Error(
+      `Implementer profile ${config.profile.id} is an ACP server, but generic ACP server diagnosis is not available yet. Use devin or cursor, or complete the P1 wiring task first.`,
+    );
+  }
+
   let diagnosis: AgentDiagnosis;
   if (config.kind === "cursor") {
     diagnosis = await (deps.diagnoseCursor ?? diagnoseCursor)({
@@ -112,7 +118,10 @@ function deliveryFlags(command: Command): Command {
   return command
     .option("--json", "Emit DeliveryResult JSON on stdout", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
-    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
+    .option(
+      "--implementer <profile>",
+      "Implementer agent profile (devin, cursor, claude-code, codex-acp, or a profile id from .meguribi.yml)",
+    )
     .option("--local", "Use a local Issue document and local Git repository; never call GitHub", false)
     .option("--allow-inherited-mcp", "Explicitly allow inherited MCP under warn policy", false)
     .option(
@@ -162,7 +171,10 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .argument("[path]", "Path to the target Git repository", ".")
     .option("--json", "Emit initialization diagnostics JSON only", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
-    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
+    .option(
+      "--implementer <profile>",
+      "Implementer agent profile (devin, cursor, claude-code, codex-acp, or a profile id from .meguribi.yml)",
+    )
     .action(async (targetPath: string | undefined, cliOptions: InitCommandOptions) => {
       try {
         const result = await runInit(targetPath, cliOptions, deps);
@@ -361,7 +373,10 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .description("Diagnose agent CLI readiness for Meguribi")
     .option("--json", "Emit AgentDiagnosis JSON only", false)
     .option("--non-interactive", "Fail closed on ambiguous MCP policy", false)
-    .option("--implementer <kind>", "Implementer agent kind (devin or cursor)")
+    .option(
+      "--implementer <profile>",
+      "Implementer agent profile (devin, cursor, claude-code, codex-acp, or a profile id from .meguribi.yml)",
+    )
     .action(async (cliOptions: DoctorCommandOptions) => {
       try {
         const result = await runDoctor(cliOptions, deps);

@@ -1,6 +1,15 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { validateRoleAssignments, type AgentProfile } from "@meguribi/core";
 import { parse } from "yaml";
+import {
+  resolveAgentsConfigData,
+  resolveValidatedAgentsConfig,
+  toRedactedAgentsConfigSnapshot,
+  unknownImplementerProfileError,
+  unsupportedImplementerTransportError,
+  type AgentsConfigResult,
+} from "./agents-config.js";
 import {
   cursorConfigFromEnvironment,
   resolveCursorConfig,
@@ -188,19 +197,47 @@ export async function loadCursorConfig(options: LoadDevinConfigOptions): Promise
   return { config, snapshot };
 }
 
+export async function loadAgentsConfig(
+  options: LoadDevinConfigOptions,
+): Promise<AgentsConfigResult> {
+  const environment = options.environment ?? process.env;
+  const userConfigPath = options.userConfigPath ?? getDefaultUserConfigPath(environment);
+  const repositoryConfigPath = options.repositoryPath
+    ? path.join(options.repositoryPath, ".meguribi.yml")
+    : undefined;
+
+  const userRaw = await readRawConfig(userConfigPath);
+  const repositoryRaw = await readRawConfig(repositoryConfigPath);
+  const resolved = resolveValidatedAgentsConfig({
+    user: userRaw,
+    repository: repositoryRaw,
+    environment,
+    cli: options.cli,
+  });
+
+  return {
+    ...resolved,
+    snapshot: toRedactedAgentsConfigSnapshot({
+      profiles: resolved.profiles,
+      roles: resolved.roles,
+    }),
+  };
+}
+
 export type ImplementerConfigResult =
   | { kind: "devin"; config: DevinConfig; snapshot: Record<string, unknown> }
-  | { kind: "cursor"; config: CursorConfig; snapshot: Record<string, unknown> };
+  | { kind: "cursor"; config: CursorConfig; snapshot: Record<string, unknown> }
+  | { kind: "acp-server"; profile: AgentProfile; snapshot: Record<string, unknown> };
 
 export class ImplementerNotSpecifiedError extends Error {
   public readonly nextAction: string;
   constructor() {
     super(
-      "No implementer is explicitly selected. Set MEGURIBI_IMPLEMENTER=devin|cursor, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor.",
+      "No implementer is explicitly selected. Set MEGURIBI_IMPLEMENTER=devin|cursor|claude-code|codex-acp, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor|claude-code|codex-acp.",
     );
     this.name = "ImplementerNotSpecifiedError";
     this.nextAction =
-      "Set MEGURIBI_IMPLEMENTER=devin|cursor, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor.";
+      "Set MEGURIBI_IMPLEMENTER=devin|cursor|claude-code|codex-acp, add 'implementer: devin' to .meguribi.yml, or use --implementer devin|cursor|claude-code|codex-acp.";
   }
 }
 
@@ -215,17 +252,26 @@ export async function loadImplementerConfig(
 
   const userRaw = await readRawConfig(userConfigPath);
   const repositoryRaw = await readRawConfig(repositoryConfigPath);
+  const agents = resolveAgentsConfigData({
+    user: userRaw,
+    repository: repositoryRaw,
+    environment,
+    cli: options.cli,
+  });
+  const explicitImplementer = agents.roles.implementer;
 
-  const cli = isRecord(options.cli) ? options.cli : {};
-  const explicitImplementer =
-    (cli.implementer as string | undefined) ??
-    environment.MEGURIBI_IMPLEMENTER ??
-    (isRecord(userRaw) ? (userRaw.implementer as string | undefined) : undefined) ??
-    (isRecord(repositoryRaw) ? (repositoryRaw.implementer as string | undefined) : undefined);
-
-  if (explicitImplementer !== "devin" && explicitImplementer !== "cursor") {
+  if (explicitImplementer === undefined) {
     throw new ImplementerNotSpecifiedError();
   }
+
+  const profile = agents.profiles.find((candidate) => candidate.id === explicitImplementer);
+  if (profile === undefined) {
+    throw unknownImplementerProfileError(explicitImplementer);
+  }
+  if (profile.transport !== "acp") {
+    throw unsupportedImplementerTransportError(profile);
+  }
+  validateRoleAssignments(agents.roles, agents.profiles);
 
   const configOptions = {
     ...options,
@@ -234,13 +280,21 @@ export async function loadImplementerConfig(
     cli: withoutImplementer(options.cli),
   };
 
-  if (explicitImplementer === "cursor") {
+  if (profile.kind === "cursor") {
     const result = await loadCursorConfig(configOptions);
     return { kind: "cursor", ...result };
   }
+  if (profile.kind === "devin") {
+    const result = await loadDevinConfig(configOptions);
+    return { kind: "devin", ...result };
+  }
 
-  const result = await loadDevinConfig(configOptions);
-  return { kind: "devin", ...result };
+  return {
+    kind: "acp-server",
+    profile,
+    snapshot: toRedactedAgentsConfigSnapshot(profile),
+  };
 }
 
+export { BUILTIN_AGENT_PROFILES, ConflictingImplementerError } from "./agents-config.js";
 export type { DevinConfigInput, CursorConfigInput };

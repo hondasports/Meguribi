@@ -1,8 +1,19 @@
 export {
+  BUILTIN_AGENT_PROFILES,
+  ConflictingImplementerError,
+} from "./agents-config.js";
+export type { AgentsConfigResult } from "./agents-config.js";
+export {
+  loadAgentsConfig,
   loadCursorConfig,
   loadDevinConfig,
   loadImplementerConfig,
 } from "./config-loader.js";
+export {
+  executableSchema,
+  isValidExecutablePath,
+  isValidExecutableString,
+} from "./executable.js";
 export type {
   CursorConfigResult,
   DevinConfigResult,

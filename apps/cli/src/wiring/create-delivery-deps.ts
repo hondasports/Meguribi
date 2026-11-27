@@ -312,6 +312,12 @@ export async function createDeliveryDeps(
     };
   }
 
+  if (config.kind === "acp-server") {
+    throw new Error(
+      `Implementer profile ${config.profile.id} is an ACP server, but generic ACP server delivery wiring is not available yet. Use devin or cursor, or complete the P1 wiring task first.`,
+    );
+  }
+
   const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
   const diagnosis = await diagnoseDevin({
     executable: config.config.executable,

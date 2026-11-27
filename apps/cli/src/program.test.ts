@@ -635,3 +635,14 @@ describe("run --log", () => {
     expect(stderr.join("")).toContain("--log must be stream, compact, or none");
   });
 });
+
+describe("implementer option help", () => {
+  it.each(["init", "run", "doctor"])("describes %s --implementer as a profile", (name) => {
+    const program = createProgram();
+    const command = program.commands.find((candidate) => candidate.name() === name);
+    const option = command?.options.find((candidate) => candidate.long === "--implementer");
+    expect(option?.description).toBe(
+      "Implementer agent profile (devin, cursor, claude-code, codex-acp, or a profile id from .meguribi.yml)",
+    );
+  });
+});
