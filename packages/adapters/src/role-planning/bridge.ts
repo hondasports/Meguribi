@@ -12,7 +12,8 @@ import type {
 import { agentDisplayName } from "@meguribi/core";
 import { PlanContentSchema, ReviewContentSchema } from "@meguribi/schemas";
 import * as v from "valibot";
-import { buildPlanningPrompt, buildRepairPrompt, buildReviewPrompt } from "../codex/prompt.js";
+import { buildPlanningPrompt, buildReviewPrompt } from "../codex/prompt.js";
+import { buildRoleRepairPrompt } from "./repair-prompt.js";
 import { digestSource } from "../codex/digest.js";
 import type { CodexWorkspaceGuard } from "../codex/types.js";
 import { captureGitWorktreeSnapshot } from "../git-boundary.js";
@@ -149,7 +150,7 @@ export function createRoleAgentPlanningBridge(
           lastMessage = "response did not contain a final ```json fence with valid JSON";
         }
         if (attempts < 3) {
-          prompt = buildRepairPrompt(role, lastMessage);
+          prompt = buildRoleRepairPrompt(role, lastMessage, params.keys);
         }
       }
       throw new RolePlanningError(

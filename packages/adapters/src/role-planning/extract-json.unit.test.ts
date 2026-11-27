@@ -17,9 +17,22 @@ describe("extractFinalJson", () => {
     expect(extractFinalJson(text)).toEqual({ b: 2 });
   });
 
-  it("returns undefined when there is no json fence", () => {
+  it("returns undefined for non-JSON text without a fence", () => {
     expect(extractFinalJson("plain text without fences")).toBeUndefined();
     expect(extractFinalJson("```\n{\"a\":1}\n```")).toBeUndefined();
+  });
+
+  it("falls back to the whole response when it is a bare JSON object", () => {
+    expect(extractFinalJson('  {"a": 1, "b": [2]}  ')).toEqual({ a: 1, b: [2] });
+  });
+
+  it("returns undefined for fenceless JSON arrays or strings", () => {
+    expect(extractFinalJson("[1, 2]")).toBeUndefined();
+    expect(extractFinalJson('"just a string"')).toBeUndefined();
+  });
+
+  it("returns undefined for fenceless broken JSON", () => {
+    expect(extractFinalJson('{"a": 1,')).toBeUndefined();
   });
 
   it("returns undefined for broken JSON in the last fence", () => {

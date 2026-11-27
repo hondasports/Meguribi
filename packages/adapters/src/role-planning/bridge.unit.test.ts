@@ -128,6 +128,27 @@ describe("createRoleAgentPlanningBridge", () => {
     expect(artifact.summary).toBe("summary");
   });
 
+  it("repairs with a fenceless bare JSON object and includes the fence instruction in the repair prompt", async () => {
+    const repositoryPath = await tempGit();
+    const { agent, sessions } = fakeRoleAgent("claude-code", [
+      "explanation without any json",
+      JSON.stringify(planContent),
+    ]);
+    const bridge = createBridge(agent, path.join(repositoryPath, ".artifacts"));
+
+    const artifact = await bridge.createPlan({
+      repositoryPath,
+      issue: issue(),
+      repositoryRules: "rules",
+      completionCriteria: ["criterion"],
+      outOfScope: [],
+    });
+
+    expect(sessions[0]?.prompts).toHaveLength(2);
+    expect(sessions[0]?.prompts[1]).toContain("```json");
+    expect(artifact.summary).toBe("summary");
+  });
+
   it("throws malformed_output with attempts 3 when every response fails validation", async () => {
     const repositoryPath = await tempGit();
     const invalid = jsonFenced({ ...planContent, extraKey: "not allowed" });
