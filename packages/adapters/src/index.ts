@@ -115,6 +115,14 @@ export type {
   StartCursorAcpInput,
   StartCursorAcpSessionInput,
 } from "./cursor/index.js";
+export {
+  acpServerInstallHint,
+  AcpServerNotRunnableError,
+  assertAcpServerRunnable,
+  diagnoseAcpServer,
+  formatAcpServerDiagnosisHuman,
+} from "./acp-server/index.js";
+export type { DiagnoseAcpServerOptions } from "./acp-server/index.js";
 export { FileSystemRunStore, createRunId } from "./run-store/index.js";
 export type { FileSystemRunStoreOptions } from "./run-store/index.js";
 export { createDefaultPolicyEngine } from "./policy/default-policy.js";
