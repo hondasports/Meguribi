@@ -78,11 +78,13 @@ function snapshotViolation(
 
 class AcpRoleSession implements RoleSession {
   readonly sessionId: string;
+  private closed = false;
 
   constructor(
     private readonly session: AcpSession,
     private readonly input: OpenRoleSessionInput,
     private readonly before: GitWorktreeSnapshot | undefined,
+    private readonly removeAbortListener: (() => void) | undefined,
   ) {
     this.sessionId = session.sessionId;
   }
@@ -113,7 +115,22 @@ class AcpRoleSession implements RoleSession {
   }
 
   async close(): Promise<void> {
-    await this.session.terminate();
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+    this.removeAbortListener?.();
+    try {
+      await this.session.shutdown("completed", {
+        gracefulShutdownMs: 1,
+        terminateTimeoutMs: 1_000,
+      });
+    } catch {
+      // shutdown は最初の呼び出しで memoize されるため、ここで失敗した場合の
+      // terminate() は多くの場合同じ理由で失敗する。それでもプロセス回収を
+      // 最後まで試み、成果物の write 済み分は残す。
+      await this.session.terminate().catch(() => undefined);
+    }
     await this.assertUnmodified();
   }
 
@@ -176,18 +193,21 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
         ...(options.transport ? { transport: options.transport } : {}),
       });
 
+      let removeAbortListener: (() => void) | undefined;
       if (input.abortSignal) {
+        const signal = input.abortSignal;
         const cancel = () => {
           void session.cancel().catch(() => undefined);
         };
-        if (input.abortSignal.aborted) {
+        if (signal.aborted) {
           cancel();
         } else {
-          input.abortSignal.addEventListener("abort", cancel, { once: true });
+          signal.addEventListener("abort", cancel, { once: true });
+          removeAbortListener = () => signal.removeEventListener("abort", cancel);
         }
       }
 
-      return new AcpRoleSession(session, input, before);
+      return new AcpRoleSession(session, input, before, removeAbortListener);
     },
   };
 }

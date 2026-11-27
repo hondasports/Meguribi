@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { promisify } from "node:util";
 import type { AgentDiagnosis, AgentEvent, AgentProfile } from "@meguribi/core";
 import { createAcpRoleAgent, RoleSessionWriteViolationError } from "./role-agent.js";
+import { AcpAgentArtifactStore } from "../acp/artifact-store.js";
 
 const tempDirs: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -170,6 +171,33 @@ describe("createAcpRoleAgent integration", () => {
     const approval = events.find((event) => event.type === "approval.required");
     expect(approval).toBeDefined();
     expect(approval).toMatchObject({ decision: { outcome: "deny" } });
+  });
+
+  it("persists the termination artifact on close and tolerates a double close", async () => {
+    const { cwd, artifactRoot } = await tempGit();
+    const agent = agentFor("success");
+    const abort = new AbortController();
+    const session = await agent.openSession({
+      cwd,
+      mode: "read-only",
+      role: "planner",
+      artifactRoot,
+      abortSignal: abort.signal,
+    });
+    await session.send({ content: "hi" });
+    await session.close();
+
+    const store = new AcpAgentArtifactStore(artifactRoot, {
+      label: "Claude Code",
+      promptFileName: "claude-code-prompt.md",
+    });
+    await expect(fs.access(store.terminationPath)).resolves.toBeUndefined();
+    const termination = JSON.parse(await fs.readFile(store.terminationPath, "utf8")) as {
+      reason?: string;
+    };
+    expect(termination.reason).toBe("completed");
+
+    await expect(session.close()).resolves.toBeUndefined();
   });
 
   it("does not raise write violations in write mode", async () => {
