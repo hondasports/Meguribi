@@ -53,7 +53,7 @@ Issue の範囲を守りながら、小さく、安全で、追跡可能な変�
 
 ## 禁止事項
 
-- Issue にない DB、Web UI、daemon、queue、cloud service の追加
+- Issue にない DB、daemon、queue、cloud service の追加
 - Codex と Devin の直接的な再帰呼び出し
 - default branch への直接変更
 - 自動マージ
