@@ -22,7 +22,7 @@ export const CodexArtifactMetadataSchema = v.strictObject({
   createdAt: v.pipe(v.string(), v.isoTimestamp()),
   durationMs: nonNegativeInteger,
   producer: v.strictObject({
-    kind: v.literal("codex"),
+    kind: v.picklist(["codex", "claude-code", "devin", "cursor"]),
     role: v.picklist(["planner", "reviewer"]),
     threadId: v.string(),
   }),

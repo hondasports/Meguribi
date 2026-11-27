@@ -12,7 +12,7 @@ export interface CodexArtifactMetadata {
   createdAt: string;
   durationMs: number;
   producer: {
-    kind: "codex";
+    kind: "codex" | "claude-code" | "devin" | "cursor";
     role: CodexArtifactRole;
     threadId: string;
   };
