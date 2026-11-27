@@ -36,7 +36,7 @@ In P1-P5, Meguribi will add an implementation workflow from Issue to draft PR as
 
 The step flow is `discuss` → `approve` → `specify` → `plan` → `implement` → `verify` → `review`; when review requires changes, the workflow returns to `fix` → `verify` within an explicit limit. Finally, `publish` creates a draft PR.
 
-Meguribi structures the information needed by this loop, assigns narrow responsibilities to Codex and the selected implementation agent, and leaves an auditable decision trail in GitHub.
+Meguribi structures the information needed by this loop, assigns roles such as `planner`, `implementer`, and `reviewer` to configured agents, and leaves an auditable decision trail in GitHub.
 
 ## 2. Intended user
 
@@ -53,11 +53,11 @@ A coding agent by itself does not solve the following problems:
 - The rationale and hypothesis in an Issue may be lost by the time a PR is created.
 - AI may present an unverified problem as a fact.
 - Implementation completion may be mistaken for product success.
-- Codex and implementation agents may have overlapping responsibilities.
+- Agents responsible for planning, implementation, and review may have overlapping responsibilities.
 - Test success may depend on an agent's natural-language claim.
 - Agent changes may be mixed with the developer's normal working directory.
 
-Meguribi uses GitHub, isolated worktrees, and structured artifacts as boundaries to reduce these risks.
+Meguribi uses GitHub, isolated worktrees, structured artifacts, and discussion transcripts as boundaries to reduce these risks.
 
 ## 4. Core concepts
 
@@ -185,7 +185,7 @@ In the current implementation, Codex performs planning and review. In P1 and lat
 
 ### Implementation agent (Devin or Cursor)
 
-- Implement approved requirements and the Codex technical plan through the selected ACP agent.
+- Implement approved requirements and the technical plan produced by the `planner` through the selected ACP agent.
 - Add required tests.
 - Modify only the assigned worktree.
 - Report unresolved items.
@@ -236,7 +236,7 @@ meguribi promote
 meguribi require
   -> human approves requirements, exclusions, and metrics
 meguribi run
-  -> Codex plan -> Agent implementation -> verification -> Codex review -> Draft PR
+  -> planning by planner -> implementation by implementer -> verification -> review by reviewer -> Draft PR
 human merges the PR
 meguribi measure
   -> human evaluates the result

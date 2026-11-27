@@ -8,14 +8,16 @@ Meguribi は、既存の GitHub リポジトリに対して次の流れを安全
 
 ```text
 GitHub Issue
-  -> Codex による計画
+  -> planner による計画
   -> Git worktree
-  -> Devin による実装
+  -> implementer による実装
   -> Meguribi による機械的検証
-  -> Codex によるレビュー
+  -> reviewer によるレビュー
   -> Draft Pull Request
   -> 人間によるマージ
 ```
+
+現行実装では `planner` / `reviewer` を Codex、`implementer` を Devin / Cursor に割り当てます。P1 以降は `roles` 設定で任意のエージェントへ割り当てられるようにする計画です。
 
 将来的には、次のプロダクト成長ループも扱います。
 

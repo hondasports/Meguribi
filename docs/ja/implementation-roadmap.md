@@ -17,6 +17,8 @@ GitHub Issue
   -> 人間がマージ
 ```
 
+現行 delivery では `planner` / `reviewer` を Codex、`implementer` を Devin / Cursor に割り当てます。P1 以降は `roles` 設定で任意のエージェントへ割り当てられるようにする計画です。
+
 仮説・課題・要件・測定の成長ループは、Delivery の一周が安定した後に追加します。
 
 ## 2. Phase 0: リポジトリ基盤

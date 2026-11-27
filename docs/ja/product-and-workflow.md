@@ -38,7 +38,7 @@ P1〜P5 で、Issue から Draft PR までの実装ワークフローを、工�
 
 工程の流れは `discuss` → `approve` → `specify` → `plan` → `implement` → `verify` → `review` で、`review` が修正を要求した場合は上限付きで `fix` → `verify` へ戻ります。最後に `publish` が Draft PR を作成します。
 
-Meguribi はこの流れに必要な情報を整理し、Codex と選択した実装エージェントに適切な役割を割り当て、GitHub 上に判断の履歴を残します。
+Meguribi はこの流れに必要な情報を整理し、設定されたエージェントに `planner`、`implementer`、`reviewer` などの役割を割り当て、GitHub 上に判断の履歴を残します。
 
 ## 2. 想定利用者
 
@@ -55,11 +55,11 @@ Meguribi はこの流れに必要な情報を整理し、Codex と選択した�
 - Issue の背景や仮説が PR まで引き継がれない。
 - AI が課題を事実として断定する。
 - 実装完了がプロダクト上の成功として扱われる。
-- Codex と実装エージェントの責務が混ざる。
+- 計画・実装・レビューを担うエージェントの責務が混ざる。
 - テスト成功が AI の自己申告に依存する。
 - 普段の作業ディレクトリと AI の変更が混ざる。
 
-Meguribi は、GitHub と構造化成果物を境界にしてこれらを抑制します。
+Meguribi は、GitHub、構造化成果物、議論工程の記録を境界にしてこれらを抑制します。
 
 ## 4. 基本概念
 
@@ -187,7 +187,7 @@ AI は Issue 草案を作れますが、仮説の採用は人間が判断しま�
 
 ### 実装エージェント（Devin / Cursor）
 
-- 選択した ACP 実装エージェントで、承認済みの要件と Codex の技術計画に基づいて実装する。
+- 選択した ACP 実装エージェントで、承認済みの要件と `planner` の技術計画に基づいて実装する。
 - 必要なテストを追加する。
 - 指定された worktree 内だけを変更する。
 - 未解決事項を成果物に記録する。
@@ -238,7 +238,7 @@ meguribi promote
 meguribi require
   -> 人間が要件・対象外・成功条件を承認
 meguribi run
-  -> Codex 計画 -> Agent 実装 -> 検証 -> Codex レビュー -> Draft PR
+  -> planner 計画 -> implementer 実装 -> 検証 -> reviewer レビュー -> Draft PR
 人間が PR をマージ
 meguribi measure
   -> 人間が結果を評価

@@ -42,7 +42,7 @@ Issue、コメント、リポジトリ内文書はコンテキストであり、
 
 - Issue ごとに専用 branch と worktree を作る。
 - 利用者の通常 checkout を Agent の作業ディレクトリにしない。
-- Codex の計画・レビューは原則読み取り専用。
+- 計画・レビューなど書き込み不可の役割は原則読み取り専用。
 - 選択した実装エージェントだけが実装フェーズで worktree を変更できる。
 - 同じ worktree へ複数 Agent を同時に書き込ませない。
 - worktree 外のパスへの書き込みを検出した場合は停止する。
@@ -277,7 +277,7 @@ Ctrl+C / signal を受けた場合:
 
 - Draft で作る。
 - CI 成功を ready / merge と同義にしない。
-- Codex review の `approved` を人間承認と同義にしない。
+- reviewer の `approved` を人間承認と同義にしない。
 - 自動 merge を実装しない。
 - production deploy を実行しない。
 - Issue の対象外とリスクを PR 本文に残す。

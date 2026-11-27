@@ -17,6 +17,8 @@ GitHub Issue
   -> Human merge
 ```
 
+In the current delivery workflow, Codex is assigned to `planner` / `reviewer` and Devin or Cursor is assigned to `implementer`. In P1 and later, the `roles` configuration is planned to allow arbitrary agents to fill these roles.
+
 The hypothesis, problem, requirement, and measurement loop is added after delivery is stable.
 
 ## 2. Phase 0: Repository foundation

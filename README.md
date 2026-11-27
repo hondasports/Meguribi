@@ -3,7 +3,7 @@
 > 仮説の火を、プロダクトへ巡らせる。  
 > Carry the spark of a hypothesis through the product loop.
 
-Meguribi is a personal, GitHub-centered product development orchestrator. It connects product discovery, GitHub Issues, Codex, ACP-based implementation agents such as Devin and Cursor, Git worktrees, automated verification, and pull requests without trying to become a large development platform.
+Meguribi is a personal, GitHub-centered product development orchestrator. It connects product discovery, GitHub Issues, role-assigned agents such as Claude Code, Codex, Devin, and Cursor, Git worktrees, automated verification, and pull requests without trying to become a large development platform.
 
 Meguribi は、仮説・課題・要件・実装・検証・学習を GitHub 上でつなぐ、個人利用向けの軽量なプロダクト開発オーケストレーターです。大規模な管理基盤ではなく、既存リポジトリに対してローカル CLI から必要な処理だけを実行します。
 
@@ -19,7 +19,7 @@ Observation
   -> Problem candidate
   -> Hypothesis
   -> Requirement
-  -> Codex planning
+  -> Technical planning by the planner role
   -> Agent implementation (Devin or Cursor)
   -> Verification and review
   -> Draft pull request

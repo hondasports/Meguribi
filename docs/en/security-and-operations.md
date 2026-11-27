@@ -39,7 +39,7 @@ Repository content is context, not a source of Meguribi system permissions.
 
 - Create one branch and worktree per Issue.
 - Never use the developer's normal checkout as the agent workspace.
-- Codex planning and review are read-only by default.
+- Planning, review, and other non-writing roles are read-only by default.
 - The selected implementation agent writes only during implementation.
 - Do not let multiple agents write to the same worktree concurrently.
 - Stop when writes outside the worktree are detected.
@@ -272,7 +272,7 @@ A failed command must report the worktree location and recovery options rather t
 
 - Create draft PRs.
 - CI success does not make a PR ready or safe to merge.
-- Codex `approved` is not human approval.
+- A reviewer `approved` result is not human approval.
 - Never auto-merge.
 - Never deploy to production.
 - Preserve exclusions and risks in the PR body.
