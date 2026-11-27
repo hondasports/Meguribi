@@ -14,9 +14,11 @@ User
       -> Verification commands
 ```
 
-The MVP has no database, daemon, job queue, web UI, or multiple workers.
+The MVP has no database, daemon, job queue, or multiple workers. Any web UI is limited to a localhost-only local server (Command Desk) without authentication that runs only when started by the user.
 
 ## 2. System boundaries
+
+The responsibilities below are the default assignments in the current implementation. In P1 and later, the `discussant`, `summarizer`, `specifier`, `planner`, `implementer`, and `reviewer` roles are planned to be assignable to arbitrary agents through the `roles` configuration.
 
 ### Owned by Meguribi
 
@@ -97,20 +99,17 @@ apps/cli
 
 ### Workflows
 
-Each command is implemented as straightforward sequential TypeScript code. Meguribi does not build a generic workflow engine.
+In P2, Meguribi is planned to have an engine that sequentially executes declarative YAML workflows with a closed set of step kinds. The existing `runDelivery` will be migrated into the built-in `delivery` workflow (`plan → implement → verify → review ⇄ fix → publish`) without changing its externally visible behavior, artifacts, or exit codes.
 
-```ts
-async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
-  const issue = await github.fetchIssue(input.target);
-  await policy.assertReady(issue);
-  const workspace = await git.createWorktree(issue);
-  const plan = await codex.createPlan({ issue, workspace });
-  await agent.implement({ issue, plan, workspace });
-  const verification = await verifier.run(workspace);
-  const review = await codex.review({ issue, plan, verification, workspace });
-  return github.createDraftPullRequest({ issue, workspace, review });
-}
-```
+The step kinds are the closed set `discuss`, `approve`, `specify`, `plan`, `implement`, `fix`, `verify`, `review`, and `publish`. Control is limited to sequential execution, bounded loops through `onChangesRequired: { goto, max }`, `then` for the next step after completion, and `of` for the approval target. There are no condition expressions, variables, or arbitrary commands.
+
+Before execution, PolicyEngine statically validates the following and refuses to run a violating workflow:
+
+- If `implement` / `fix` / `publish` appears after `discuss`, an `approve` step (`of: discuss`) exists between them.
+- `verify` and `review` exist before `publish`.
+- `verify` exists after `implement`.
+- Every `goto` has a `max`.
+- Step IDs are unique and all references resolve.
 
 ### `GitHubAdapter`
 
@@ -160,6 +159,10 @@ The MVP production implementations are `createDevinAcpAdapter` (Devin) and `crea
 `PermissionRequest`, inherited-MCP decisions, implementation prompts, Git/worktree snapshots, and shutdown are normalized and checked inside the ACP adapter (shared by Devin and Cursor). ACP SDK request/response types and CLI-specific output do not leak into core workflows. Issue text, comments, and fix instructions are delimited as untrusted content by the prompt builder; permission and Git decisions are enforced independently by PolicyEngine.
 
 `AcpShutdownController` performs cancel, stdin close, grace period, termination, and force escalation at most once and stores the result in `termination.json`. Git snapshot changes to HEAD, branch, remote, local config, protected paths, symlinks, or diff limits feed the publish gate. Git diff remains authoritative over agent-reported changed files.
+
+### `RoleAgent` / `RoleSession` (P1, planned)
+
+`RoleAgent` is the port that opens a session for an `AgentProfile` with an execution mode (`read-only` or `write`). `RoleSession` owns prompt submission, sequential `AgentEvent` delivery, and close. Roles that must not write open sessions in `read-only` mode and reject ACP file-change or command-execution permissions. The existing `AgentAdapter` will be reimplemented on top of `RoleSession` without changing its external type. SDK transports such as the Codex SDK also implement `RoleSession` so they can fill roles including discussion participation.
 
 ### `Verifier`
 
