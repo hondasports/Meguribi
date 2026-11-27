@@ -157,3 +157,10 @@ export type {
   FakePolicyOptions,
   FakeVerifierOptions,
 } from "./fakes/index.js";
+
+export {
+  createRoleAgentPlanningBridge,
+  extractFinalJson,
+  RolePlanningError,
+} from "./role-planning/index.js";
+export type { CreateRoleAgentPlanningBridgeOptions } from "./role-planning/index.js";

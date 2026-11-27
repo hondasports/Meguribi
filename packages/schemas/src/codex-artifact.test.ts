@@ -109,3 +109,31 @@ describe("Codex artifact schemas", () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe("producer.kind widening for role agents", () => {
+  it("accepts claude-code as a plan producer", () => {
+    const result = v.safeParse(PlanArtifactSchema, {
+      schemaVersion: 1,
+      artifactType: "implementation-plan",
+      metadata: {
+        ...metadata,
+        producer: { kind: "claude-code", role: "planner", threadId: "session-1" },
+      },
+      ...plan,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown producer kind", () => {
+    const result = v.safeParse(PlanArtifactSchema, {
+      schemaVersion: 1,
+      artifactType: "implementation-plan",
+      metadata: {
+        ...metadata,
+        producer: { kind: "gemini", role: "planner", threadId: "session-1" },
+      },
+      ...plan,
+    });
+    expect(result.success).toBe(false);
+  });
+});
