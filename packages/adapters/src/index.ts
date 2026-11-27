@@ -128,6 +128,20 @@ export type {
   CreateAcpRoleAgentOptions,
   DiagnoseAcpServerOptions,
 } from "./acp-server/index.js";
+export {
+  ACP_SERVER_PROMPT_VERSION,
+  createAcpServerImplementer,
+} from "./acp-server/implementer.js";
+export type { AcpServerImplementerOptions } from "./acp-server/implementer.js";
+export {
+  AcpImplementerAdapterError,
+  createGenericAcpImplementer,
+} from "./acp/implementer-adapter.js";
+export type {
+  AcpImplementerHooks,
+  AcpImplementerOptions,
+  AcpImplementerSessionInput,
+} from "./acp/implementer-adapter.js";
 export { FileSystemRunStore, createRunId } from "./run-store/index.js";
 export type { FileSystemRunStoreOptions } from "./run-store/index.js";
 export { createDefaultPolicyEngine } from "./policy/default-policy.js";
