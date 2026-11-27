@@ -446,3 +446,17 @@ Phase 1 完了時に、専用の検証リポジトリで次を確認します。
 - `measure`
 
 これにより、まず「Issue から安全に Draft PR を作れる」ことを検証し、その上にプロダクト成長ループを追加します。
+
+## 10. マルチエージェント移行フェーズ（P1〜P5・計画中）
+
+P0（方針転換の明文化）はこのドキュメント改訂で扱い、完了後は次の P1〜P5 へ進みます。次の表はマルチエージェント方針への移行に関する計画系列であり、既存の Phase 0〜3 の記述は変更しません。各フェーズは1つ以上の GitHub Issue に分け、`AGENTS.md` の標準実装フローで進めます。
+
+| フェーズ | 内容 | 完了の目安 |
+|---|---|---|
+| P1 エージェント層 | `AgentProfile` / `RoleAgent` / `RoleSession`、Claude Code と Codex の ACP 接続、役割割り当て設定、既存 implementer 設定の互換、`RoleSession` からの `AgentEvent` 逐次通知、`formatLiveLogEvent` と既存 `run` / `resume` の実装工程でのライブログ表示 | 各 kind を fake executable で診断・1ターン実行でき、イベントが逐次届く。`run` 実行中に実装エージェントの動きが流れる。既存テストが通る |
+| P2 ワークフローエンジン | 定義のスキーマと静的検査、逐次実行、工程状態、再開、`events.jsonl`（`step.progress` を含む）、`deriveAgentActivity`、全工程の CLI ライブログと `--log`、`meguribi status [--follow] [--agent]`、`delivery` の移植 | 既存の delivery fixture テストが無変更で通る。実行中の Run の動きを CLI のライブログと別端末の `status --follow` で追える |
+| P3 議論と承認 | 議論ルーム、封筒、進行、終了条件、要約、承認ゲート、`discuss` / `approve` / `reject` コマンド | fake エージェント3体で合意終了・上限終了・タイムアウト・不正 JSON・却下再議論の fixture テストが通る |
+| P4 仕様化と通し | `specify` 工程、`discuss-to-pr` 組み込みワークフロー、implementer ≠ reviewer ポリシー | fake エージェントで Issue → Draft PR 相当まで通る fixture テスト |
+| P5 可視化 | Command Desk の Run 一覧・パイプライン・活動バー（応答なし警告を含む）・エージェント別ペインと全体ログ・議論・承認・工程詳細、`events.jsonl` の SSE 配信、`inbox/` 経由の介入と承認、`meguribi desk` | CLI 起動の Run が画面に出る。画面から承認して後続が進む |
+
+P5 の一部（Run 一覧とパイプライン表示）は P2 の完了後に前倒ししてもよい。

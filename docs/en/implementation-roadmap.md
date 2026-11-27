@@ -441,3 +441,17 @@ After the first release:
 - `measure`
 
 This validates safe Issue-to-draft-PR delivery before adding the full product growth loop.
+
+## 10. Multi-agent migration phases (P1-P5, planned)
+
+P0 (documenting the policy pivot) is handled by this documentation revision; after it completes, the following P1-P5 phases proceed. This table is a separate planning series for the multi-agent migration and does not change the existing Phase 0-3 descriptions. Each phase is split into one or more GitHub Issues and follows the standard implementation flow in `AGENTS.md`.
+
+| Phase | Contents | Completion target |
+|---|---|---|
+| P1 Agent layer | `AgentProfile` / `RoleAgent` / `RoleSession`, Claude Code and Codex ACP connections, role assignment configuration, compatibility for existing implementer settings, sequential `AgentEvent` delivery from `RoleSession`, `formatLiveLogEvent`, and live log output during implementation in existing `run` / `resume` | Each kind can be diagnosed and run for one turn with a fake executable, and events arrive sequentially. While `run` executes, implementation-agent activity is streamed. Existing tests pass |
+| P2 Workflow engine | Definition schema and static validation, sequential execution, step state, resume, `events.jsonl` (including `step.progress`), `deriveAgentActivity`, CLI live logs and `--log` for all steps, `meguribi status [--follow] [--agent]`, and migration of `delivery` | Existing delivery fixture tests pass unchanged. Activity in a running Run can be followed through the CLI live log and `status --follow` in another terminal |
+| P3 Discussion and approval | Discussion room, envelope, turn progression, ending conditions, summarization, approval gate, and `discuss` / `approve` / `reject` commands | Fixture tests with three fake agents pass for consensus ending, limit ending, timeout, invalid JSON, and rejection followed by re-discussion |
+| P4 Specification and end-to-end flow | `specify` step, built-in `discuss-to-pr` workflow, and the implementer ≠ reviewer policy | A fixture test with fake agents reaches the equivalent of Issue → Draft PR |
+| P5 Visualization | Command Desk Run list, pipeline, activity bar (including no-response warnings), per-agent panes and whole log, discussion, approval, step details, SSE delivery of `events.jsonl`, intervention and approval through `inbox/`, and `meguribi desk` | A CLI-started Run appears in the UI. Approval in the UI allows later steps to continue |
+
+Part of P5 (the Run list and pipeline display) may be moved earlier after P2 completes.

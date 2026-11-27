@@ -38,6 +38,8 @@ GitHub Issue
     |
     v
 Meguribi CLI
+    |-- Role assignment (planned): agents and roles in `.meguribi.yml`
+    |-- Discussion room (planned): read-only agents exchange unmodified messages
     |-- Codex adapter: discovery, planning, review
     |-- Agent adapter: Devin or Cursor implementation through ACP
     |-- Git adapter: isolated worktree and branch
@@ -50,15 +52,23 @@ Meguribi CLI
 - Local-first CLI; no always-on server is required.
 - GitHub Issues and pull requests are the source of truth.
 - Each implementation task runs in an isolated Git worktree.
-- Codex and implementation agents do not communicate directly; Meguribi passes structured artifacts between them.
+- During `discuss`, Meguribi may pass agent messages to other agents without rewriting them; all participants are read-only and conclusions require human approval. Outside discussion, Meguribi passes structured artifacts between agents.
 - Human approval is required for product promotion, high-risk implementation, and merge.
-- No database, web UI, queue, or multi-tenant architecture is required for the MVP.
+- No database, queue, or multi-tenant architecture is required for the MVP. The local web UI is localhost-only and runs only when started.
+
+日本語: `discuss` では、エージェントの発言を加工せず他エージェントへ渡せますが、参加者は read-only で、結論は人間の承認後だけ後続工程へ反映します。議論工程以外では構造化成果物を境界にします。DB・queue・マルチテナント基盤は不要で、ローカル Web UI は localhost 専用・認証なしで、利用者が起動したときだけ動かします。
 
 ## CLI status
 
 The implemented CLI surface currently consists of `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, and `cleanup`. Discovery reads Issue evidence and optional Markdown/JSON observations, then saves candidates locally without creating Issues. Hypothesis structures explicit Issue sections, records missing evidence, and requires human approval. Promote turns a human-validated hypothesis into a Problem draft and only creates an Issue after explicit interactive confirmation. Explore compares multiple explicit solution directions without selecting a winner. Require turns an explicitly selected approved solution into an incomplete Requirement draft and records open questions instead of filling them in. The delivery wiring uses the selected ACP agent, the real GitHub, Git, Codex SDK, verifier, run store, and policy engine.
 
 日本語: 現在利用できる CLI は `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`cleanup` です。標準設定では、選択した ACP エージェント、実 GitHub / Git アダプター、Codex SDK、検証コマンド、ローカル RunStore、PolicyEngine を使用します。fixture 用の fake は `MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ有効になります。GitHub を使わないローカル検証では、`run` に `--local --repo-path <path>` を指定できます。
+
+Planned (P1–P5): `workflow`, `discuss`, `approve`, `reject`, `desk`, and `status`.
+
+English: During execution, agent messages, tool executions, and results are planned to stream as live logs to the CLI and Command Desk; each agent will be visible in Command Desk panes or in a terminal through `meguribi status <runId> --follow --agent <profileId>`.
+
+日本語: 実行中のエージェントの発言・ツール実行・結果は CLI と Command Desk にライブログとして流れ、Command Desk のエージェント別ペインやターミナルの `meguribi status <runId> --follow --agent <profileId>` で追跡できるようになる予定です。
 
 ## Command Desk
 

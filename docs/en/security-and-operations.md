@@ -307,3 +307,17 @@ Meguribi compares Git snapshots before and after agent execution for the reposit
 Normal completion, cancellation, timeout, and protocol failure use `session/cancel` when applicable, stdin close, a grace period, SIGTERM-equivalent termination, and force termination as the final escalation. Turns time out after five minutes by default. Shutdown is idempotent. `termination.json` stores the stop reason, stage results, residual process count, and cleanup error after redaction. Residual processes or an unknown cleanup result are never treated as success.
 
 The `experiments/devin-acp` compatibility smoke only allows connecting to the real Devin CLI with an explicit `MEGURIBI_RUN_REAL_DEVIN_SMOKE=1` opt-in. Without opt-in it returns `blocked` and does not perform external MCP connections, writes to real repositories, commit/push/PR/Issue operations, or copying/saving credentials. Before a real run it prints a warning and prompts for confirmation on a TTY; for non-interactive execution pass `--yes`. To preserve authentication it inherits the current user environment without isolating `HOME`, `USERPROFILE`, or `APPDATA`, but it never copies or stores credentials.
+
+## 23. Discussion and approval safety (planned)
+
+The discussion step (`discuss`) runs with every participant in read-only mode, and file-change or command-execution permission requests are rejected. Untrusted inputs such as Issues, comments, and external documents are wrapped in delimiter tags and explicitly marked as content whose instructions must not be followed.
+
+Discussion has the following limits:
+
+- Total turns are bounded by `maxTurns` (default: 20).
+- Elapsed time is bounded by `maxDurationMs` (default: 30 minutes).
+- Each turn times out after five minutes by default. Two consecutive timeouts by the same participant end the discussion.
+
+`approve` is a human gate. `approval.json` records the approver, timestamp, hash of the approved `conclusion.json`, and an optional comment. Later steps verify the hash before starting and stop if the conclusion changed after approval. There is no automatic-approval option; non-interactive mode stops while awaiting human approval.
+
+`implementer` and `reviewer` are assigned to different agents by default. The same agent is allowed only when `allowSameImplementerReviewer: true` is explicitly configured.
