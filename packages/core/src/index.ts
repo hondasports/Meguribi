@@ -212,3 +212,14 @@ export type {
   WorkflowDefinitionIssue,
   WorkflowDefinitionIssueCode,
 } from "./workflow-engine/definition.js";
+export { MissingStepHandlerError, runWorkflow } from "./workflow-engine/engine.js";
+export type {
+  RunWorkflowInput,
+  StepHandler,
+  StepHandlerContext,
+  StepOutcome,
+  StepStateRecord,
+  StepStateStore,
+  WorkflowRunResult,
+} from "./workflow-engine/engine.js";
+export type { WorkflowEvent } from "./workflow-engine/events.js";
