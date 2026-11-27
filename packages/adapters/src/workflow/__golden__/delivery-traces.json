@@ -1,0 +1,2722 @@
+{
+  "happy path publishes and uses git/github ports (not Devin)": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "publishing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "passes the implementation worktree to Codex review": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "publishing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "blocks MCP warn policy in non-interactive mode": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "blocked",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "warn policy is fail-closed in non-interactive mode"
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "warn policy is fail-closed in non-interactive mode"
+      ]
+    }
+  },
+  "blocks when inherited MCP confirmation is denied": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "blocked",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "inherited MCP confirmation was denied"
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "inherited MCP confirmation was denied"
+      ]
+    }
+  },
+  "cancels via abortSignal before implement": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "cancelled",
+        "currentStep": "cancelled",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "cancelled"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "cancelled",
+      "published": false,
+      "reasons": [
+        "cancelled before implementation"
+      ]
+    }
+  },
+  "cancels via abortSignal during implement": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "cancelled",
+        "currentStep": "cancelled",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "cancelled"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "cancelled",
+      "published": false,
+      "reasons": [
+        "implementation cancelled"
+      ]
+    }
+  },
+  "cancels during verification and does not publish": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "cancelled",
+        "currentStep": "cancelled",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "cancelled"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "cancelled",
+        "lastErrorMessage": "cancelled during verification"
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.update"
+    ],
+    "result": {
+      "status": "cancelled",
+      "published": false,
+      "reasons": [
+        "cancelled during verification"
+      ]
+    }
+  },
+  "retries after verifier failure then publishes": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing",
+          "reviewing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing",
+          "reviewing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing",
+          "reviewing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing",
+          "reviewing",
+          "publishing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.fix",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-fix-1-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "stops when fix attempt limit is exhausted": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "blocked",
+        "currentStep": "implementation_blocked",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "fixing",
+          "implementation_blocked"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "verification failed after fix attempts"
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.fix",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-fix-1-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "verification failed after fix attempts"
+      ]
+    }
+  },
+  "fixes after review changes_required then publishes": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing",
+          "publishing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.fix",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-fix-1-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "uses the remaining fix attempts when review still requires changes": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 1,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 2,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "fixing",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 2,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 2,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing"
+        ],
+        "fixAttempts": 2,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "fixing",
+          "publishing"
+        ],
+        "fixAttempts": 2,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.fix",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-fix-1-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "implementer.fix",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-fix-2-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "resumes from implementation_completed": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "publishing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "publishing",
+        "currentStep": "publishing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "awaiting_human",
+        "currentStep": "awaiting_human",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing",
+          "publishing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": 101
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "runStore.update",
+      "github.upsertMarkerComment",
+      "runStore.load",
+      "runStore.acquireLock",
+      "git.getIdentity",
+      "github.getIssue",
+      "runStore.readArtifact:plan.json",
+      "runStore.readArtifact:implementation-result.json",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update",
+      "git.commit",
+      "runStore.update",
+      "git.push",
+      "github.findDraftPullRequest",
+      "github.createDraftPullRequest",
+      "runStore.update",
+      "github.upsertMarkerComment"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [],
+      "pullRequestNumber": 101
+    }
+  },
+  "stops resume on identity mismatch": {
+    "states": [],
+    "calls": [
+      "runStore.load",
+      "runStore.acquireLock",
+      "git.getIdentity",
+      "runStore.releaseLock"
+    ],
+    "thrownError": "Run identity mismatch: worktree/branch/HEAD/remote do not match saved state"
+  },
+  "blocks mid-implement resume": {
+    "states": [
+      {
+        "status": "blocked",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "Mid-implementation or mid-fix resume is not supported; resume only after implementation_completed"
+      }
+    ],
+    "calls": [
+      "runStore.load",
+      "runStore.acquireLock",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "Mid-implementation or mid-fix resume is not supported; resume only after implementation_completed"
+      ]
+    }
+  },
+  "blocks mid-fix resume": {
+    "states": [
+      {
+        "status": "blocked",
+        "currentStep": "fixing",
+        "completedSteps": [
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "Mid-implementation or mid-fix resume is not supported; resume only after implementation_completed"
+      }
+    ],
+    "calls": [
+      "runStore.load",
+      "runStore.acquireLock",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "Mid-implementation or mid-fix resume is not supported; resume only after implementation_completed"
+      ]
+    }
+  },
+  "blocks publish when protected paths change": {
+    "states": [
+      {
+        "status": "created",
+        "currentStep": "preflight",
+        "completedSteps": [
+          "context"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "awaiting_mcp_confirmation",
+        "completedSteps": [
+          "context",
+          "preflight"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "created",
+        "currentStep": "worktree",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planning",
+        "currentStep": "planning",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "planned",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "implementing",
+        "currentStep": "implementing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "implementation_completed",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "verifying",
+        "currentStep": "verifying",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "reviewing",
+        "currentStep": "reviewing",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null
+      },
+      {
+        "status": "blocked",
+        "currentStep": "implementation_blocked",
+        "completedSteps": [
+          "context",
+          "preflight",
+          "awaiting_mcp_confirmation",
+          "worktree",
+          "planning",
+          "implementation_completed",
+          "verifying",
+          "reviewing"
+        ],
+        "fixAttempts": 0,
+        "pullRequestNumber": null,
+        "lastErrorCode": "policy_blocked",
+        "lastErrorMessage": "protected path changed without approval: .env.local; protected path changed without approval: .env.local"
+      }
+    ],
+    "calls": [
+      "github.getIssue",
+      "policy.assertReady",
+      "git.ensureWorktree",
+      "runStore.create",
+      "runStore.acquireLock",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "runStore.update",
+      "codex.createPlan",
+      "runStore.saveArtifact:plan.json",
+      "runStore.update",
+      "runStore.update",
+      "implementer.implement",
+      "runStore.saveArtifact:implementation-result.json",
+      "git.getIdentity",
+      "runStore.update",
+      "runStore.readArtifact:verification.json",
+      "runStore.releaseLock",
+      "runStore.readArtifact:review.json",
+      "runStore.update",
+      "verifier.verify",
+      "runStore.saveArtifact:logs/verify-01-test.log",
+      "runStore.saveArtifact:verification.json",
+      "runStore.update",
+      "runStore.update",
+      "git.getDiff",
+      "codex.review",
+      "runStore.saveArtifact:review.json",
+      "runStore.update",
+      "policy.evaluatePublish",
+      "runStore.update"
+    ],
+    "result": {
+      "status": "blocked",
+      "published": false,
+      "reasons": [
+        "protected path changed without approval: .env.local",
+        "protected path changed without approval: .env.local"
+      ]
+    }
+  },
+  "does not re-publish when resume finds awaiting_human": {
+    "states": [],
+    "calls": [
+      "runStore.load",
+      "runStore.acquireLock",
+      "git.getIdentity",
+      "github.getIssue",
+      "runStore.readArtifact:plan.json",
+      "runStore.readArtifact:implementation-result.json",
+      "runStore.readArtifact:verification.json",
+      "runStore.readArtifact:review.json",
+      "runStore.releaseLock"
+    ],
+    "result": {
+      "status": "awaiting_human",
+      "published": true,
+      "reasons": [
+        "Run already completed and is awaiting human review; publish will not be repeated"
+      ],
+      "pullRequestNumber": 99
+    }
+  }
+}
