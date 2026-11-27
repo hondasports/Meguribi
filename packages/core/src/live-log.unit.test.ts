@@ -42,7 +42,7 @@ describe("createLiveLogRenderer", () => {
     const r = createLiveLogRenderer({ mode: "stream", color: false });
     const out = r.render(ev({ type: "message.delta", sessionId: "s", text: "途中", at: at(0) })) + r.flush();
     expect(out).toBe("● Devin  途中\n");
-    expect(out).not.toMatch(/\u001b\[/);
+    expect(out.includes("\u001b[")).toBe(false);
   });
   it("colors agent labels when color is on", () => {
     const r = createLiveLogRenderer({ mode: "stream", color: true });
