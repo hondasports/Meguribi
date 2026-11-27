@@ -18,7 +18,25 @@ Observation
   -> Next hypothesis
 ```
 
-Meguribi structures the information needed by this loop, assigns narrow responsibilities to Codex and the selected implementation agent, and leaves an auditable decision trail in GitHub.
+### 1.1 Multi-agent overview (planned)
+
+In P1-P5, Meguribi will add an implementation workflow from Issue to draft PR as a declarative workflow with a closed set of step kinds. During discussion, agent messages are passed to other agents without rewriting, but every participant is read-only and the conclusion reaches later steps only after human approval through `approve`.
+
+```text
+              ┌──────────── Workflow Engine (sequential, bounded loops) ────────────┐
+ Issue ──▶ discuss ──▶ approve ──▶ specify ──▶ plan ──▶ implement ──▶ verify ──▶ review ─┬▶ publish ──▶ Draft PR ──▶ human merge
+              │  ▲         │(human)                                      ▲          │
+              │  │         │                                            └─ fix ◀───┘ (maxFixAttempts bound)
+         discussion room
+     Claude Code / Codex / Devin
+              │
+              ▼
+     events.jsonl (all steps and messages) ──▶ Command Desk (SSE)
+```
+
+The step flow is `discuss` → `approve` → `specify` → `plan` → `implement` → `verify` → `review`; when review requires changes, the workflow returns to `fix` → `verify` within an explicit limit. Finally, `publish` creates a draft PR.
+
+Meguribi structures the information needed by this loop, assigns roles such as `planner`, `implementer`, and `reviewer` to configured agents, and leaves an auditable decision trail in GitHub.
 
 ## 2. Intended user
 
@@ -35,11 +53,11 @@ A coding agent by itself does not solve the following problems:
 - The rationale and hypothesis in an Issue may be lost by the time a PR is created.
 - AI may present an unverified problem as a fact.
 - Implementation completion may be mistaken for product success.
-- Codex and implementation agents may have overlapping responsibilities.
+- Agents responsible for planning, implementation, and review may have overlapping responsibilities.
 - Test success may depend on an agent's natural-language claim.
 - Agent changes may be mixed with the developer's normal working directory.
 
-Meguribi uses GitHub, isolated worktrees, and structured artifacts as boundaries to reduce these risks.
+Meguribi uses GitHub, isolated worktrees, structured artifacts, and discussion transcripts as boundaries to reduce these risks.
 
 ## 4. Core concepts
 
@@ -155,6 +173,8 @@ Purpose:
 
 ## 6. Responsibilities
 
+In the current implementation, Codex performs planning and review. In P1 and later, the `roles` configuration is planned to assign roles such as `planner`, `implementer`, and `reviewer` to arbitrary agents.
+
 ### Codex
 
 - Extract problem candidates from Issues and product material.
@@ -165,7 +185,7 @@ Purpose:
 
 ### Implementation agent (Devin or Cursor)
 
-- Implement approved requirements and the Codex technical plan through the selected ACP agent.
+- Implement approved requirements and the technical plan produced by the `planner` through the selected ACP agent.
 - Add required tests.
 - Modify only the assigned worktree.
 - Report unresolved items.
@@ -173,8 +193,8 @@ Purpose:
 ### Meguribi
 
 - Fetch Issue and repository context.
-- Build explicit inputs for Codex and the implementation agent.
-- Store their artifacts and prevent direct agent-to-agent recursion.
+- Build explicit inputs for each role-assigned agent.
+- During `discuss`, pass agent messages to other agents without rewriting them; outside discussion, store structured artifacts as the handoff boundary.
 - Manage worktrees, branches, verification, and draft PRs.
 - Stop at human approval gates.
 
@@ -184,9 +204,10 @@ Purpose:
 
 1. Promote a hypothesis to a confirmed problem.
 2. Select a solution direction and MVP scope.
-3. Approve high-risk implementation.
-4. Merge the pull request.
-5. Judge post-release success or failure.
+3. Approve a discussion conclusion before specification and implementation continue (`approve`, planned).
+4. Approve high-risk implementation.
+5. Merge the pull request.
+6. Judge post-release success or failure.
 
 ### Optional for low-risk work
 
@@ -215,7 +236,7 @@ meguribi promote
 meguribi require
   -> human approves requirements, exclusions, and metrics
 meguribi run
-  -> Codex plan -> Agent implementation -> verification -> Codex review -> Draft PR
+  -> planning by planner -> implementation by implementer -> verification -> review by reviewer -> Draft PR
 human merges the PR
 meguribi measure
   -> human evaluates the result
@@ -248,9 +269,11 @@ Meguribi is successful when:
 
 - Multi-user or multi-organization SaaS
 - Always-on web server
-- Web dashboard
+- Remotely exposed web dashboard
 - Automated roadmap decisions
 - AI-driven automatic merge
 - Unbounded multi-agent debate
 - Large-scale parallel Issue execution
 - A custom Issue tracker or code host
+
+A local web UI (Command Desk) that is localhost-only, has no authentication, and runs only when started by the user is in scope for inspecting execution state rather than a non-goal.

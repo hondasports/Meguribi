@@ -2,9 +2,9 @@
 
 ## 1. 目的
 
-Codex と実装エージェントの間で自然文チャットを直接転送しません。
+議論工程に限り、発言（`message`）を加工せず他エージェントへ渡します。議論工程は全員 read-only とし、結論は人間の承認後だけ後続工程へ反映します。
 
-Meguribi が管理する構造化成果物を受け渡しの境界にします。
+それ以外の受け渡しは、Meguribi が管理する構造化成果物を境界にします。
 
 ```text
 GitHub Issue
@@ -28,6 +28,48 @@ GitHub Issue
 - GitHub コメントの冪等更新
 - どの入力から成果物が作られたかの追跡
 
+### 1.1 議論・承認・工程イベントの成果物（計画中）
+
+P2/P3 では、Run ディレクトリに次の成果物を追加する計画です。
+
+- `discussion/transcript.jsonl`: 議論の全ターン。各発言は話者、turn ID、封筒形式を持つ（P3・計画中）。
+- `discussion/conclusion.json`: `DiscussionConclusion`。採用する方向、論点ごとの立場、不採用案、未解決問い、受け入れ条件の種、終了理由、transcript hash を持つ（P3・計画中）。
+- `approval.json`: 承認者、日時、承認した `conclusion.json` のハッシュ、任意コメントを記録する（P3・計画中）。
+- `steps/<stepId>.json`: 工程ごとの状態（`pending | running | completed | failed | awaiting_human | skipped`）を保存する（P2・計画中）。
+- `events.jsonl`: 全工程のイベント。`step.progress` と `agent.event` を含む（P2・計画中）。
+
+発言の封筒形式は次のとおりです。`message` は加工せず他の参加者へ転送し、転送時は話者名と turn ID を付けます。
+
+```json
+{
+  "message": "自由記述の発言（Markdown）",
+  "replyTo": ["turn-7"],
+  "addressTo": ["codex"],
+  "positions": [{ "issue": "通知のタイミング", "stance": "夜間はまとめるべき" }],
+  "newIssues": ["通知チャネルの選択"],
+  "done": false
+}
+```
+
+`DiscussionConclusion` は次のとおりです。`turnIds` によって、結論のどの部分が誰のどの発言から来たかを追跡できます。
+
+```ts
+interface DiscussionConclusion {
+  topic: string;
+  conclusion: string;
+  issues: Array<{
+    issue: string;
+    positions: Array<{ participant: string; stance: string; turnIds: string[] }>;
+    resolution: string;
+  }>;
+  rejectedOptions: Array<{ option: string; reason: string; turnIds: string[] }>;
+  openQuestions: string[];
+  acceptanceCriteriaSeeds: string[];
+  endedBy: "consensus" | "max_turns" | "max_duration" | "timeout";
+  transcriptHash: string;
+}
+```
+
 ## 2. Run ディレクトリ
 
 ```text
@@ -39,6 +81,13 @@ GitHub Issue
               +-- resolved-config.json
               +-- issue.json
               +-- context-manifest.json
+              +-- discussion/              # 計画中 (P3)
+              |   +-- transcript.jsonl
+              |   +-- conclusion.json
+              +-- approval.json            # 計画中 (P3)
+              +-- steps/                   # 計画中 (P2)
+              |   `-- <stepId>.json
+              +-- events.jsonl             # 計画中 (P2)
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json

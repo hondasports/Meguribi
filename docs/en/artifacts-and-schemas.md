@@ -2,7 +2,9 @@
 
 ## 1. Purpose
 
-Meguribi does not forward free-form chat directly between Codex and an implementation agent. Structured artifacts are the handoff boundary.
+Only during the discussion step may Meguribi pass a message (`message`) to other agents without rewriting it. Every discussion participant is read-only, and the conclusion reaches later steps only after human approval.
+
+All other handoffs use structured artifacts owned by Meguribi as the boundary.
 
 ```text
 GitHub Issue
@@ -19,6 +21,48 @@ GitHub Issue
 
 This provides responsibility separation, schema validation, reproducibility, human-summary regeneration, idempotent GitHub comments, and input lineage.
 
+### 1.1 Discussion, approval, and step-event artifacts (planned)
+
+In P2/P3, the Run directory is planned to gain the following artifacts:
+
+- `discussion/transcript.jsonl`: every discussion turn. Each message has a speaker, turn ID, and envelope format (P3, planned).
+- `discussion/conclusion.json`: the `DiscussionConclusion`, including the selected direction, positions by issue, rejected options, open questions, acceptance-criterion seeds, ending reason, and transcript hash (P3, planned).
+- `approval.json`: the approver, timestamp, hash of the approved `conclusion.json`, and optional comment (P3, planned).
+- `steps/<stepId>.json`: per-step state (`pending | running | completed | failed | awaiting_human | skipped`) (P2, planned).
+- `events.jsonl`: events for every step, including `step.progress` and `agent.event` (P2, planned).
+
+The message envelope is defined as follows. `message` is forwarded to other participants without modification, with the speaker name and turn ID attached.
+
+```json
+{
+  "message": "free-form message (Markdown)",
+  "replyTo": ["turn-7"],
+  "addressTo": ["codex"],
+  "positions": [{ "issue": "notification timing", "stance": "batch notifications at night" }],
+  "newIssues": ["notification channel selection"],
+  "done": false
+}
+```
+
+`DiscussionConclusion` is defined as follows. `turnIds` make it possible to trace which participant and message contributed to each part of the conclusion.
+
+```ts
+interface DiscussionConclusion {
+  topic: string;
+  conclusion: string;
+  issues: Array<{
+    issue: string;
+    positions: Array<{ participant: string; stance: string; turnIds: string[] }>;
+    resolution: string;
+  }>;
+  rejectedOptions: Array<{ option: string; reason: string; turnIds: string[] }>;
+  openQuestions: string[];
+  acceptanceCriteriaSeeds: string[];
+  endedBy: "consensus" | "max_turns" | "max_duration" | "timeout";
+  transcriptHash: string;
+}
+```
+
 ## 2. Run directory
 
 ```text
@@ -30,6 +74,13 @@ This provides responsibility separation, schema validation, reproducibility, hum
               +-- resolved-config.json
               +-- issue.json
               +-- context-manifest.json
+              +-- discussion/              # planned (P3)
+              |   +-- transcript.jsonl
+              |   +-- conclusion.json
+              +-- approval.json            # planned (P3)
+              +-- steps/                   # planned (P2)
+              |   `-- <stepId>.json
+              +-- events.jsonl             # planned (P2)
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
@@ -437,7 +488,7 @@ packages/schemas/
 
 ## 14. Logging
 
-Store:
+### Store
 
 - Executable and non-secret arguments
 - Start and end time
@@ -447,7 +498,7 @@ Store:
 - Git diff
 - GitHub update result
 
-Do not store:
+### Do not store
 
 - API keys or OAuth tokens
 - Complete environment variables

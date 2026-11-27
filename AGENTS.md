@@ -8,14 +8,16 @@ Meguribi は、既存の GitHub リポジトリに対して次の流れを安全
 
 ```text
 GitHub Issue
-  -> Codex による計画
+  -> planner による計画
   -> Git worktree
-  -> Devin による実装
+  -> implementer による実装
   -> Meguribi による機械的検証
-  -> Codex によるレビュー
+  -> reviewer によるレビュー
   -> Draft Pull Request
   -> 人間によるマージ
 ```
+
+現行実装では `planner` / `reviewer` を Codex、`implementer` を Devin / Cursor に割り当てます。P1 以降は `roles` 設定で任意のエージェントへ割り当てられるようにする計画です。
 
 将来的には、次のプロダクト成長ループも扱います。
 
@@ -23,7 +25,7 @@ GitHub Issue
 観測 -> 課題候補 -> 仮説 -> 課題 -> 要件 -> 実装 -> 測定 -> 次の仮説
 ```
 
-Meguribi を、ホステッドサービス、マルチテナント基盤、汎用ワークフローエンジン、常駐デーモン、汎用エージェントフレームワークへ拡張してはいけません。Issue が明示的に要求した場合だけ検討してください。
+Meguribi は、工程種別が閉じた宣言的ワークフロー（任意コード実行なし・逐次と上限付きループのみ）を持ってよい。ただし、ホステッドサービス、マルチテナント基盤、常駐デーモン、汎用エージェントフレームワークへ拡張してはいけません。Issue が明示的に要求した場合だけ検討してください。
 
 ## 2. 最初に読むドキュメント
 
@@ -129,9 +131,9 @@ Issue Readiness Gate、設計、QA、レビュー、公開判断では、必要�
 
 - リンクされた Issue の完了条件だけを実装してください。
 - 要求外のリファクタリングを混ぜないでください。
-- MVP では、DB、Web UI、メッセージキュー、常駐サーバー、プラグインマーケット、クラウドコントロールプレーンを追加しないでください。
+- MVP では、DB、メッセージキュー、常駐サーバー、プラグインマーケット、クラウドコントロールプレーンを追加しないでください。localhost 専用・認証なし・利用者が起動したときだけ動くローカル Web UI（Command Desk）は追加して構いません。
 - 単純なローカルファイルと明示的な逐次処理を優先してください。
-- Codex と Devin を直接再帰的に会話させてはいけません。Meguribi が所有する構造化成果物を介して連携させてください。
+- 議論工程（`discuss`）では、エージェントの発言を加工せず他エージェントへ渡してよい。議論工程は全員 read-only とし、結論は人間の承認（`approve`）を経てからだけ仕様・コードへ反映する。議論工程以外のエージェント間連携は、従来どおり Meguribi が所有する構造化成果物を介してください。
 - コアロジックを SDK や CLI 固有のレスポンス型へ直接依存させないでください。
 
 ## 7. 推奨技術
@@ -208,24 +210,22 @@ git branch -d feat/<issue-number>-<slug>   # 不要なら
 
 ドキュメントのみの極小変更でも、default branch 直編集は避け、専用ブランチ（可能なら worktree）を使います。
 
-## 10. Codex と Devin の責務
+## 10. 役割と担当
 
-### Codex
+エージェントは製品名ではなく役割へ割り当てます。役割と権限は次のとおりです。
 
-- リポジトリ調査
-- 構造化された実装計画
-- 差分レビュー
-- 要件充足・スコープ違反・リスクの判定
+| 役割 | 書き込み | 出力 |
+|---|---|---|
+| `discussant` | 不可 | 議論発言（封筒形式） |
+| `summarizer` | 不可 | `DiscussionConclusion` |
+| `specifier` | 不可 | `Requirement` + `Specification` |
+| `planner` | 不可 | `PlanArtifact` |
+| `implementer` | 指定された worktree 内のみ | `ImplementationResult` |
+| `reviewer` | 不可 | `ReviewArtifact` |
 
-計画・レビュー時は read-only とし、ファイルが変更されていないことを Meguribi 側で確認してください。
+書き込み不可の役割は read-only とし、ファイルが変更されていないことを Meguribi 側で確認してください。`implementer` と `reviewer` は、既定では別のエージェントを担当させます。
 
-### Devin
-
-- 承認済み計画に基づくコード変更
-- 必要なテストの追加
-- 指定された worktree 内での実装
-
-Devin に commit、push、PR 作成、Issue 更新、リポジトリ設定変更を担当させてはいけません。
+どのエージェントにも commit、push、PR 作成、Issue 更新、リポジトリ設定変更を担当させてはいけません。
 
 ## 11. 安全ルール
 
@@ -294,8 +294,8 @@ Cloud Agent 環境（VM）で Meguribi を開発・検証するための、非�
 
 ### プロダクト構成（サービス）
 
-- これは **local-first の CLI**（pnpm monorepo）です。常駐サーバー、DB、Web UI は無く、起動しておくべきサービスはありません（README / §1・§6 参照）。
-- アプリ本体は `@meguribi/cli`。現時点で実装済みのコマンドは `doctor`（Devin CLI の実行可否診断）のみ。
+- これは **local-first の CLI**（pnpm monorepo）です。常駐サーバーと DB はありません。Web UI（`apps/web`）は利用者が起動したときだけ動くローカルサーバーであり、起動しておくべき常駐サービスはありません（README / §1・§6 参照）。
+- アプリ本体は `@meguribi/cli`。現時点で実装済みのコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`measure`、`cleanup` です。
   - dev 実行: `pnpm exec tsx apps/cli/src/index.ts doctor`（`--json` / `--non-interactive` 可）
   - build 済み実行: `pnpm build` 後に `node apps/cli/dist/index.js doctor`
 - `doctor` は Devin CLI が PATH に無いと `runnable: no` を出力し **exit code 1** で終了します。これは環境不具合ではなく **正常な診断結果** です（`executable_not_found` と nextAction を返す）。実際に runnable にしたい場合のみ Devin CLI を用意してください。

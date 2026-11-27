@@ -14,9 +14,11 @@ Meguribi はローカルで実行する単一 CLI として実装します。
       -> 検証コマンド
 ```
 
-MVP では、DB、常駐サーバー、ジョブキュー、Web UI、複数 Worker を持ちません。
+MVP では、DB、常駐サーバー、ジョブキュー、複数 Worker を持ちません。Web UI は localhost 専用・認証なし・利用者が起動したときだけ動くローカルサーバー（Command Desk）に限定します。
 
 ## 2. システム境界
+
+次の責務分界は現行実装の既定割り当てです。P1 以降は `discussant`、`summarizer`、`specifier`、`planner`、`implementer`、`reviewer` の役割を `roles` 設定で任意のエージェントへ割り当てられるようにする計画です。
 
 ### Meguribi が所有するもの
 
@@ -100,22 +102,17 @@ apps/cli
 
 ### Workflow
 
-コマンドごとの手続きを明示的に順番実行します。
+P2 で、Meguribi は工程種別が閉じた宣言的 YAML ワークフローを逐次実行するエンジンを持つ予定です（計画中）。既存の `runDelivery` は、外から見た振る舞い・成果物・終了コードを変えずに、組み込みワークフロー `delivery`（`plan → implement → verify → review ⇄ fix → publish`）として移植します。
 
-汎用ワークフローエンジンは作らず、TypeScript の関数として記述します。
+工程種別は `discuss`、`approve`、`specify`、`plan`、`implement`、`fix`、`verify`、`review`、`publish` の閉じた集合です。制御は逐次実行、`onChangesRequired: { goto, max }` による上限付きループ、工程完了後の `then`、承認対象を示す `of` だけに限定し、条件式・変数・任意コマンドは持ちません。
 
-```ts
-async function runDelivery(input: DeliveryInput): Promise<DeliveryResult> {
-  const issue = await github.fetchIssue(input.target);
-  const approval = await policy.assertReady(issue);
-  const workspace = await git.createWorktree(issue);
-  const plan = await codex.createPlan({ issue, workspace });
-  const implementation = await agent.implement({ issue, plan, workspace });
-  const verification = await verifier.run(workspace);
-  const review = await codex.review({ issue, plan, verification, workspace });
-  return github.createDraftPullRequest({ issue, workspace, review });
-}
-```
+PolicyEngine は実行前に次を静的検査し、違反があれば実行しません。
+
+- `discuss` より後に `implement` / `fix` / `publish` がある場合、その間に `approve`（`of: discuss`）がある。
+- `publish` の前に `verify` と `review` がある。
+- `implement` の後に `verify` がある。
+- すべての `goto` に `max` がある。
+- 工程 ID が一意で、参照先が存在する。
 
 ### GitHubAdapter
 
@@ -171,6 +168,10 @@ MVP の本番実装は `createDevinAcpAdapter`（Devin）と `createCursorAcpAda
 `AcpShutdownController` は cancel、stdin close、grace period、terminate、force escalation を一度だけ実行し、`termination.json` へ結果を保存します。Git snapshot の HEAD、branch、remote、local config、protected path、symlink、diff limit の違反は publish gate の入力となり、Agent が申告した changed files より Git diff を優先します。
 
 将来 API 連携へ変更しても、`AgentAdapter` のインターフェースは維持します。
+
+### RoleAgent / RoleSession（P1・計画中）
+
+`RoleAgent` は `AgentProfile` と実行 mode（`read-only` / `write`）に応じてセッションを開く port、`RoleSession` は prompt 送信、`AgentEvent` の逐次通知、終了を担当する port です。書き込み不可の役割は `read-only` で開き、ACP のファイル変更・コマンド実行権限を拒否します。既存の `AgentAdapter` は外部から見た型を変えず、`RoleSession` の上に実装し直します。Codex SDK のような `transport: sdk` の経路も `RoleSession` を実装し、議論参加を含む役割を担えるようにします。
 
 ### Verifier
 
