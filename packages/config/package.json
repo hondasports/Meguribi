@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@meguribi/core": "workspace:*",
     "valibot": "^1.0.0",
     "yaml": "^2.7.0"
   },

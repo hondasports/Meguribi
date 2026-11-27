@@ -1,4 +1,9 @@
 import * as v from "valibot";
+import {
+  executableSchema,
+  isValidExecutablePath,
+  isValidExecutableString,
+} from "./executable.js";
 
 // Node.js setTimeout uses a signed 32-bit integer for the delay, so values
 // greater than or equal to 2^31 overflow to 1ms. We keep a small margin below
@@ -9,51 +14,6 @@ const MAX_TIMEOUT_MINUTES = Math.floor(MAX_TIMEOUT_MS / 60_000);
 const positiveInteger = v.pipe(v.number(), v.integer(), v.minValue(1));
 const msTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MS));
 const minutesTimeout = v.pipe(positiveInteger, v.maxValue(MAX_TIMEOUT_MINUTES));
-
-function isValidExecutableBase(value: string): boolean {
-  if (value.trim() !== value) return false;
-  if (value.startsWith("-")) return false;
-  if (value.includes("://")) return false;
-  if (value.includes("=")) return false;
-  if (value.includes('"')) return false;
-  if (/[&|;<>$`\p{Control}]/u.test(value)) return false;
-  return true;
-}
-
-// Single executable path/name only, without spaces. This rejects command
-// templates and secret flags for the simple string form.
-function isValidExecutableString(value: string): boolean {
-  if (!isValidExecutableBase(value)) return false;
-  if (/\s/u.test(value)) return false;
-  return true;
-}
-
-// Used for the one-element tuple form, which is the only way to represent an
-// executable path that contains spaces. The whole element is the executable
-// path; additional tuple elements (command arguments) are rejected by the
-// strictTuple schema shape itself. We only guard against structural injection
-// patterns (=, URL scheme, leading -) so that relative spaced paths such as
-// [Cursor Agent.exe] and [tools\\Cursor Agent.exe] are accepted.
-function isValidExecutablePath(value: string): boolean {
-  return isValidExecutableBase(value);
-}
-
-const executableSchema = v.optional(
-  v.union([
-    v.pipe(
-      v.string(),
-      v.nonEmpty(),
-      v.check(isValidExecutableString, "Invalid executable"),
-    ),
-    v.strictTuple([
-      v.pipe(
-        v.string(),
-        v.nonEmpty(),
-        v.check(isValidExecutablePath, "Invalid executable"),
-      ),
-    ]),
-  ]),
-);
 
 export const CursorConfigSchema = v.strictObject({
   executable: executableSchema,
