@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { StepKind, WorkflowDefinition } from "./definition.js";
+import type { WorkflowDefinition } from "./definition.js";
 import {
   MissingStepHandlerError,
   runWorkflow,
   type StepHandler,
   type StepOutcome,
   type StepStateRecord,
-  type WorkflowEvent,
 } from "./engine.js";
+import type { WorkflowEvent } from "./events.js";
 import { WorkflowDefinitionError } from "./definition.js";
 
 interface RecordedStep {
