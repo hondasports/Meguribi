@@ -130,6 +130,7 @@ function deliveryFlags(command: Command): Command {
     .addOption(new Option("--no-commit", "Skip git commit after successful review"))
     .addOption(new Option("--no-push", "Skip git push after commit"))
     .addOption(new Option("--no-pr", "Skip draft PR creation"))
+    .option("--log <mode>", "Live log mode (stream, compact, or none)")
     .option("--repo-path <path>", "Path to the target repository checkout")
     .option("--worktree-path <path>", "Path for the issue worktree")
     .option("--base <ref>", "Base ref for the worktree", "origin/main")

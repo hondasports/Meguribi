@@ -1,4 +1,6 @@
 import type { AgentError } from "../agent-error.js";
+import type { AgentEvent } from "../agent-event.js";
+import { agentDisplayName, type AgentKind } from "../role-agent.js";
 import type {
   DeliveryDependencies,
   DeliveryResult,
@@ -163,6 +165,57 @@ function toAgentError(error: unknown, fallbackCode: AgentError["code"]): AgentEr
     code: fallbackCode,
     message: error instanceof Error ? error.message : String(error),
     isRetryable: false,
+  };
+}
+
+type ImplementerStepId = "implement" | "fix";
+
+function implementerProfileOf(deps: DeliveryDependencies): { id: string; kind: AgentKind } {
+  return deps.implementerProfile ?? { id: "devin", kind: "devin" };
+}
+
+function emitImplementerStepStarted(deps: DeliveryDependencies, stepId: ImplementerStepId): void {
+  if (!deps.onAgentEvent) {
+    return;
+  }
+  const profile = implementerProfileOf(deps);
+  try {
+    deps.onAgentEvent({
+      type: "step.started",
+      stepId,
+      label: stepId,
+      role: "implementer",
+      profileId: profile.id,
+      agentLabel: agentDisplayName(profile.kind),
+    });
+  } catch {
+    // Live-log reporting must never change the delivery result.
+  }
+}
+
+function forwardImplementerEvents(
+  deps: DeliveryDependencies,
+  stepId: ImplementerStepId,
+): ((event: AgentEvent) => void) | undefined {
+  if (!deps.onAgentEvent) {
+    return undefined;
+  }
+  const profile = implementerProfileOf(deps);
+  const agentLabel = agentDisplayName(profile.kind);
+  const onAgentEvent = deps.onAgentEvent;
+  return (event) => {
+    try {
+      onAgentEvent({
+        type: "agent.event",
+        stepId,
+        profileId: profile.id,
+        agentLabel,
+        role: "implementer",
+        event,
+      });
+    } catch {
+      // Live-log reporting must never change the delivery result.
+    }
   };
 }
 
@@ -604,6 +657,7 @@ async function maybeFix(input: {
     },
   });
 
+  emitImplementerStepStarted(deps, "fix");
   const implementation = await deps.implementer.fix({
     context,
     artifactRoot: `${delivery.artifactRootForDevin}-fix-${state.fixAttempts}`,
@@ -618,6 +672,7 @@ async function maybeFix(input: {
     },
     previousSessionId: input.previousImplementation.sessionId,
     abortSignal: delivery.abortSignal,
+    onEvent: forwardImplementerEvents(deps, "fix"),
   });
   await deps.runStore.saveArtifact(state.runId, "implementation-result.json", implementation);
   state = await mark(deps, state.runId, {
@@ -834,6 +889,7 @@ export async function runDelivery(
       completionCriteria: input.completionCriteria,
       repositoryRules: input.repositoryRules,
     });
+    emitImplementerStepStarted(deps, "implement");
     const implementation = await deps.implementer.implement({
       context,
       artifactRoot: input.artifactRootForDevin,
@@ -847,6 +903,7 @@ export async function runDelivery(
         maxDiffLines: 2_000,
       },
       abortSignal: input.abortSignal,
+      onEvent: forwardImplementerEvents(deps, "implement"),
     });
     await deps.runStore.saveArtifact(current.runId, "implementation-result.json", implementation);
 

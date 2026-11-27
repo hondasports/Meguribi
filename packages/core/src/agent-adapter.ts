@@ -1,4 +1,5 @@
 import type { AgentError } from "./agent-error.js";
+import type { AgentEvent } from "./agent-event.js";
 import type { AgentTerminationResult } from "./agent-termination.js";
 import type { ImplementationContext } from "./implementation-context.js";
 import type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
@@ -23,6 +24,8 @@ export interface ImplementationInput {
   artifactRoot: string;
   gitBoundary: ImplementationGitBoundary;
   abortSignal?: AbortSignal;
+  /** Optional observer receiving normalized agent events as they stream. */
+  onEvent?: (event: AgentEvent) => void;
 }
 
 export interface FixInput extends ImplementationInput {

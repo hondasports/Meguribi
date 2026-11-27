@@ -319,6 +319,7 @@ export function createCursorAcpAdapter(options: CursorAcpAdapterOptions): AgentA
             throw new CursorAcpAdapterError("cancelled", "implementation aborted");
           }
           events.push(event as { type: string; path?: string; stopReason?: string });
+          input.onEvent?.(event);
           if (event.type === "turn.completed") {
             stopReason = event.stopReason;
           }

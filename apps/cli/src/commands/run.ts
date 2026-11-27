@@ -1,16 +1,18 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  createLiveLogRenderer,
   resumeDelivery,
   runDelivery,
   type DeliveryDependencies,
   type DeliveryResult,
   type InheritedMcpPolicy,
+  type LiveLogMode,
   type ResumeDeliveryInput,
   type RunState,
   type RunDeliveryInput,
 } from "@meguribi/core";
-import { DEFAULT_VERIFY_TIMEOUT_MS } from "@meguribi/adapters";
+import { DEFAULT_VERIFY_TIMEOUT_MS, redactDiagnosticText } from "@meguribi/adapters";
 import { parseIssueTarget } from "../target.js";
 
 const DEFAULT_PROTECTED_PATHS = [
@@ -62,6 +64,19 @@ export interface DeliveryCommandOptions {
   worktreePath?: string;
   base?: string;
   branch?: string;
+  log?: string;
+}
+
+type LogModeValue = LiveLogMode | "none";
+
+function parseLogMode(value: string | undefined): LogModeValue {
+  if (value === undefined) {
+    return "stream";
+  }
+  if (value === "stream" || value === "compact" || value === "none") {
+    return value;
+  }
+  throw new Error("--log must be stream, compact, or none");
 }
 
 export interface DeliveryCommandDependencies {
@@ -115,6 +130,40 @@ function withProgress(
       await delivery.onStateChange?.(state);
     },
   };
+}
+
+function withLiveLog(
+  delivery: DeliveryDependencies,
+  stderr: (text: string) => void,
+  options: { mode: LiveLogMode; color: boolean },
+): { delivery: DeliveryDependencies; flush: () => void } {
+  const renderer = createLiveLogRenderer({
+    mode: options.mode,
+    color: options.color,
+    redact: redactDiagnosticText,
+  });
+  return {
+    delivery: {
+      ...delivery,
+      onAgentEvent: (event) => {
+        const out = renderer.render(event);
+        if (out.length > 0) {
+          stderr(out);
+        }
+        delivery.onAgentEvent?.(event);
+      },
+    },
+    flush: () => {
+      const out = renderer.flush();
+      if (out.length > 0) {
+        stderr(out);
+      }
+    },
+  };
+}
+
+function liveLogColor(): boolean {
+  return process.stderr.isTTY === true && process.env.NO_COLOR === undefined;
 }
 
 function formatHuman(result: DeliveryResult): string {
@@ -267,6 +316,7 @@ export async function runRunCommand(
 ): Promise<{ exitCode: number; result?: DeliveryResult }> {
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const writeErr = deps.stderr ?? ((text: string) => process.stderr.write(text));
+  const logMode = parseLogMode(options.log);
   const wiring = await resolveDeliveryWiring(target, options, deps);
   const run = deps.runDelivery ?? runDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
@@ -275,12 +325,24 @@ export async function runRunCommand(
 
   try {
     progress(writeErr, `Starting delivery for ${target}…`);
-    const result = await run(
-      buildRunInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
-      withProgress(wiring.delivery, writeErr),
-    );
-    progress(writeErr, `Delivery finished: ${result.status}`);
-    return { exitCode: emitResult(result, options, writeOut), result };
+    let delivery = withProgress(wiring.delivery, writeErr);
+    let flushLiveLog: () => void = () => undefined;
+    if (logMode !== "none" && options.json !== true) {
+      const live = withLiveLog(delivery, writeErr, { mode: logMode, color: liveLogColor() });
+      delivery = live.delivery;
+      flushLiveLog = live.flush;
+    }
+    try {
+      const result = await run(
+        buildRunInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
+        delivery,
+      );
+      flushLiveLog();
+      progress(writeErr, `Delivery finished: ${result.status}`);
+      return { exitCode: emitResult(result, options, writeOut), result };
+    } finally {
+      flushLiveLog();
+    }
   } finally {
     uninstall();
   }
@@ -293,6 +355,7 @@ export async function runResumeCommand(
 ): Promise<{ exitCode: number; result?: DeliveryResult }> {
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const writeErr = deps.stderr ?? ((text: string) => process.stderr.write(text));
+  const logMode = parseLogMode(options.log);
   const wiring = await resolveDeliveryWiring(target, options, deps);
   const resume = deps.resumeDelivery ?? resumeDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
@@ -304,12 +367,24 @@ export async function runResumeCommand(
       writeErr,
       `Resuming delivery for ${target}${options.runId ? ` (run ${options.runId})` : ""}…`,
     );
-    const result = await resume(
-      buildResumeInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
-      withProgress(wiring.delivery, writeErr),
-    );
-    progress(writeErr, `Resume finished: ${result.status}`);
-    return { exitCode: emitResult(result, options, writeOut), result };
+    let delivery = withProgress(wiring.delivery, writeErr);
+    let flushLiveLog: () => void = () => undefined;
+    if (logMode !== "none" && options.json !== true) {
+      const live = withLiveLog(delivery, writeErr, { mode: logMode, color: liveLogColor() });
+      delivery = live.delivery;
+      flushLiveLog = live.flush;
+    }
+    try {
+      const result = await resume(
+        buildResumeInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
+        delivery,
+      );
+      flushLiveLog();
+      progress(writeErr, `Resume finished: ${result.status}`);
+      return { exitCode: emitResult(result, options, writeOut), result };
+    } finally {
+      flushLiveLog();
+    }
   } finally {
     uninstall();
   }
