@@ -329,9 +329,59 @@ type WorkflowEvent =
   | { type: "discussion.turn"; runId; turnId; participant; message; replyTo; addressTo; at }
   | { type: "discussion.human"; runId; turnId; message; at }
   | { type: "approval.required" | "approval.granted" | "approval.rejected"; runId; stepId; at }
-  | { type: "agent.event"; runId; stepId; profileId; event: AgentEvent }   // 既存 AgentEvent を包む
+  | { type: "agent.event"; runId; stepId; profileId; role; event: AgentEvent }   // 既存 AgentEvent を包む
+  | { type: "step.progress"; runId; stepId; label; current; max?; at }          // 例: 議論 14/20、修正 2/3、検証 3/4
   | { type: "workflow.finished"; runId; status; at };
 ```
+
+#### 進捗とエージェントの活動（2026-11-27 利用者要望で追加）
+
+利用者が「いま誰が何をしていて、どこまで進んだか」を常に把握できるようにする。
+
+- **エージェントの活動状態** `AgentActivity` を、`agent.event` から純粋関数 `deriveAgentActivity(events)` で導出する（core に置き、CLI と Command Desk で共用する）。
+
+  ```ts
+  interface AgentActivity {
+    profileId: string;
+    role: AgentRole;
+    stepId: string;
+    state: "starting" | "thinking" | "running_tool" | "waiting_permission" | "idle" | "finished" | "failed";
+    detail?: string;          // 例: "Edit src/notify.ts"、"pnpm test"、発言の冒頭 80 文字
+    since: string;            // この state に入った時刻
+    lastEventAt: string;
+    toolCalls: number;        // この工程での累計
+    changedFiles: readonly string[];
+  }
+  ```
+
+  導出規則: `session.started` → `starting`、`message.delta` → `thinking`（`detail` は直近の発言冒頭）、`tool.started` → `running_tool`（`detail` は `summary ?? tool`）、`tool.completed` → `thinking`、`approval.required` → `waiting_permission`、セッション終了 → `finished` / `failed`。
+- **止まって見える状態の検知**: `lastEventAt` から `stallWarningMs`（既定 2 分）以上イベントがなければ「応答なし（n 分）」と表示する。表示だけで、工程は止めない（停止はタイムアウト設定に従う）。
+- **工程の進捗**: エンジンは上限のある工程で `step.progress` を出す（議論のターン数 / `maxTurns`、修正回数 / `max`、検証コマンドの実行数 / 総数）。工程全体の経過時間も表示する。
+- **CLI のライブログ（Claude Code / Codex CLI / Devin CLI のような流れるログ）**: `run` / `resume` / `workflow run` / `discuss` の実行中、CLI はエージェントの発言・ツール呼び出し・結果・ファイル変更・権限判定・工程の切り替わりを、起きた順にそのまま流す。
+
+  ```text
+  ── implement · Devin (implementer) ─────────────────────────────
+  ● Devin  通知処理の現状を確認してから、夜間分をまとめる処理を追加します。
+  ● Read  src/notify.ts
+    └ completed
+  ● Edit  src/notify.ts
+    └ completed · src/notify.ts
+  ● Terminal  pnpm test -- notify
+    └ exit 0 · 12.3s
+  ⚠ 権限  git push → 拒否（git_write is not permitted）
+  ── verify · Meguribi ───────────────────────────────────────────
+  ✓ lint 2.1s   ✓ typecheck 8.4s   ✗ test exit 1 14.0s
+  ── discuss · turn 4/20 ─────────────────────────────────────────
+  ● Codex → Claude  ログを見ると夜間の開封率が低いので、量より時刻の問題です。
+  ```
+
+  - 発言（`message.delta`）は届いた分から逐次そのまま表示する。同時に動くエージェントは常に1体なので、行が混ざらない。
+  - ツールは `tool.started` で `● <tool>  <summary>` を、`tool.completed` で `└ <status> · <exitCode や対象ファイル> · <所要時間>` を出す。summary は 120 文字で切り、表示前に secret redaction をかける。
+  - 話者ごとに色を変える（TTY のときのみ。`NO_COLOR` を尊重）。非 TTY では同じ内容を色なしで出す。
+  - `--log stream`（既定）/ `--log compact`（工程の切り替わりと `AgentActivity` の1行要約だけ）/ `--log none`。`--json` のときは `none` 扱い。
+  - 整形は純粋関数 `formatLiveLogEvent(event: WorkflowEvent, options): string[]` として core に置き、CLI と Command Desk で同じ見た目にする。
+  - 別の端末からは `meguribi status <runId>` で現在の工程・進捗・`AgentActivity` を表示し、`--follow` で `events.jsonl` を tail して同じライブログを流す。
+  - **エージェント別の画面（2026-11-27 利用者要望で追加）**: `--agent <profileId>` を付けると、そのエージェントのイベントと、そのエージェントが担当する工程の見出しだけを流す。Ghostty や tmux で画面を分割し、エージェントごとに `meguribi status <runId> --follow --agent <id>` を開けば、ターミナルでもエージェント別の画面になる。全画面 TUI は作らない。
 
 - Command Desk のサーバーは RunStore を読み、`events.jsonl` を tail して SSE で配信する。これにより、CLI から開始した Run も画面で追える。
 - 議論中の人間の発言挿入は、Command Desk から Run ディレクトリの `inbox/` へ JSON ファイルを書き、エンジンがそれを取り込む（プロセス間の受け渡しをファイルで行い、常駐の仕組みを作らない）。承認は §6.5 のとおり CLI 経由で行う。
@@ -341,6 +391,7 @@ type WorkflowEvent =
 ```text
 ┌ Runs ───────────┐┌ Run 2026-11-27-01  discuss-to-pr  Issue #42 ────────────────────────────┐
 │ ● #42 承認待ち   ││ discuss ✓ ─ approve ⏸ ─ specify ─ plan ─ implement ─ verify ─ review ─ PR │
+│                  ││ 活動  Claude: 発言中「タイミングの論点は…」 12s / Codex: 待機 / Devin: 待機 │
 │ ○ #41 PR作成済み ││──────────────────────────────────────────────────────────────────────────│
 │ ✕ #39 失敗       ││ 議論  turn 14/20  終了: 全員合意                                         │
 │                  ││ [Claude] 通知の量より、出すタイミングが問題では?             (t-3)      │
@@ -358,7 +409,20 @@ type WorkflowEvent =
 - Run 一覧、工程のパイプライン表示（状態を色と記号で表す）。
 - 議論ビュー: `replyTo` によるスレッド表示、話者ごとの色、ターン数、発言挿入欄。
 - 承認ビュー: 結論、論点ごとの立場、不採用案、対応 turn へのリンク、承認・却下ボタン。
-- 工程詳細: エージェントのツール呼び出し、変更ファイル、検証コマンドの結果とログ。
+- 活動バー: 参加中の全エージェントの `AgentActivity`（状態・内容・経過時間・応答なし警告）を常時表示する。
+- ライブログ: CLI と同じ `formatLiveLogEvent` の出力を、ターミナル風の等幅ペインに逐次追記する（自動スクロール、一時停止）。
+- **エージェント別ペイン**: Run に関わるエージェント（`roles` に割り当てられ、その Run の工程で使われるもの）ごとにペインを1つずつ格子状に並べ、それぞれにそのエージェントのライブログだけを流す。手番のエージェントのペインは枠を強調し、`AgentActivity` の状態と経過時間をペイン上部に出す。工程は逐次なので同時に動くのは1体だが、各ペインにはそのエージェント自身の履歴が残る。全体の流れを1本で見たいとき用に「全体」タブ（全イベントの1本のログ）も残す。
+
+  ```text
+  ┌ Claude Code · reviewer ── 待機 ┐┌ Codex · planner ── 完了 ───────┐┌ Devin · implementer ── 実行中 3m12s ┓
+  │ ── discuss · turn 3 ──         ││ ── plan ──                     ││ ── implement ──                     ┃
+  │ ● Claude Code  量より時刻が…   ││ ● Codex  計画を作成します。    ││ ● Devin  通知処理を確認してから…   ┃
+  │                                ││ ● Read  src/notify.ts          ││ ● Edit  src/notify.ts               ┃
+  │                                ││   └ completed                  ││   └ completed · src/notify.ts       ┃
+  │                                ││                                ││ ● Terminal  pnpm test -- notify     ┃
+  └────────────────────────────────┘└────────────────────────────────┘┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+  ```
+- 工程詳細: エージェントのツール呼び出しのタイムライン、変更ファイル、`step.progress`、検証コマンドの結果とログ。
 
 Command Desk は従来どおり localhost にだけ bind し、認証は持たない。
 
@@ -372,6 +436,7 @@ Command Desk は従来どおり localhost にだけ bind し、認証は持た�
 | `meguribi discuss <target>` | `discuss` → `approve` だけを実行（結論を得るまで） |
 | `meguribi approve <runId>` / `meguribi reject <runId>` | 承認・却下 |
 | `meguribi desk` | Command Desk を起動 |
+| `meguribi status <runId> [--follow] [--agent <profileId>]` | 工程・進捗・エージェントの活動を表示。`--follow` でライブログを流し、`--agent` でそのエージェントだけに絞る |
 | 既存コマンド | 振る舞いを変えない。`run` は内部で `delivery` ワークフローを使う |
 
 ## 7. 転換後も維持する安全ルール
@@ -392,11 +457,11 @@ Command Desk は従来どおり localhost にだけ bind し、認証は持た�
 | フェーズ | 内容 | 完了の目安 |
 |---|---|---|
 | P0 方針転換の明文化 | `AGENTS.md`、`README.md`、`docs/ja` と `docs/en`（product-and-workflow、architecture、artifacts-and-schemas、security-and-operations、implementation-roadmap）、関連スキルを本設計に合わせて改訂 | 日英が一致し、旧前提が残っていない |
-| P1 エージェント層 | `AgentProfile` / `RoleAgent` / `RoleSession`、Claude Code と Codex の ACP 接続、役割割り当て設定、既存 implementer 設定の互換 | 各 kind を fake executable で診断・1ターン実行できる。既存テストが通る |
-| P2 ワークフローエンジン | 定義のスキーマと静的検査、逐次実行、工程状態、再開、`events.jsonl`、`delivery` の移植 | 既存の delivery fixture テストが無変更で通る |
+| P1 エージェント層 | `AgentProfile` / `RoleAgent` / `RoleSession`、Claude Code と Codex の ACP 接続、役割割り当て設定、既存 implementer 設定の互換、`RoleSession` からの `AgentEvent` 逐次通知、`formatLiveLogEvent` と既存 `run` / `resume` の実装工程でのライブログ表示 | 各 kind を fake executable で診断・1ターン実行でき、イベントが逐次届く。`run` 実行中に実装エージェントの動きが流れる。既存テストが通る |
+| P2 ワークフローエンジン | 定義のスキーマと静的検査、逐次実行、工程状態、再開、`events.jsonl`（`step.progress` を含む）、`deriveAgentActivity`、全工程の CLI ライブログと `--log`、`meguribi status [--follow] [--agent]`、`delivery` の移植 | 既存の delivery fixture テストが無変更で通る。実行中の Run の動きを CLI のライブログと別端末の `status --follow` で追える |
 | P3 議論と承認 | 議論ルーム、封筒、進行、終了条件、要約、承認ゲート、`discuss` / `approve` / `reject` コマンド | fake エージェント3体で合意終了・上限終了・タイムアウト・不正 JSON・却下再議論の fixture テストが通る |
 | P4 仕様化と通し | `specify` 工程、`discuss-to-pr` 組み込みワークフロー、implementer ≠ reviewer ポリシー | fake エージェントで Issue → Draft PR 相当まで通る fixture テスト |
-| P5 可視化 | Command Desk の Run 一覧・パイプライン・議論・承認・工程詳細、`events.jsonl` の SSE 配信、`inbox/` 経由の介入と承認、`meguribi desk` | CLI 起動の Run が画面に出る。画面から承認して後続が進む |
+| P5 可視化 | Command Desk の Run 一覧・パイプライン・活動バー（応答なし警告を含む）・エージェント別ペインと全体ログ・議論・承認・工程詳細、`events.jsonl` の SSE 配信、`inbox/` 経由の介入と承認、`meguribi desk` | CLI 起動の Run が画面に出る。画面から承認して後続が進む |
 
 P5 の一部（Run 一覧とパイプライン表示）は P2 の完了後に前倒ししてもよい。
 
