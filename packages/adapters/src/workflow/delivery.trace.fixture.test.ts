@@ -102,11 +102,11 @@ function fillResult(trace: DeliveryTrace, result: DeliveryResult): void {
   };
 }
 
-async function traced<T>(
+async function traced(
   bundle: ReturnType<typeof createFakeDeliveryDeps>,
   trace: DeliveryTrace,
-  invoke: (deps: Parameters<typeof withDeliveryTrace>[0]) => Promise<T>,
-): Promise<T> {
+  invoke: (deps: Parameters<typeof withDeliveryTrace>[0]) => Promise<DeliveryResult>,
+): Promise<DeliveryResult> {
   const wrapped = withDeliveryTrace(bundle.deps);
   // 1つのシナリオで複数の delivery 呼び出しをトレースするときは、
   // 同じ states / calls 配列を共有させる。
@@ -116,9 +116,7 @@ async function traced<T>(
   trace.calls = wrapped.trace.calls;
   try {
     const result = await invoke(wrapped.deps);
-    if (typeof result === "object" && result !== null && "status" in result && "published" in result) {
-      fillResult(trace, result as DeliveryResult);
-    }
+    fillResult(trace, result);
     return result;
   } catch (error) {
     trace.thrownError = error instanceof Error ? error.message : String(error);
