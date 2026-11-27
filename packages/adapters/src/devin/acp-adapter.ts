@@ -319,6 +319,7 @@ export function createDevinAcpAdapter(options: DevinAcpAdapterOptions): DevinAda
             throw new DevinAcpAdapterError("cancelled", "implementation aborted");
           }
           events.push(event as { type: string; path?: string; stopReason?: string });
+          input.onEvent?.(event);
           if (event.type === "turn.completed") {
             stopReason = event.stopReason;
           }

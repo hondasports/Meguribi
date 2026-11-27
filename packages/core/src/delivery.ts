@@ -7,6 +7,8 @@ import type {
 } from "./agent-adapter.js";
 import type { DevinAdapter } from "./devin-adapter.js";
 import type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+import type { LiveLogEvent } from "./live-log.js";
+import type { AgentKind } from "./role-agent.js";
 
 export type RunCommand = "run" | "resume";
 
@@ -290,6 +292,13 @@ export interface DeliveryDependencies {
   assertDevinReady?: () => Promise<void>;
   /** Optional non-functional observer for live CLI progress reporting. */
   onStateChange?: (state: Readonly<RunState>) => void | Promise<void>;
+  /** Optional observer for live agent-activity logging. */
+  onAgentEvent?: (event: LiveLogEvent) => void;
+  /**
+   * Implementer profile identity used to label live-log output.
+   * Defaults to the devin built-in profile when unset.
+   */
+  implementerProfile?: { id: string; kind: AgentKind };
   now?: () => Date;
 }
 

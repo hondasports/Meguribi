@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createFakeDeliveryDeps } from "@meguribi/adapters";
 import type { DevinDiagnosis } from "@meguribi/schemas";
 import type { CodexClient, CodexThreadEvent } from "@meguribi/adapters";
 import { runResumeCommand, runRunCommand } from "./commands/run.js";
 import { runInit } from "./commands/init.js";
 import { runPlanCommand } from "./commands/plan.js";
-import { runDoctor } from "./program.js";
+import { createProgram, runDoctor } from "./program.js";
 import { parseIssueTarget } from "./target.js";
 import { createCodexBridge } from "./wiring/create-delivery-deps.js";
 
@@ -559,5 +559,79 @@ describe("Codex CLI bridge", () => {
     expect(review.artifactType).toBe("code-review");
     expect(client.prompts).toHaveLength(2);
     expect(snapshots).toHaveLength(0);
+  });
+});
+
+describe("run --log", () => {
+  afterEach(() => {
+    process.exitCode = undefined;
+  });
+
+  function logTestProgram(stderr: string[], stdout: string[]) {
+    const bundle = createFakeDeliveryDeps({
+      github: { issue: { number: 22, labels: ["agent:ready"] } },
+    });
+    const program = createProgram({
+      delivery: bundle.deps,
+      stdout: (text) => stdout.push(text),
+      stderr: (text) => stderr.push(text),
+      installSignalHandlers: () => () => undefined,
+    });
+    return { program, bundle };
+  }
+
+  it("accepts run --log compact", async () => {
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    const { program } = logTestProgram(stderr, stdout);
+    await program.parseAsync([
+      "node",
+      "meguribi",
+      "run",
+      "owner/repo#22",
+      "--log",
+      "compact",
+      "--allow-inherited-mcp",
+      "--non-interactive",
+    ]);
+    expect(process.exitCode ?? 0).toBe(0);
+    expect(stderr.join("")).toContain("── implement");
+  });
+
+  it("accepts run --log none", async () => {
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    const { program } = logTestProgram(stderr, stdout);
+    await program.parseAsync([
+      "node",
+      "meguribi",
+      "run",
+      "owner/repo#22",
+      "--log",
+      "none",
+      "--allow-inherited-mcp",
+      "--non-interactive",
+    ]);
+    expect(process.exitCode ?? 0).toBe(0);
+    expect(stderr.join("")).not.toContain("── implement");
+    expect(stderr.join("")).toContain("[meguribi] run=");
+  });
+
+  it("rejects run --log loud with exit 1", async () => {
+    const stderr: string[] = [];
+    const stdout: string[] = [];
+    const { program } = logTestProgram(stderr, stdout);
+    await program.parseAsync([
+      "node",
+      "meguribi",
+      "run",
+      "owner/repo#22",
+      "--log",
+      "loud",
+      "--allow-inherited-mcp",
+      "--non-interactive",
+    ]);
+    expect(process.exitCode).toBe(1);
+    expect(stderr.join("")).toContain("--log must be stream, compact, or none");
   });
 });
