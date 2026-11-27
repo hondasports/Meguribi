@@ -176,6 +176,13 @@ export {
   type RoleSession,
   type RoleSessionMode,
 } from "./role-agent.js";
+export {
+  createLiveLogRenderer,
+  type LiveLogEvent,
+  type LiveLogMode,
+  type LiveLogOptions,
+  type LiveLogRenderer,
+} from "./live-log.js";
 export type {
   InitDependencyCheck,
   InitDependencyStatus,
