@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createProgram } from "../program.js";
 import { runWorkflowListCommand, runWorkflowValidateCommand } from "./workflow.js";
@@ -87,10 +88,11 @@ describe("runWorkflowListCommand", () => {
   it("lists the built-in delivery workflow and repository workflows with step ids", async () => {
     const stdout: string[] = [];
 
+    const repositoryPath = path.resolve("/repo");
     const result = await runWorkflowListCommand({ repoPath: "/repo" }, {
       loadWorkflows: async () => [
         {
-          path: "/repo/.meguribi/workflows/discuss-to-pr.yml",
+          path: path.join(repositoryPath, ".meguribi", "workflows", "discuss-to-pr.yml"),
           definition: {
             name: "discuss-to-pr",
             steps: [
@@ -114,9 +116,13 @@ describe("runWorkflowListCommand", () => {
   it("reports broken repository workflow files without failing the whole list", async () => {
     const stdout: string[] = [];
 
+    const repositoryPath = path.resolve("/repo");
     const result = await runWorkflowListCommand({ repoPath: "/repo" }, {
       loadWorkflows: async () => [
-        { path: "/repo/.meguribi/workflows/broken.yml", error: "Invalid workflow definition" },
+        {
+          path: path.join(repositoryPath, ".meguribi", "workflows", "broken.yml"),
+          error: "Invalid workflow definition",
+        },
       ],
       stdout: (text) => stdout.push(text),
       stderr: () => undefined,
@@ -173,7 +179,7 @@ describe("workflow list command registration", () => {
       await program.parseAsync(["node", "meguribi", "workflow", "list", "--repo-path", "/repo"]);
 
       expect(process.exitCode).toBe(0);
-      expect(requested).toEqual(["/repo"]);
+      expect(requested).toEqual([path.resolve("/repo")]);
       expect(stdout.join("")).toContain("delivery (built-in, 7 steps): plan, implement, verify");
     } finally {
       process.exitCode = previousExitCode;
