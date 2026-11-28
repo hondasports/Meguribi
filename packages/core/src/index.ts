@@ -234,3 +234,10 @@ export type {
   WorkflowEventLog,
   WorkflowEventRecord,
 } from "./workflow-engine/event-log.js";
+
+// discussion approval
+export {
+  ApprovalError,
+  assertApprovedConclusion,
+  type ApprovalRecord,
+} from "./discussion/approval.js";
