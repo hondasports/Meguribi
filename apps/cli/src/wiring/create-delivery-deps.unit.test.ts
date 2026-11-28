@@ -395,6 +395,135 @@ describe("createDeliveryDeps ACP wiring", () => {
   });
 });
 
+describe("Devin/Cursor planning role rejection", () => {
+  const acpBridge = {
+    createPlan: async () => planArtifact("unused acp plan"),
+    review: async () => reviewArtifact("unused acp review"),
+  };
+  const sdkBridge = {
+    createPlan: async () => planArtifact("unused sdk plan"),
+    review: async () => reviewArtifact("unused sdk review"),
+  };
+
+  function acpServerImplementerConfig() {
+    const profile = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
+    if (profile === undefined) throw new Error("claude-code profile missing");
+    return { kind: "acp-server" as const, profile, snapshot: {} };
+  }
+
+  it("rejects a devin planner in createPlanDependencies before any ACP diagnosis", async () => {
+    let diagnoseCalls = 0;
+
+    await expect(
+      createPlanDependencies({
+        cwd: "C:/fixture/repository",
+        repositoryPath: "C:/fixture/repository",
+        repository: "owner/repo",
+        localOnly: true,
+        loadAgentsConfig: async () => agentsResult("devin", "codex"),
+        diagnoseAcpServer: async () => {
+          diagnoseCalls += 1;
+          return healthyAcpDiagnosis;
+        },
+        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
+        createRoleAgentPlanningBridge: () => acpBridge,
+        createCodexBridge: () => sdkBridge,
+      }),
+    ).rejects.toMatchObject({
+      name: "RoleAssignmentError",
+      code: "transport_unsupported",
+      message: "planner profile devin (kind devin) cannot be used as planner yet",
+      nextAction:
+        "roles.planner には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    });
+    expect(diagnoseCalls).toBe(0);
+  });
+
+  it("rejects a cursor reviewer in createPlanDependencies before any ACP diagnosis", async () => {
+    let diagnoseCalls = 0;
+
+    await expect(
+      createPlanDependencies({
+        cwd: "C:/fixture/repository",
+        repositoryPath: "C:/fixture/repository",
+        repository: "owner/repo",
+        localOnly: true,
+        loadAgentsConfig: async () => agentsResult("codex", "cursor"),
+        diagnoseAcpServer: async () => {
+          diagnoseCalls += 1;
+          return healthyAcpDiagnosis;
+        },
+        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
+        createRoleAgentPlanningBridge: () => acpBridge,
+        createCodexBridge: () => sdkBridge,
+      }),
+    ).rejects.toMatchObject({
+      name: "RoleAssignmentError",
+      code: "transport_unsupported",
+      message: "reviewer profile cursor (kind cursor) cannot be used as reviewer yet",
+      nextAction:
+        "roles.reviewer には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    });
+    expect(diagnoseCalls).toBe(0);
+  });
+
+  it("rejects a devin planner in createDeliveryDeps before any ACP diagnosis", async () => {
+    let diagnoseCalls = 0;
+
+    await expect(
+      createDeliveryDeps({
+        cwd: "C:/fixture/repository",
+        repositoryPath: "C:/fixture/repository",
+        repository: "owner/repo",
+        loadImplementerConfig: async () => acpServerImplementerConfig(),
+        loadAgentsConfig: async () => agentsResult("devin", "codex"),
+        diagnoseAcpServer: async () => {
+          diagnoseCalls += 1;
+          return healthyAcpDiagnosis;
+        },
+        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
+        createRoleAgentPlanningBridge: () => acpBridge,
+        createCodexBridge: () => sdkBridge,
+      }),
+    ).rejects.toMatchObject({
+      name: "RoleAssignmentError",
+      code: "transport_unsupported",
+      message: "planner profile devin (kind devin) cannot be used as planner yet",
+      nextAction:
+        "roles.planner には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    });
+    expect(diagnoseCalls).toBe(0);
+  });
+
+  it("rejects a cursor reviewer in createDeliveryDeps before any ACP diagnosis", async () => {
+    let diagnoseCalls = 0;
+
+    await expect(
+      createDeliveryDeps({
+        cwd: "C:/fixture/repository",
+        repositoryPath: "C:/fixture/repository",
+        repository: "owner/repo",
+        loadImplementerConfig: async () => acpServerImplementerConfig(),
+        loadAgentsConfig: async () => agentsResult("codex", "cursor"),
+        diagnoseAcpServer: async () => {
+          diagnoseCalls += 1;
+          return healthyAcpDiagnosis;
+        },
+        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
+        createRoleAgentPlanningBridge: () => acpBridge,
+        createCodexBridge: () => sdkBridge,
+      }),
+    ).rejects.toMatchObject({
+      name: "RoleAssignmentError",
+      code: "transport_unsupported",
+      message: "reviewer profile cursor (kind cursor) cannot be used as reviewer yet",
+      nextAction:
+        "roles.reviewer には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    });
+    expect(diagnoseCalls).toBe(0);
+  });
+});
+
 describe("createDeliveryDeps role validation", () => {
   it("propagates same_implementer_reviewer as a RoleAssignmentError with nextAction", async () => {
     await expect(

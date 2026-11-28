@@ -285,6 +285,13 @@ function assertSupportedPlanningTransport(
   profile: AgentProfile,
   role: "planner" | "reviewer",
 ): void {
+  if (profile.kind === "devin" || profile.kind === "cursor") {
+    throw new RoleAssignmentError(
+      "transport_unsupported",
+      `${role} profile ${profile.id} (kind ${profile.kind}) cannot be used as ${role} yet`,
+      `roles.${role} には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます`,
+    );
+  }
   if (profile.transport === "sdk" && profile.kind !== "codex") {
     throw new RoleAssignmentError(
       "transport_unsupported",
