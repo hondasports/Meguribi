@@ -55,6 +55,18 @@ describe("createLiveLogRenderer", () => {
     expect(r.render({ type: "agent.event", stepId: "plan", profileId: "codex", agentLabel: "Codex", role: "planner",
       event: { type: "tool.started", sessionId: "c", tool: "Read", summary: "a.ts", at: at(0) } })).toBe("● Read  a.ts\n");
   });
+  it("renders workflow step progress", () => {
+    const r = createLiveLogRenderer({ mode: "stream", color: false });
+    expect(r.render({
+      type: "step.progress",
+      runId: "run-1",
+      stepId: "verify",
+      label: "verify",
+      current: 1,
+      max: 2,
+      at: at(0),
+    })).toBe("  · verify 1/2\n");
+  });
   it("compact mode hides messages and completions", () => {
     const r = createLiveLogRenderer({ mode: "compact", color: false });
     expect(r.render(ev({ type: "message.delta", sessionId: "s", text: "a", at: at(0) }))).toBe("");

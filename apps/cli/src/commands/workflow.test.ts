@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createProgram } from "../program.js";
-import { runWorkflowValidateCommand } from "./workflow.js";
+import { runWorkflowListCommand, runWorkflowValidateCommand } from "./workflow.js";
 
 const discussToPrYaml = `name: discuss-to-pr
 steps:
@@ -82,6 +82,53 @@ describe("runWorkflowValidateCommand", () => {
   });
 });
 
+
+describe("runWorkflowListCommand", () => {
+  it("lists the built-in delivery workflow and repository workflows with step ids", async () => {
+    const stdout: string[] = [];
+
+    const result = await runWorkflowListCommand({ repoPath: "/repo" }, {
+      loadWorkflows: async () => [
+        {
+          path: "/repo/.meguribi/workflows/discuss-to-pr.yml",
+          definition: {
+            name: "discuss-to-pr",
+            steps: [
+              { id: "discuss", kind: "discuss" },
+              { id: "publish", kind: "publish" },
+            ],
+          },
+        },
+      ],
+      stdout: (text) => stdout.push(text),
+      stderr: () => undefined,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout.join("")).toBe(
+      "delivery (built-in, 7 steps): plan, implement, verify, review, fix-after-verify, fix-after-review, publish\n" +
+        "discuss-to-pr (.meguribi/workflows/discuss-to-pr.yml, 2 steps): discuss, publish\n",
+    );
+  });
+
+  it("reports broken repository workflow files without failing the whole list", async () => {
+    const stdout: string[] = [];
+
+    const result = await runWorkflowListCommand({ repoPath: "/repo" }, {
+      loadWorkflows: async () => [
+        { path: "/repo/.meguribi/workflows/broken.yml", error: "Invalid workflow definition" },
+      ],
+      stdout: (text) => stdout.push(text),
+      stderr: () => undefined,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout.join("")).toContain(
+      ".meguribi/workflows/broken.yml: error: Invalid workflow definition\n",
+    );
+  });
+});
+
 describe("workflow command registration", () => {
   it("registers meguribi workflow validate <file>", async () => {
     const stdout: string[] = [];
@@ -102,6 +149,32 @@ describe("workflow command registration", () => {
       expect(process.exitCode).toBe(0);
       expect(requested).toEqual(["custom.yml"]);
       expect(stdout.join("")).toBe("OK: discuss-to-pr (9 steps)\n");
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+});
+
+describe("workflow list command registration", () => {
+  it("registers meguribi workflow list --repo-path <path>", async () => {
+    const stdout: string[] = [];
+    const requested: string[] = [];
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    try {
+      const program = createProgram({
+        loadWorkflows: async (repoPath) => {
+          requested.push(repoPath);
+          return [];
+        },
+        stdout: (text) => stdout.push(text),
+        stderr: () => undefined,
+      });
+      await program.parseAsync(["node", "meguribi", "workflow", "list", "--repo-path", "/repo"]);
+
+      expect(process.exitCode).toBe(0);
+      expect(requested).toEqual(["/repo"]);
+      expect(stdout.join("")).toContain("delivery (built-in, 7 steps): plan, implement, verify");
     } finally {
       process.exitCode = previousExitCode;
     }

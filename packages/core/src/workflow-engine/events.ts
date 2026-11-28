@@ -1,4 +1,4 @@
-import type { LiveLogEvent } from "../live-log.js";
+import type { LiveLogEvent, StepProgressEvent } from "../live-log.js";
 import type { DiscussionEndReason, DiscussionTurn } from "../discussion/types.js";
 import type { StepKind } from "./definition.js";
 import type { StepOutcome, WorkflowRunResult } from "./engine.js";
@@ -9,6 +9,7 @@ import type { StepOutcome, WorkflowRunResult } from "./engine.js";
  */
 export type WorkflowEvent =
   | LiveLogEvent
+  | StepProgressEvent
   | {
       type: "discussion.turn";
       runId: string;

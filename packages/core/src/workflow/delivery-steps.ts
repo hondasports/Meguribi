@@ -19,6 +19,7 @@ import type { PlanArtifact, ReviewArtifact } from "../codex-artifact.js";
 import { matchesProtectedPath } from "../path-match.js";
 import type { StepKind } from "../workflow-engine/definition.js";
 import type { StepHandler } from "../workflow-engine/engine.js";
+import type { WorkflowEvent } from "../workflow-engine/events.js";
 import { buildFixInstruction } from "./fix-instruction.js";
 
 export interface PublishGateInput {
@@ -71,6 +72,7 @@ export function createVerificationLogWriter(
   deps: DeliveryDependencies,
   runId: string,
   prefix: string,
+  progress?: { stepId: string; totalCommands: number },
 ): VerificationLogWriter {
   return {
     async write(input) {
@@ -81,9 +83,29 @@ export function createVerificationLogWriter(
       const content = ["[stdout]", input.stdout, "", "[stderr]", input.stderr, truncation].join(
         "\n",
       );
-      return deps.runStore.saveArtifact(runId, fileName, content);
+      const logPath = await deps.runStore.saveArtifact(runId, fileName, content);
+      if (progress) {
+        emitWorkflowEvent(deps, {
+          type: "step.progress",
+          runId,
+          stepId: progress.stepId,
+          label: "verify",
+          current: input.commandIndex + 1,
+          max: progress.totalCommands,
+          at: nowIso(deps),
+        });
+      }
+      return logPath;
     },
   };
+}
+
+function emitWorkflowEvent(deps: DeliveryDependencies, event: WorkflowEvent): void {
+  try {
+    deps.onWorkflowEvent?.(event);
+  } catch {
+    // Progress reporting must never change the delivery result.
+  }
 }
 
 function nowIso(deps: DeliveryDependencies): string {
@@ -345,7 +367,10 @@ async function runReview(context: DeliveryRunContext): Promise<void> {
   });
 }
 
-export async function runDeliveryFixAttempt(context: DeliveryRunContext): Promise<void> {
+export async function runDeliveryFixAttempt(
+  context: DeliveryRunContext,
+  stepId = "fix",
+): Promise<void> {
   const { deps, delivery, issue } = context;
   const plan = requirePlan(context);
   const previousImplementation = requireImplementation(context);
@@ -360,6 +385,15 @@ export async function runDeliveryFixAttempt(context: DeliveryRunContext): Promis
     status: "fixing",
     currentStep: "fixing",
     fixAttempts: context.state.fixAttempts + 1,
+  });
+  emitWorkflowEvent(deps, {
+    type: "step.progress",
+    runId: context.state.runId,
+    stepId,
+    label: "fix",
+    current: context.state.fixAttempts,
+    max: context.state.maxFixAttempts,
+    at: nowIso(deps),
   });
 
   const preflight = deps.assertImplementerReady ?? deps.assertDevinReady;
@@ -651,7 +685,10 @@ async function verifyStep(context: DeliveryRunContext) {
         commands: delivery.verifyCommands,
         abortSignal: delivery.abortSignal,
         timeoutMs: delivery.verifyTimeoutMs,
-        logWriter: createVerificationLogWriter(deps, context.state.runId, "verify"),
+        logWriter: createVerificationLogWriter(deps, context.state.runId, "verify", {
+          stepId: "verify",
+          totalCommands: delivery.verifyCommands.length,
+        }),
       });
     } catch (error) {
       if (isCancelledError(error) || delivery.abortSignal?.aborted) {
@@ -698,7 +735,10 @@ async function fixStep(context: DeliveryRunContext, of: string | undefined) {
   }
 
   try {
-    await runDeliveryFixAttempt(context);
+    await runDeliveryFixAttempt(
+      context,
+      of === "verify" ? "fix-after-verify" : "fix-after-review",
+    );
   } catch (error) {
     if (isCancelledError(error) || delivery.abortSignal?.aborted) {
       return stopWith(
