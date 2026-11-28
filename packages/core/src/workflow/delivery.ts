@@ -101,12 +101,7 @@ export async function runDelivery(
     runId: state.runId,
   });
 
-  let lockReleased = false;
   const releaseLock = async (): Promise<void> => {
-    if (lockReleased) {
-      return;
-    }
-    lockReleased = true;
     await deps.runStore
       .releaseLock({
         repository: input.repository,
@@ -192,7 +187,7 @@ export async function runDelivery(
     const workflowResult = await runWorkflow<DeliveryRunContext, DeliveryResult>({
       runId: current.runId,
       definition: createDeliveryWorkflow(input.maxFixAttempts),
-      handlers: createDeliveryStepHandlers({ releaseLock }),
+      handlers: createDeliveryStepHandlers(),
       context,
       stepStore: createRunStoreStepStateStore(deps.runStore, current.runId),
       onEvent: deps.onWorkflowEvent,
@@ -255,12 +250,7 @@ export async function resumeDelivery(
     runId: state.runId,
   });
 
-  let lockReleased = false;
   const releaseLock = async (): Promise<void> => {
-    if (lockReleased) {
-      return;
-    }
-    lockReleased = true;
     await deps.runStore
       .releaseLock({
         repository: state.repository,
@@ -372,7 +362,7 @@ export async function resumeDelivery(
     const workflowResult = await runWorkflow<DeliveryRunContext, DeliveryResult>({
       runId: state.runId,
       definition: createDeliveryWorkflow(state.maxFixAttempts),
-      handlers: createDeliveryStepHandlers({ releaseLock }),
+      handlers: createDeliveryStepHandlers(),
       context,
       startAt: startFrom === "publishing" ? "publish" : "verify",
       stepStore: createRunStoreStepStateStore(deps.runStore, state.runId),

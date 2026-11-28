@@ -290,15 +290,11 @@ function requireVerification(context: DeliveryRunContext): VerificationResult {
   return context.verification;
 }
 
-async function loadVerificationAndReview(
-  context: DeliveryRunContext,
-  releaseLock?: () => Promise<void>,
-): Promise<void> {
+async function loadVerificationAndReview(context: DeliveryRunContext): Promise<void> {
   const verificationRead = context.deps.runStore.readArtifact<VerificationResult>(
     context.state.runId,
     "verification.json",
   );
-  await releaseLock?.();
   context.verification = (await verificationRead) ?? undefined;
   context.review =
     (await context.deps.runStore.readArtifact<ReviewArtifact>(
@@ -633,9 +629,9 @@ async function implementStep(context: DeliveryRunContext) {
   return { type: "continue" } as const;
 }
 
-async function verifyStep(context: DeliveryRunContext, releaseLock?: () => Promise<void>) {
+async function verifyStep(context: DeliveryRunContext) {
   const { deps, delivery } = context;
-  await loadVerificationAndReview(context, releaseLock);
+  await loadVerificationAndReview(context);
 
   if (!context.reuseVerification || !context.verification) {
     if (delivery.abortSignal?.aborted) {
@@ -773,10 +769,10 @@ async function fixStep(context: DeliveryRunContext, of: string | undefined) {
   return { type: "continue" } as const;
 }
 
-async function publishStep(context: DeliveryRunContext, releaseLock?: () => Promise<void>) {
+async function publishStep(context: DeliveryRunContext) {
   const { deps, delivery, issue } = context;
   if (!context.verification || !context.review) {
-    await loadVerificationAndReview(context, releaseLock);
+    await loadVerificationAndReview(context);
   }
   if (!context.verification || !context.review) {
     throw new Error("verification and review artifacts are required before publish");
@@ -899,15 +895,13 @@ async function publishStep(context: DeliveryRunContext, releaseLock?: () => Prom
   });
 }
 
-export function createDeliveryStepHandlers(
-  options: {
-    releaseLock?: () => Promise<void>;
-  } = {},
-): Partial<Record<StepKind, StepHandler<DeliveryRunContext, DeliveryResult>>> {
+export function createDeliveryStepHandlers(): Partial<
+  Record<StepKind, StepHandler<DeliveryRunContext, DeliveryResult>>
+> {
   return {
     plan: async ({ context }) => planStep(context),
     implement: async ({ context }) => implementStep(context),
-    verify: async ({ context }) => verifyStep(context, options.releaseLock),
+    verify: async ({ context }) => verifyStep(context),
     fix: async ({ context, step }) => fixStep(context, step.of),
     review: async ({ context }) => {
       await runReview(context);
@@ -915,6 +909,6 @@ export function createDeliveryStepHandlers(
         ? ({ type: "changes_required" } as const)
         : ({ type: "continue" } as const);
     },
-    publish: async ({ context }) => publishStep(context, options.releaseLock),
+    publish: async ({ context }) => publishStep(context),
   };
 }
