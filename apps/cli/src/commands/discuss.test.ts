@@ -466,6 +466,44 @@ describe("runRejectCommand", () => {
     expect(receivedInput?.artifactRoot).toBeUndefined();
   });
 
+  it("restores the same participants and summarizer from the run when redoing", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    await runStore.saveArtifact(state.runId, "discussion-input.json", {
+      repositoryPath: "/original/repo",
+      worktreePath: "/tmp/worktree",
+      branch: "meguribi/issue-83",
+      baseRef: "origin/main",
+      requiredLabels: ["agent:ready"],
+      repositoryRules: "Follow AGENTS.md",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+      nonInteractive: true,
+      artifactRoot: "/original/artifact-root",
+    });
+    // 元の議論で使われた参加者 override（devin/cursor + summarizer devin）。
+    await runStore.saveArtifact(state.runId, "discussion-participants.json", {
+      discussants: ["devin", "cursor"],
+      summarizer: "devin",
+    });
+    let wiringOptions: { discussants?: readonly string[]; summarizer?: string } = {};
+    const { deps } = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      createDependencies: async (options) => {
+        wiringOptions = options;
+        return wiringFixture();
+      },
+      resolveApprover: async () => "Test Rejecter",
+      rejectWorkflow: async (input) => ({ runId: input.runId, status: "awaiting_human", reasons: [] }),
+    });
+
+    const result = await runRejectCommand(state.runId, { reason: "やり直し", redo: true }, deps);
+
+    expect(result.exitCode).toBe(0);
+    // redo は同じ参加者・要約でやり直す（永続設定ではなく Run に保存した override）。
+    expect(wiringOptions.discussants).toEqual(["devin", "cursor"]);
+    expect(wiringOptions.summarizer).toBe("devin");
+  });
+
   it("falls back to cwd-based wiring when discussion-input.json is missing", async () => {
     const { runStore, state } = await createRunState({ status: "awaiting_human" });
     let wiringOptions: { repositoryPath?: string } = {};
@@ -489,5 +527,222 @@ describe("runRejectCommand", () => {
 
     expect(result.exitCode).toBe(0);
     expect(wiringOptions.repositoryPath).toBe("/fallback/cwd");
+  });
+});
+
+describe("runApproveCommand (discuss-to-pr continuation)", () => {
+  async function createDiscussToPrRun(runStore: ReturnType<typeof createMemoryRunStore>, runId: string): Promise<void> {
+    await runStore.saveArtifact(runId, "discuss-to-pr.json", {
+      outOfScope: [],
+      protectedPaths: [],
+      verifyCommands: [],
+      inheritedMcpPolicy: "allow",
+      allowInheritedMcp: false,
+      maxFixAttempts: 2,
+      artifactRootForDevin: "/artifacts",
+    });
+  }
+
+  function continuationDeps(
+    runStore: ReturnType<typeof createMemoryRunStore>,
+    continueWorkflow: DiscussionCommandDeps["continueWorkflow"],
+  ) {
+    return discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      resolveApprover: async () => "Test Approver",
+      approveWorkflow: async (input) => ({
+        runId: input.runId,
+        status: "completed",
+        reasons: [],
+      }),
+      createDiscussToPrDeps: async () => ({
+        deps: {} as never,
+        inheritedMcpPolicy: "allow" as never,
+      }),
+      continueWorkflow,
+    });
+  }
+
+  it("records approval and continues to publish in the same process", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    await createDiscussToPrRun(runStore, state.runId);
+    let continued: string | undefined;
+    const { deps, stdout } = continuationDeps(runStore, async (input) => {
+      continued = input.runId;
+      return { runId: input.runId, status: "awaiting_human", published: true, pullRequestNumber: 101, reasons: [] };
+    });
+
+    const result = await runApproveCommand(state.runId, {}, deps);
+
+    expect(result.exitCode).toBe(0);
+    expect(continued).toBe(state.runId);
+    expect(stdout.join("")).toContain("承認しました");
+    expect(stdout.join("")).toContain("公開まで進みました");
+  });
+
+  it("re-entry after mid-failure skips re-approval and resumes continuation", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    await createDiscussToPrRun(runStore, state.runId);
+    // 1回目: 承認は記録されるが継続が途中失敗する
+    let calls = 0;
+    let approveCalls = 0;
+    const failing = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      resolveApprover: async () => "Test Approver",
+      approveWorkflow: async (input) => {
+        approveCalls += 1;
+        await runStore.saveArtifact(input.runId, "approval.json", {
+          decision: "approved",
+          approver: "Test Approver",
+          at: new Date().toISOString(),
+          conclusionHash: "hash",
+        });
+        return { runId: input.runId, status: "completed", reasons: [] };
+      },
+      createDiscussToPrDeps: async () => ({ deps: {} as never, inheritedMcpPolicy: "allow" as never }),
+      continueWorkflow: async (input) => {
+        calls += 1;
+        if (calls === 1) {
+          return { runId: input.runId, status: "failed", published: false, reasons: ["implement exploded"] };
+        }
+        return { runId: input.runId, status: "awaiting_human", published: true, pullRequestNumber: 101, reasons: [] };
+      },
+    });
+
+    const first = await runApproveCommand(state.runId, {}, failing.deps);
+    expect(first.exitCode).toBe(1);
+    expect(failing.stderr.join("")).toContain("implement exploded");
+    expect(failing.stderr.join("")).toContain(`meguribi approve ${state.runId} で再開できます`);
+
+    // 2回目: 承認は二重記録せず継続だけを再開する
+    const secondOut = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      resolveApprover: async () => "Test Approver",
+      approveWorkflow: async () => {
+        throw new Error("approval must not be recorded twice");
+      },
+      createDiscussToPrDeps: async () => ({ deps: {} as never, inheritedMcpPolicy: "allow" as never }),
+      continueWorkflow: async (input) => ({
+        runId: input.runId,
+        status: "awaiting_human",
+        published: true,
+        pullRequestNumber: 101,
+        reasons: [],
+      }),
+    });
+    const second = await runApproveCommand(state.runId, {}, secondOut.deps);
+    expect(second.exitCode).toBe(0);
+    expect(secondOut.stdout.join("")).toContain("承認は記録済みです");
+    expect(secondOut.stdout.join("")).toContain("公開まで進みました");
+    expect(approveCalls).toBe(1);
+  });
+
+  it("restores wiring from persisted discussion input instead of caller cwd", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    await createDiscussToPrRun(runStore, state.runId);
+    await runStore.saveArtifact(state.runId, "discussion-input.json", {
+      repositoryPath: "/original/repo",
+      worktreePath: "/worktree",
+      branch: "meguribi/issue-22",
+      baseRef: "HEAD",
+      requiredLabels: ["agent:ready"],
+      repositoryRules: "Follow AGENTS.md",
+      limits: { maxTurns: 20, maxDurationMs: 1000, turnTimeoutMs: 1000 },
+      nonInteractive: true,
+      artifactRoot: "/artifacts",
+    });
+    let wiringOptions: { repositoryPath?: string; localOnly?: boolean; nonInteractive?: boolean } | undefined;
+    const { deps } = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      cwd: "/unrelated/cwd",
+      resolveApprover: async () => "Test Approver",
+      approveWorkflow: async (input) => ({ runId: input.runId, status: "completed", reasons: [] }),
+      createDiscussToPrDeps: async (options) => {
+        wiringOptions = options;
+        return { deps: {} as never, inheritedMcpPolicy: "allow" as never };
+      },
+      continueWorkflow: async (input) => ({
+        runId: input.runId,
+        status: "awaiting_human",
+        published: true,
+        reasons: [],
+      }),
+    });
+
+    const result = await runApproveCommand(state.runId, {}, deps);
+
+    expect(result.exitCode).toBe(0);
+    expect(wiringOptions?.repositoryPath).toBe("/original/repo");
+    expect(wiringOptions?.localOnly).toBe(true);
+    expect(wiringOptions?.nonInteractive).toBe(true);
+  });
+});
+
+
+describe("prompt-only consultation command", () => {
+  /** DiscussionInboxStore ポートを全件実装する test double。cast は使わない。 */
+  function consultationMemoryStore(): DiscussionInboxStore & {
+    turns: unknown[];
+    conclusions: unknown[];
+  } {
+    const turns: unknown[] = [];
+    const conclusions: unknown[] = [];
+    const humanMessages: { message: string; at: string }[] = [];
+    return {
+      turns,
+      conclusions,
+      appendTurn: async (turn) => {
+        turns.push(turn);
+      },
+      readTurns: async () => [],
+      readHumanMessages: async () => humanMessages.map((entry) => ({ ...entry })),
+      writeHumanMessage: async (message) => {
+        humanMessages.push({ message, at: new Date().toISOString() });
+        return message;
+      },
+      saveConclusion: async (value) => {
+        conclusions.push(value);
+      },
+      readConclusion: async () => null,
+    };
+  }
+
+  /** RoleAgent ポートを満たす失敗する test double。cast は使わない。 */
+  function failingAgent(id: string): DiscussionWiringDependencies["discussants"][number] {
+    return {
+      profileId: id,
+      kind: "claude-code",
+      openSession: async () => {
+        throw new Error("agent exploded mid-consultation");
+      },
+    };
+  }
+
+  it("marks the consultation run as failed when a discussant blows up mid-run", async () => {
+    const runStore = createMemoryRunStore();
+    const store = consultationMemoryStore();
+    const wiring: DiscussionWiringDependencies = {
+      ...wiringFixture(),
+      runStore,
+      discussants: [failingAgent("devin"), failingAgent("cursor")],
+      createStore: () => store,
+    };
+    const { deps } = discussDeps({
+      createDependencies: async () => wiring,
+    });
+
+    await expect(
+      runDiscussCommand(undefined, { prompt: "失敗する相談", repoPath: "/tmp/repo", nonInteractive: true, log: "none" }, deps),
+    ).rejects.toThrow(/exploded/);
+
+    // Run は failed として永続化され、UI から失敗が分かる。
+    const states = [...runStore.states.values()];
+    expect(states).toHaveLength(1);
+    expect(states[0]?.command).toBe("consult");
+    expect(states[0]?.status).toBe("failed");
   });
 });

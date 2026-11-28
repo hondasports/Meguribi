@@ -107,3 +107,4 @@ export type {
   DiscussionConclusionContent,
   DiscussionEnvelope,
 } from "./discussion.js";
+export { SpecificationArtifactSchema, SpecificationContentSchema } from "./specification.js";

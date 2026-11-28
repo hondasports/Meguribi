@@ -11,7 +11,8 @@ import type { LiveLogEvent } from "./live-log.js";
 import type { WorkflowEvent } from "./workflow-engine/events.js";
 import type { AgentKind } from "./role-agent.js";
 
-export type RunCommand = "run" | "resume" | "discuss";
+export type IssueRunCommand = "run" | "resume" | "discuss";
+export type RunCommand = IssueRunCommand | "consult";
 
 /**
  * Coarse run lifecycle. Fine-grained ACP steps live in currentStep / completedSteps.
@@ -65,21 +66,13 @@ export interface RunIdentity {
   remoteIdentity: string;
 }
 
-export interface RunState {
+export interface RunStateBase {
   schemaVersion: 1;
   runId: string;
   repository: string;
-  issueNumber: number;
-  command: RunCommand;
   status: RunStatus;
   currentStep?: DeliveryStep;
   completedSteps: DeliveryStep[];
-  branch: string;
-  worktreePath: string;
-  baseRef: string;
-  baseSha: string;
-  headSha: string;
-  remoteIdentity: string;
   pullRequestNumber: number | null;
   agentSessions: {
     codexPlan?: string;
@@ -95,6 +88,65 @@ export interface RunState {
     message: string;
   };
 }
+
+export interface IssueRunState extends RunStateBase {
+  command: IssueRunCommand;
+  issueNumber: number;
+  branch: string;
+  worktreePath: string;
+  baseRef: string;
+  baseSha: string;
+  headSha: string;
+  remoteIdentity: string;
+}
+
+export interface ConsultationRunState extends RunStateBase {
+  command: "consult";
+  issueNumber: null;
+  branch: null;
+  worktreePath: string;
+  baseRef: null;
+  baseSha: null;
+  headSha: null;
+  remoteIdentity: string;
+}
+
+export type RunState = IssueRunState | ConsultationRunState;
+export type RunStatePatch = Partial<RunStateBase> & { headSha?: string };
+
+export function isIssueRunState(state: RunState): state is IssueRunState {
+  return state.command !== "consult";
+}
+
+export function requireIssueRunState(state: RunState): IssueRunState {
+  if (!isIssueRunState(state)) {
+    throw Object.assign(new Error(`Run ${state.runId} is an issue-less consultation run`), {
+      code: "policy_blocked",
+      isRetryable: false,
+    });
+  }
+  return state;
+}
+
+export interface ConsultationRunIdentity {
+  worktreePath: string;
+  remoteIdentity: string;
+}
+
+export type RunStoreCreateInput =
+  | {
+      repository: string;
+      issueNumber: number;
+      command: IssueRunCommand;
+      identity: RunIdentity;
+      maxFixAttempts: number;
+    }
+  | {
+      repository: string;
+      command: "consult";
+      consultation: ConsultationRunIdentity;
+      maxFixAttempts: number;
+    };
 
 export interface IssueRecord {
   number: number;
@@ -232,16 +284,10 @@ export interface PolicyEngine {
 }
 
 export interface RunStore {
-  create(input: {
-    repository: string;
-    issueNumber: number;
-    command: RunCommand;
-    identity: RunIdentity;
-    maxFixAttempts: number;
-  }): Promise<RunState>;
+  create(input: RunStoreCreateInput): Promise<RunState>;
   load(runId: string): Promise<RunState | null>;
   loadLatest(repository: string, issueNumber: number): Promise<RunState | null>;
-  update(runId: string, patch: Partial<RunState>): Promise<RunState>;
+  update(runId: string, patch: RunStatePatch): Promise<RunState>;
   saveArtifact(runId: string, name: string, value: unknown): Promise<string>;
   readArtifact<T>(runId: string, name: string): Promise<T | null>;
   acquireLock(input: {

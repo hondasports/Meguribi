@@ -1,4 +1,5 @@
-import type { GitAdapter, GitHubAdapter, PullRequestRecord, RunState, RunStore } from "./delivery.js";
+import type { GitAdapter, GitHubAdapter, IssueRunState, PullRequestRecord, RunState, RunStore } from "./delivery.js";
+import { isIssueRunState } from "./delivery.js";
 
 export interface CleanupDependencies {
   github: Pick<GitHubAdapter, "getPullRequest">;
@@ -50,12 +51,15 @@ function fail(message: string): never {
   throw Object.assign(new Error(message), { code: "cleanup_refused" });
 }
 
-async function loadRun(input: CleanupInput, runStore: CleanupDependencies["runStore"]): Promise<RunState> {
+async function loadRun(input: CleanupInput, runStore: CleanupDependencies["runStore"]): Promise<IssueRunState> {
   const state = input.runId
     ? await runStore.load(input.runId)
     : await runStore.loadLatest(input.repository, input.issueNumber);
   if (!state) {
     fail(`No delivery Run found for ${input.repository}#${String(input.issueNumber)}; run plan/run first or provide --run-id`);
+  }
+  if (!isIssueRunState(state)) {
+    fail(`Run ${state.runId} is an issue-less consultation run; there is no delivery worktree or branch to clean up`);
   }
   if (state.repository !== input.repository || state.issueNumber !== input.issueNumber) {
     fail(`Run ${state.runId} does not belong to ${input.repository}#${String(input.issueNumber)}; provide the matching target`);

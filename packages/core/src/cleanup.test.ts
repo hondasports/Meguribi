@@ -1,8 +1,8 @@
-import type { PullRequestRecord, RunState } from "./index.js";
+import type { IssueRunState, PullRequestRecord } from "./index.js";
 import { cleanupRun } from "./cleanup.js";
 import { describe, expect, it } from "vitest";
 
-const state: RunState = {
+const state: IssueRunState = {
   schemaVersion: 1,
   runId: "20260730T000000Z-cleanup1",
   repository: "owner/repo",
@@ -83,6 +83,57 @@ describe("cleanupRun", () => {
       ),
     ).resolves.toMatchObject({ status: "completed", worktreeRemoved: true });
     expect(bundle.removed).toBe(1);
+  });
+
+
+
+  it("refuses an issue-less consultation run before touching git or GitHub", async () => {
+    const consultationState = {
+      ...state,
+      command: "consult" as const,
+      issueNumber: null,
+      branch: null,
+      baseRef: null,
+      baseSha: null,
+      headSha: null,
+    };
+    let gitCalled = false;
+    let githubCalled = false;
+    await expect(
+      cleanupRun(
+        { repository: state.repository, issueNumber: state.issueNumber, repositoryPath: "C:/repo", runId: consultationState.runId },
+        {
+          github: {
+            getPullRequest: async () => {
+              githubCalled = true;
+              return pullRequest;
+            },
+          },
+          git: {
+            getIdentity: async () => {
+              gitCalled = true;
+              return { branch: "unexpected", headSha: "unexpected", remoteIdentity: "unexpected" };
+            },
+            getDiff: async () => {
+              gitCalled = true;
+              return { changedFiles: [], patch: "" };
+            },
+            removeWorktree: async () => {
+              gitCalled = true;
+              return { worktreeRemoved: true, branchRemoved: true };
+            },
+          },
+          runStore: {
+            load: async () => consultationState,
+            loadLatest: async () => consultationState,
+            readArtifact: async <T>() => null as T | null,
+            saveArtifact: async () => "unused",
+          },
+        },
+      ),
+    ).rejects.toThrow("issue-less consultation run");
+    expect(gitCalled).toBe(false);
+    expect(githubCalled).toBe(false);
   });
 
   it("refuses uncommitted changes and an open PR", async () => {

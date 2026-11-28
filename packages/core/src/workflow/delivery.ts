@@ -10,6 +10,7 @@ import type {
   RunStatus,
   VerificationResult,
 } from "../delivery.js";
+import { requireIssueRunState } from "../delivery.js";
 import type { PlanArtifact, ReviewArtifact } from "../codex-artifact.js";
 import { decideInheritedMcpPolicy } from "../mcp-policy.js";
 import { runWorkflow } from "../workflow-engine/engine.js";
@@ -19,6 +20,7 @@ import {
   appendStep,
   createDeliveryStepHandlers,
   mark,
+  markIssueRun,
   type DeliveryRunContext,
 } from "./delivery-steps.js";
 
@@ -79,7 +81,7 @@ export async function runDelivery(
     baseRef: input.baseRef,
   });
 
-  const state = await deps.runStore.create({
+  const state = requireIssueRunState(await deps.runStore.create({
     repository: input.repository,
     issueNumber: input.issueNumber,
     command: "run",
@@ -94,7 +96,7 @@ export async function runDelivery(
       remoteIdentity: worktree.remoteIdentity,
     },
     maxFixAttempts: input.maxFixAttempts,
-  });
+  }));
   await deps.runStore.acquireLock({
     repository: input.repository,
     issueNumber: input.issueNumber,
@@ -111,7 +113,7 @@ export async function runDelivery(
   };
 
   try {
-    let current = await mark(deps, state.runId, {
+    let current = await markIssueRun(deps, state, {
       status: "created",
       currentStep: "preflight",
       completedSteps: appendStep(state, "context"),
@@ -120,7 +122,7 @@ export async function runDelivery(
     if (preflight) {
       await preflight();
     }
-    current = await mark(deps, current.runId, {
+    current = await markIssueRun(deps, current, {
       completedSteps: appendStep(current, "preflight"),
       currentStep: "awaiting_mcp_confirmation",
     });
@@ -136,7 +138,7 @@ export async function runDelivery(
         ? await deps.mcpConfirmation.confirmInheritedMcp()
         : false;
       if (!confirmed) {
-        current = await mark(deps, current.runId, {
+        current = await markIssueRun(deps, current, {
           status: "blocked",
           currentStep: "awaiting_mcp_confirmation",
           lastError: {
@@ -152,7 +154,7 @@ export async function runDelivery(
         };
       }
     } else if (mcpDecision.outcome === "block") {
-      current = await mark(deps, current.runId, {
+      current = await markIssueRun(deps, current, {
         status: "blocked",
         currentStep: "awaiting_mcp_confirmation",
         lastError: {
@@ -167,11 +169,11 @@ export async function runDelivery(
         reasons: [mcpDecision.reason],
       };
     }
-    current = await mark(deps, current.runId, {
+    current = await markIssueRun(deps, current, {
       completedSteps: appendStep(current, "awaiting_mcp_confirmation"),
       currentStep: "worktree",
     });
-    current = await mark(deps, current.runId, {
+    current = await markIssueRun(deps, current, {
       completedSteps: appendStep(current, "worktree"),
       status: "planning",
       currentStep: "planning",
@@ -225,12 +227,13 @@ export async function resumeDelivery(
   input: ResumeDeliveryInput,
   deps: DeliveryDependencies,
 ): Promise<DeliveryResult> {
-  const state = input.runId
+  const loadedState = input.runId
     ? await deps.runStore.load(input.runId)
     : await deps.runStore.loadLatest(input.repository, input.issueNumber);
-  if (!state) {
+  if (!loadedState) {
     throw new Error("No run found to resume");
   }
+  const state = requireIssueRunState(loadedState);
   if (state.repository !== input.repository || state.issueNumber !== input.issueNumber) {
     throw Object.assign(
       new Error(
@@ -282,7 +285,7 @@ export async function resumeDelivery(
       (state.currentStep && unsafeResumeSteps.has(state.currentStep)) ||
       !state.completedSteps.includes("implementation_completed")
     ) {
-      const updated = await mark(deps, state.runId, {
+      const updated = await markIssueRun(deps, state, {
         status: "blocked",
         lastError: {
           code: "policy_blocked",

@@ -196,7 +196,9 @@ Commands run as executable + argv with `shell: false`. Each command has a defaul
 
 ### `RunStore`
 
-Store Issue-specific execution state on the local filesystem. No database is required.
+Store execution state on the local filesystem. No database is required.
+
+Issue-backed runs (`run` / `resume` / `discuss`) require a positive `issueNumber`, branch, base/head SHAs, worktree, and remote identity. Issue-less read-only consultations use `command: "consult"` and store `null` for `issueNumber`, `branch`, `baseRef`, `baseSha`, and `headSha`. Consultation runs live under `runs/<owner>/<repo>/consultations/<runId>/`; Meguribi does not create `issue-0` or fictional branch/SHA identity. `repository` and `remoteIdentity` must contain the real target resolved from git remote or an explicit local identity. `worktreePath` points to the existing repository path being discussed, not to a newly created worktree. Operations that require Issue or git identity, such as `cleanup`, `review`, and delivery resume, explicitly reject consultation runs.
 
 ## 4. Physical layout
 
@@ -206,7 +208,8 @@ Store Issue-specific execution state on the local filesystem. No database is req
 
 ~/.local/share/meguribi/
   +-- runs/
-  |   `-- owner/repo/issue-123/run-YYYYMMDD-HHmmss/
+  |   +-- owner/repo/issue-123/run-YYYYMMDD-HHmmss/
+  |   `-- owner/repo/consultations/run-YYYYMMDD-HHmmss/
   +-- worktrees/
   |   `-- owner/repo/issue-123/
   `-- cache/

@@ -4,10 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  FileSystemDiscussionStore,
   FileSystemRunStore,
   FileSystemWorkflowEventLog,
 } from "@meguribi/adapters";
 import type {
+  DiscussionConclusion,
+  DiscussionTurn,
   RunState,
   WorkflowEvent,
   WorkflowEventLog,
@@ -76,6 +79,71 @@ async function createRun(runStore: FileSystemRunStore, issueNumber = 42): Promis
       remoteIdentity: "github.com/owner/repo",
     },
   });
+}
+
+async function createDiscussionRun(
+  runStore: FileSystemRunStore,
+  issueNumber = 83,
+): Promise<RunState> {
+  return runStore.create({
+    repository: "owner/repo",
+    issueNumber,
+    command: "discuss",
+    maxFixAttempts: 0,
+    identity: {
+      repository: "owner/repo",
+      issueNumber,
+      branch: `meguribi/issue-${String(issueNumber)}`,
+      worktreePath: "/tmp/worktree",
+      baseRef: "origin/main",
+      baseSha: "base",
+      headSha: "head",
+      remoteIdentity: "github.com/owner/repo",
+    },
+  });
+}
+
+async function createConsultationRun(runStore: FileSystemRunStore): Promise<RunState> {
+  return runStore.create({
+    repository: "owner/repo",
+    command: "consult",
+    maxFixAttempts: 0,
+    consultation: {
+      worktreePath: "/tmp/worktree",
+      remoteIdentity: "github.com/owner/repo",
+    },
+  });
+}
+
+function discussionTurn(message = "議論メッセージ"): DiscussionTurn {
+  return {
+    turnId: "t-1",
+    speaker: "codex",
+    speakerLabel: "Codex",
+    envelope: {
+      message,
+      replyTo: [],
+      addressTo: [],
+      positions: [],
+      newIssues: [],
+      done: true,
+    },
+    malformed: false,
+    at: "2026-11-28T12:00:00.000Z",
+  };
+}
+
+function discussionConclusion(message = "結論"): DiscussionConclusion {
+  return {
+    topic: "topic",
+    conclusion: message,
+    issues: [],
+    rejectedOptions: [],
+    openQuestions: [],
+    acceptanceCriteriaSeeds: [],
+    endedBy: "consensus",
+    transcriptHash: "hash",
+  };
 }
 
 function liveStepStarted(profileId = "devin", stepId = "implement"): WorkflowEvent {
@@ -446,6 +514,192 @@ describe("run-store api", () => {
       }
       const missing = await getJson(port, "/api/run-store/runs/missing-run");
       expect(missing.status).toBe(404);
+    });
+  });
+  it("returns discussion detail with redacted turns, conclusion, approval, and decision flags", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createDiscussionRun(runStore);
+    await runStore.update(run.runId, { status: "awaiting_human" });
+    const store = new FileSystemDiscussionStore({ runStore, runId: run.runId });
+    await store.appendTurn(discussionTurn("token=abc123456789 を含む発言"));
+    await store.saveConclusion(discussionConclusion("承認待ちの結論"));
+    await runStore.saveArtifact(run.runId, "approval.json", {
+      decision: "rejected",
+      approver: "human",
+      at: "2026-11-28T12:00:00.000Z",
+      conclusionHash: "hash",
+      comment: "token=abc123456789 を含む却下",
+      redo: true,
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      expect(response.status).toBe(200);
+      const detail = response.body as {
+        turns: Array<{ envelope: { message: string } }>;
+        conclusion: { conclusion: string } | null;
+        approval: { decision: string; comment?: string } | null;
+        canInterject: boolean;
+        canDecide: boolean;
+      };
+      expect(detail.turns).toHaveLength(1);
+      expect(detail.turns[0]?.envelope.message).not.toContain("abc123456789");
+      expect(detail.conclusion?.conclusion).toBe("承認待ちの結論");
+      expect(detail.approval?.decision).toBe("rejected");
+      expect(detail.approval?.comment).not.toContain("abc123456789");
+      expect(detail.canInterject).toBe(false);
+      expect(detail.canDecide).toBe(true);
+    });
+  });
+
+  it("returns discussion flags for active and terminal states", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const active = await createDiscussionRun(runStore, 83);
+    const terminal = await createDiscussionRun(runStore, 84);
+    await runStore.update(terminal.runId, { status: "completed" });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const activeResponse = await getJson(port, `/api/run-store/runs/${active.runId}/discussion`);
+      expect(activeResponse.status).toBe(200);
+      expect(
+        (activeResponse.body as { canInterject: boolean; canDecide: boolean }).canInterject,
+      ).toBe(true);
+      expect((activeResponse.body as { canInterject: boolean; canDecide: boolean }).canDecide).toBe(
+        false,
+      );
+
+      const terminalResponse = await getJson(
+        port,
+        `/api/run-store/runs/${terminal.runId}/discussion`,
+      );
+      expect(terminalResponse.status).toBe(200);
+      expect((terminalResponse.body as { canInterject: boolean }).canInterject).toBe(false);
+    });
+  });
+
+  it("returns 404 for discussion detail of a non-discussion run", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      expect(response.status).toBe(404);
+    });
+  });
+
+  it("streams discussion detail when discussion events arrive", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createDiscussionRun(runStore);
+    const store = new FileSystemDiscussionStore({ runStore, runId: run.runId });
+    await store.appendTurn(discussionTurn());
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const client = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await eventLog.append(
+        run.runId,
+        {
+          type: "discussion.turn",
+          runId: run.runId,
+          turn: discussionTurn(),
+          turnNumber: 1,
+          maxTurns: 20,
+        },
+        "2026-11-28T12:00:00.000Z",
+      );
+      await waitFor(
+        () => client.events.some((event) => event.name === "discussion"),
+        "discussion SSE event",
+      );
+      client.close();
+      const event = client.events.find((candidate) => candidate.name === "discussion");
+      const detail = JSON.parse(event?.data ?? "{}") as { turns: unknown[]; canInterject: boolean };
+      expect(detail.turns).toHaveLength(1);
+      expect(detail.canInterject).toBe(true);
+    });
+  });
+
+  it("lists and reads issue-less consultation runs with null identity fields", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const list = await getJson(port, "/api/run-store/runs?limit=10");
+      expect(list.status).toBe(200);
+      expect((list.body as Array<Record<string, unknown>>)[0]).toMatchObject({
+        runId: run.runId,
+        command: "consult",
+        issueNumber: null,
+        pullRequestNumber: null,
+      });
+
+      const detail = await getJson(port, `/api/run-store/runs/${run.runId}`);
+      expect(detail.status).toBe(200);
+      const body = detail.body as { state: Record<string, unknown>; pipeline: unknown[] };
+      expect(body.state).toMatchObject({
+        command: "consult",
+        issueNumber: null,
+        branch: null,
+        baseRef: null,
+        baseSha: null,
+        headSha: null,
+      });
+      expect(body.pipeline).toEqual([]);
+    });
+  });
+
+  it("returns consultation discussion detail with interjection but without approval decision", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+    const store = new FileSystemDiscussionStore({ runStore, runId: run.runId });
+    await store.appendTurn(discussionTurn("consult turn"));
+    await store.saveConclusion(discussionConclusion("consult conclusion"));
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      expect(response.status).toBe(200);
+      const detail = response.body as {
+        turns: unknown[];
+        conclusion: { conclusion: string } | null;
+        approval: unknown;
+        canInterject: boolean;
+        canDecide: boolean;
+      };
+      expect(detail.turns).toHaveLength(1);
+      expect(detail.conclusion?.conclusion).toBe("consult conclusion");
+      expect(detail.approval).toBeNull();
+      expect(detail.canInterject).toBe(true);
+      expect(detail.canDecide).toBe(false);
+    });
+  });
+
+  it("streams consultation discussion detail when consultation events arrive", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+    const store = new FileSystemDiscussionStore({ runStore, runId: run.runId });
+    await store.appendTurn(discussionTurn());
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const client = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await eventLog.append(
+        run.runId,
+        {
+          type: "discussion.turn",
+          runId: run.runId,
+          turn: discussionTurn(),
+          turnNumber: 1,
+          maxTurns: 20,
+        },
+        "2026-11-28T12:00:00.000Z",
+      );
+      await waitFor(
+        () => client.events.some((event) => event.name === "discussion"),
+        "consultation discussion SSE event",
+      );
+      client.close();
+      const event = client.events.find((candidate) => candidate.name === "discussion");
+      const detail = JSON.parse(event?.data ?? "{}") as { turns: unknown[]; canDecide: boolean };
+      expect(detail.turns).toHaveLength(1);
+      expect(detail.canDecide).toBe(false);
     });
   });
 });

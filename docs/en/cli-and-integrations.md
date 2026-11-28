@@ -33,9 +33,15 @@ meguribi desk --port 4199
 
 `meguribi desk` starts `pnpm --filter @meguribi/web dev` as an argument array in the Meguribi repository root. Open the printed URL (`http://127.0.0.1:4173` by default). The child process exit code is propagated as the CLI exit code.
 
-In the `Commands` tab, select and run the supported Meguribi commands. The UI does not accept arbitrary shell commands; it validates command names and options, then passes an argument array to the local Meguribi CLI. stdout / stderr are streamed over SSE, and artifacts are saved in the normal RunStore.
+The initial `Consult` tab provides a large multiline prompt and a two-to-four participant selector populated from the real configuration. Issue linkage is optional auxiliary input. Candidates and defaults come from `GET /api/discussion/profiles`, and starting a consultation uses `POST /api/discussions`. Even when an Issue target is attached, the normal start path never continues automatically to implementation, push, or Draft PR creation. Only an explicitly selected `discuss-to-pr` workflow follows that path.
 
-The `Run` tab read-only displays recent Runs from the RunStore, the delivery pipeline, agent activity including no-response warnings, per-agent live-log panes, and the combined log. It shows not only Runs started from Command Desk but also `meguribi run` / `resume` Runs started from the CLI, because both use the same RunStore. The RunStore location resolves with the same rules as the CLI; for tests, set `MEGURIBI_RUNS_ROOT` to the desired root.
+After startup, the same screen puts the actual consultation prompt, speaker-separated conversation, and interjection input first. The large composer collapses; the small `New consultation` action returns to it, and `Back to consultation` restores the active conversation.
+
+The `Existing operations` tab runs only validated Meguribi commands as argument arrays. The `Run history` tab shows recent Runs, delivery progress, agent activity, and live logs from the same RunStore used by the CLI.
+
+Issue-less consultations are stored as `command: "consult"` under `consultations/<runId>` with `issueNumber` / `branch` / `baseRef` / `baseSha` / `headSha` set to `null`. Existing Issue-linked discussion Runs keep `command: "discuss"`. Messages in `consult` / `discuss` Runs are threaded by `replyTo`, distinguished by speaker color and speaker name, and malformed turns are marked. Turn IDs in a conclusion link to existing turns; missing IDs are plain text.
+
+While the discussion engine is running, the interjection box can send a human message through `meguribi say <runId> <message>` started by the server as an argument array; the server never writes to `inbox/` directly. Existing Issue-linked `discuss` Runs can still be approved or rejected/redone when they reach `awaiting_human`. A `consult` Run completes after saving its conclusion and never continues to implementation or PR creation.
 
 Authentication, remote exposure, and multi-user operation are intentionally out of scope. See `apps/web/README.md` for details.
 
@@ -781,3 +787,37 @@ Meguribi stages only verified paths and does not use unconditional `git add -A`.
 - an unexpected dirty state exists
 
 Meguribi does not guess its way through a condition that cannot be resolved safely.
+
+## 12. discuss-to-pr workflow
+
+The built-in `discuss-to-pr` workflow runs the path from Issue discussion through specification, implementation, verification, review, and Draft PR creation as one declarative workflow. Its steps are `discuss → approve → specify → plan → implement → verify → review → publish`, with bounded transitions to `fix-after-verify` after verification failure and `fix-after-review` after review changes are required.
+
+```bash
+meguribi workflow run discuss-to-pr owner/repo#123 \
+  --repo-path /path/to/repo \
+  --request "additional consultation context"
+```
+
+The main options are `--local`, `--implementer <profile>`, `--allow-inherited-mcp`, and `--non-interactive`. `discuss-to-pr` is currently the only executable built-in workflow. Use `meguribi discuss` for discussion only and `meguribi run` for the existing delivery workflow.
+
+In the first phase, read-only discussants discuss the Issue and the summarizer creates a conclusion. Meguribi never auto-approves it and stops at `awaiting_human`, even with `--non-interactive`. The continuation settings are stored per Run as `discuss-to-pr.json` before the approval-waiting state becomes externally visible.
+
+```bash
+meguribi approve <runId>
+meguribi reject <runId> --reason "what should be redone" [--redo]
+```
+
+`approve` records the approver, timestamp, and conclusion hash in `approval.json`. For a `discuss-to-pr` Run, the same command then continues from `specify`. If continuation fails partway, running `meguribi approve <runId>` resumes it without recording approval twice. Resume prioritizes incomplete steps in `steps/<stepId>.json` and follows the outcome of completed steps, so invoking it after completion does not repeat implementation or Draft PR creation. `reject` never continues to implementation; `--redo` only restarts the discussion.
+
+In the `specify` step, a read-only specifier creates `requirement.json` and `specification.json` from the approved conclusion. Execution stops if the current conclusion hash differs from the approved one. Acceptance criteria that cannot be mapped one-to-one to a seed, or references to nonexistent requirements, are not guessed: they are excluded from machine-readable acceptance criteria and recorded in `openQuestions`.
+
+The main RunStore artifacts are:
+
+- `discussion/transcript.jsonl`, `discussion/conclusion.json`
+- `approval.json`, `approval-history.json`
+- `discuss-to-pr.json`
+- `requirement.json`, `specification.json`
+- `plan.json`, `implementation-result.json`, `verification.json`, `review.json`
+- `steps/<stepId>.json`
+
+The Draft PR body contains `Closes #<issue>` plus the persisted `specification.json` acceptance criteria, scope, out-of-scope items, and open questions. Implementer and reviewer use different profiles by default; the same profile is allowed only through explicit configuration.

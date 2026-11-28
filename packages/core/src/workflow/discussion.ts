@@ -1,5 +1,6 @@
 import type {
   IssueRecord,
+  IssueRunState,
   RunState,
   RunStatus,
   RunStore,
@@ -12,6 +13,7 @@ import { agentDisplayName } from "../role-agent.js";
 import { runWorkflow, type WorkflowRunResult } from "../workflow-engine/engine.js";
 import { createRunStoreStepStateStore } from "../workflow-engine/run-store-step-state.js";
 import { createDiscussionWorkflow } from "./discussion-definition.js";
+import { requireIssueRunState } from "../delivery.js";
 import {
   createDiscussionStepHandlers,
   updateDiscussionRunState,
@@ -112,7 +114,7 @@ function createBrief(
 async function executeDiscussionWorkflow(
   input: RunDiscussionWorkflowInput,
   deps: DiscussionDependencies,
-  state: RunState,
+  state: IssueRunState,
   issue: IssueRecord,
   store: DiscussionStorePort,
   brief: DiscussionBrief,
@@ -147,7 +149,7 @@ async function executeDiscussionWorkflow(
 async function executeDiscussionWorkflowWithFailureResult(
   input: RunDiscussionWorkflowInput,
   deps: DiscussionDependencies,
-  state: RunState,
+  state: IssueRunState,
   issue: IssueRecord,
   store: DiscussionStorePort,
   brief: DiscussionBrief,
@@ -256,7 +258,7 @@ export async function runDiscussionWorkflow(
     branch: input.branch,
     baseRef: input.baseRef,
   });
-  const state = await deps.runStore.create({
+  const state = requireIssueRunState(await deps.runStore.create({
     repository: input.repository,
     issueNumber: input.issueNumber,
     command: "discuss",
@@ -271,7 +273,7 @@ export async function runDiscussionWorkflow(
       remoteIdentity: worktree.remoteIdentity,
     },
     maxFixAttempts: 0,
-  });
+  }));
   await deps.runStore.acquireLock({
     repository: input.repository,
     issueNumber: input.issueNumber,
@@ -294,7 +296,7 @@ export async function runDiscussionWorkflow(
   }
 }
 
-function assertAwaitingApproval(state: RunState | null, runId: string): asserts state is RunState {
+function assertAwaitingApproval(state: RunState | null, runId: string): asserts state is IssueRunState {
   if (!state || state.command !== "discuss" || state.status !== "awaiting_human") {
     throw new ApprovalError(
       "not_awaiting_approval",
@@ -307,7 +309,7 @@ function assertAwaitingApproval(state: RunState | null, runId: string): asserts 
 async function withDiscussionDecisionLock<T>(
   runId: string,
   deps: Pick<DiscussionDependencies, "runStore">,
-  operation: (state: RunState) => Promise<T>,
+  operation: (state: IssueRunState) => Promise<T>,
 ): Promise<T> {
   const initial = await deps.runStore.load(runId);
   assertAwaitingApproval(initial, runId);
@@ -421,7 +423,7 @@ export async function approveDiscussion(
 
 async function requireRedoInput(
   input: RejectDiscussionInput,
-  state: RunState,
+  state: IssueRunState,
   runStore: RunStore,
 ): Promise<RunDiscussionWorkflowInput> {
   const persisted = await readDiscussionInputArtifact(runStore, state.runId);
@@ -524,7 +526,7 @@ export async function rejectDiscussion(
     return await executeDiscussionWorkflowWithFailureResult(
       redoInput!,
       deps,
-      resetState,
+      requireIssueRunState(resetState),
       issue,
       store,
       brief,

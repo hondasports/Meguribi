@@ -7,13 +7,16 @@ import type {
   DeliveryStep,
   ImplementationResult,
   IssueRecord,
+  IssueRunState,
   PublishDecision,
   ResumeDeliveryInput,
   RunDeliveryInput,
   RunState,
+  RunStatePatch,
   VerificationResult,
   VerificationLogWriter,
 } from "../delivery.js";
+import { isIssueRunState } from "../delivery.js";
 import type { ImplementationContext } from "../implementation-context.js";
 import type { PlanArtifact, ReviewArtifact } from "../codex-artifact.js";
 import { matchesProtectedPath } from "../path-match.js";
@@ -131,7 +134,7 @@ export function appendStep(state: RunState, step: DeliveryStep): DeliveryStep[] 
 export async function mark(
   deps: DeliveryDependencies,
   runId: string,
-  patch: Partial<RunState>,
+  patch: RunStatePatch,
 ): Promise<RunState> {
   const next = await deps.runStore.update(runId, {
     ...patch,
@@ -141,6 +144,18 @@ export async function mark(
     await deps.onStateChange?.(next);
   } catch {
     // Progress reporting must never change the delivery result.
+  }
+  return next;
+}
+
+export async function markIssueRun(
+  deps: DeliveryDependencies,
+  state: IssueRunState,
+  patch: RunStatePatch,
+): Promise<IssueRunState> {
+  const next = await mark(deps, state.runId, patch);
+  if (!isIssueRunState(next)) {
+    throw new Error(`Run ${state.runId} unexpectedly changed into a consultation run`);
   }
   return next;
 }
@@ -272,7 +287,7 @@ function buildImplementationContext(input: {
 export interface DeliveryRunContext {
   deps: DeliveryDependencies;
   delivery: RunDeliveryInput | ResumeDeliveryInput;
-  state: RunState;
+  state: IssueRunState;
   issue: IssueRecord;
   plan?: PlanArtifact;
   implementation?: ImplementationResult;
@@ -280,6 +295,8 @@ export interface DeliveryRunContext {
   review?: ReviewArtifact;
   /** resume 用: true のとき verify は既存の verification.json を再利用する */
   reuseVerification: boolean;
+  /** discuss-to-pr 継続など、仕様書を PR 本文へ含める文脈でのみ true */
+  includeSpecificationInPrBody?: boolean;
 }
 
 function requireRunDeliveryInput(
@@ -331,7 +348,7 @@ async function runReview(context: DeliveryRunContext): Promise<void> {
   const implementation = requireImplementation(context);
   const verification = requireVerification(context);
 
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "reviewing",
     currentStep: "reviewing",
   });
@@ -358,7 +375,7 @@ async function runReview(context: DeliveryRunContext): Promise<void> {
   });
   context.review = review;
   await deps.runStore.saveArtifact(context.state.runId, "review.json", review);
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     completedSteps: appendStep(context.state, "reviewing"),
     agentSessions: {
       ...context.state.agentSessions,
@@ -381,7 +398,7 @@ export async function runDeliveryFixAttempt(
     return;
   }
 
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "fixing",
     currentStep: "fixing",
     fixAttempts: context.state.fixAttempts + 1,
@@ -448,7 +465,7 @@ export async function runDeliveryFixAttempt(
     "implementation-result.json",
     implementation,
   );
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     completedSteps: appendStep(context.state, "fixing"),
     agentSessions: {
       ...context.state.agentSessions,
@@ -527,7 +544,7 @@ async function planStep(context: DeliveryRunContext) {
   });
   context.plan = plan;
   await deps.runStore.saveArtifact(context.state.runId, "plan.json", plan);
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "planned",
     completedSteps: appendStep(context.state, "planning"),
     agentSessions: {
@@ -538,7 +555,7 @@ async function planStep(context: DeliveryRunContext) {
   });
 
   if (input.abortSignal?.aborted) {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "cancelled",
       currentStep: "cancelled",
       completedSteps: appendStep(context.state, "cancelled"),
@@ -557,7 +574,7 @@ async function implementStep(context: DeliveryRunContext) {
   const { deps, issue } = context;
   const input = requireRunDeliveryInput(context.delivery);
   const plan = requirePlan(context);
-  context.state = await mark(deps, context.state.runId, { status: "implementing" });
+  context.state = await markIssueRun(deps, context.state, { status: "implementing" });
   const implementationContext = buildImplementationContext({
     issueBody: `${issue.title}\n\n${issue.body}`,
     comments: issue.comments,
@@ -592,7 +609,7 @@ async function implementStep(context: DeliveryRunContext) {
   );
 
   if (implementation.status === "cancelled") {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "cancelled",
       currentStep: "cancelled",
       completedSteps: appendStep(context.state, "cancelled"),
@@ -610,7 +627,7 @@ async function implementStep(context: DeliveryRunContext) {
     });
   }
   if (implementation.status === "timed_out") {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "timed_out",
       currentStep: "timed_out",
       completedSteps: appendStep(context.state, "timed_out"),
@@ -628,7 +645,7 @@ async function implementStep(context: DeliveryRunContext) {
     });
   }
   if (implementation.status !== "completed" || !implementation.publishable) {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "blocked",
       currentStep: "implementation_blocked",
       completedSteps: appendStep(context.state, "implementation_blocked"),
@@ -650,7 +667,7 @@ async function implementStep(context: DeliveryRunContext) {
   }
 
   const identity = await deps.git.getIdentity(input.worktreePath);
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "verifying",
     currentStep: "implementation_completed",
     completedSteps: appendStep(context.state, "implementation_completed"),
@@ -675,7 +692,7 @@ async function verifyStep(context: DeliveryRunContext) {
         }),
       );
     }
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "verifying",
       currentStep: "verifying",
     });
@@ -705,7 +722,7 @@ async function verifyStep(context: DeliveryRunContext) {
       "verification.json",
       context.verification,
     );
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       completedSteps: appendStep(context.state, "verifying"),
     });
   }
@@ -756,7 +773,7 @@ async function fixStep(context: DeliveryRunContext, of: string | undefined) {
   const verification = requireVerification(context);
   if (of === "verify") {
     if (!verification.success) {
-      context.state = await mark(deps, context.state.runId, {
+      context.state = await markIssueRun(deps, context.state, {
         status: "blocked",
         currentStep: "implementation_blocked",
         completedSteps: appendStep(context.state, "implementation_blocked"),
@@ -788,7 +805,7 @@ async function fixStep(context: DeliveryRunContext, of: string | undefined) {
     return { type: "changes_required" } as const;
   }
   if (review.status === "changes_required" || !verification.success) {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "blocked",
       currentStep: "implementation_blocked",
       lastError: {
@@ -846,7 +863,7 @@ async function publishStep(context: DeliveryRunContext) {
   });
   const reasons = [...gate.reasons, ...policyGate.reasons];
   if (!gate.allowed || !policyGate.allowed) {
-    context.state = await mark(deps, context.state.runId, {
+    context.state = await markIssueRun(deps, context.state, {
       status: "blocked",
       currentStep: "implementation_blocked",
       lastError: {
@@ -865,7 +882,7 @@ async function publishStep(context: DeliveryRunContext) {
     });
   }
 
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "publishing",
     currentStep: "publishing",
   });
@@ -876,7 +893,7 @@ async function publishStep(context: DeliveryRunContext) {
       paths: implementation.changedFiles,
       message: `feat: implement issue #${context.state.issueNumber}`,
     });
-    context.state = await mark(deps, context.state.runId, { headSha: committed.headSha });
+    context.state = await markIssueRun(deps, context.state, { headSha: committed.headSha });
   }
   if (!delivery.noPush) {
     await deps.git.push({
@@ -897,7 +914,7 @@ async function publishStep(context: DeliveryRunContext) {
       const created = await deps.github.createDraftPullRequest({
         repository: context.state.repository,
         title: issue.title,
-        body: `Closes #${context.state.issueNumber}\n\nImplemented by Meguribi delivery workflow.`,
+        body: await buildPullRequestBody(deps, context),
         head: context.state.branch,
         base: context.state.baseRef.replace(/^origin\//, ""),
       });
@@ -905,7 +922,7 @@ async function publishStep(context: DeliveryRunContext) {
     }
   }
 
-  context.state = await mark(deps, context.state.runId, {
+  context.state = await markIssueRun(deps, context.state, {
     status: "awaiting_human",
     currentStep: "awaiting_human",
     completedSteps: appendStep(context.state, "publishing"),
@@ -933,6 +950,58 @@ async function publishStep(context: DeliveryRunContext) {
     published: true,
     reasons: [],
   });
+}
+
+interface PersistedSpecificationForPrBody {
+  acceptanceCriteria?: readonly { given: string; when: string; then: string }[];
+  inScope?: readonly string[];
+  outOfScope?: readonly string[];
+  openQuestions?: readonly string[];
+}
+
+/**
+ * PR 本文を組み立てる。discuss-to-pr で保存された specification.json があれば
+ * 受け入れ条件を本文に含める（§6.4: 仕様は PR 本文と RunStore に保存する）。
+ * 通常の delivery では仕様が存在しないため本文は従来どおり。
+ */
+async function buildPullRequestBody(
+  deps: DeliveryDependencies,
+  context: DeliveryRunContext,
+): Promise<string> {
+  const base = `Closes #${context.state.issueNumber}`;
+  if (context.includeSpecificationInPrBody !== true) {
+    return `${base}\n\nImplemented by Meguribi delivery workflow.`;
+  }
+  const specification = await deps.runStore
+    .readArtifact<PersistedSpecificationForPrBody>(context.state.runId, "specification.json")
+    .catch(() => null);
+  if (specification === null || specification.acceptanceCriteria === undefined) {
+    return `${base}\n\nImplemented by Meguribi delivery workflow.`;
+  }
+  const lines = [base, "", "## 受け入れ条件", ""];
+  for (const criterion of specification.acceptanceCriteria) {
+    lines.push(`- Given ${criterion.given}, when ${criterion.when}, then ${criterion.then}`);
+  }
+  if (specification.inScope !== undefined && specification.inScope.length > 0) {
+    lines.push("", "## 対象範囲", "");
+    for (const item of specification.inScope) {
+      lines.push(`- ${item}`);
+    }
+  }
+  if (specification.outOfScope !== undefined && specification.outOfScope.length > 0) {
+    lines.push("", "## 範囲外", "");
+    for (const item of specification.outOfScope) {
+      lines.push(`- ${item}`);
+    }
+  }
+  if (specification.openQuestions !== undefined && specification.openQuestions.length > 0) {
+    lines.push("", "## 残課題", "");
+    for (const item of specification.openQuestions) {
+      lines.push(`- ${item}`);
+    }
+  }
+  lines.push("", "Implemented by Meguribi discuss-to-pr workflow.");
+  return lines.join("\n");
 }
 
 export function createDeliveryStepHandlers(): Partial<

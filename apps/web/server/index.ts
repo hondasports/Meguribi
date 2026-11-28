@@ -8,7 +8,14 @@ import { fileURLToPath } from "node:url";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import { FileSystemRunStore, FileSystemWorkflowEventLog } from "@meguribi/adapters";
 import { buildCliArgs, commandIds, redactOutput, type CommandRequest } from "./command-specs.js";
+import {
+  createDiscussionActions,
+  hasJsonContentType,
+  hasTrustedLocalWriteHeaders,
+  type CliResult,
+} from "./discussion-actions.js";
 import { createRunStoreApi } from "./run-store-api.js";
+import { createDiscussionStartApi } from "./discussion-start.js";
 
 interface RunRecord {
   id: string;
@@ -26,6 +33,7 @@ const repositoryRoot = process.env.MEGURIBI_ROOT
   : path.resolve(appDirectory, "../..");
 const port = Number(process.env.MEGURIBI_WEB_PORT ?? 4173);
 const pnpmExecutable = process.platform === "win32" ? process.execPath : "pnpm";
+const MAX_CLI_OUTPUT_CHARS = 64 * 1024;
 
 function localDataRoot(): string {
   if (process.env.XDG_DATA_HOME) return path.join(process.env.XDG_DATA_HOME, "meguribi");
@@ -47,6 +55,35 @@ function pnpmArguments(args: readonly string[]): string[] {
     path.join(path.dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js"),
     ...args,
   ];
+}
+
+function appendLimited(text: string, chunk: Buffer): string {
+  if (text.length >= MAX_CLI_OUTPUT_CHARS) return text;
+  return text + chunk.toString("utf8").slice(0, MAX_CLI_OUTPUT_CHARS - text.length);
+}
+
+function runMeguribiCli(args: readonly string[]): Promise<CliResult> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      pnpmExecutable,
+      pnpmArguments(["exec", "tsx", "apps/cli/src/index.ts", ...args]),
+      { cwd: repositoryRoot, windowsHide: true },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout = appendLimited(stdout, chunk);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = appendLimited(stderr, chunk);
+    });
+    child.on("error", (error) => {
+      resolve({ exitCode: 1, stdout, stderr: error.message });
+    });
+    child.on("close", (exitCode) => {
+      resolve({ exitCode: exitCode ?? 1, stdout, stderr });
+    });
+  });
 }
 
 function json(res: http.ServerResponse, status: number, value: unknown): void {
@@ -156,11 +193,32 @@ async function createAppServer(): Promise<http.Server> {
   const runStore = new FileSystemRunStore({ rootDir: runStoreRoot() });
   const eventLog = new FileSystemWorkflowEventLog({ runStore });
   const runStoreApi = createRunStoreApi({ runStore, eventLog });
+  const discussionActions = createDiscussionActions({
+    runStore,
+    cli: { run: runMeguribiCli },
+  });
+  const discussionStartApi = createDiscussionStartApi({
+    repositoryPath: repositoryRoot,
+    startCli: (args) =>
+      spawn(pnpmExecutable, pnpmArguments(["exec", "tsx", "apps/cli/src/index.ts", ...args]), {
+        cwd: repositoryRoot,
+        detached: process.platform !== "win32",
+        windowsHide: true,
+      }),
+  });
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api/health" && req.method === "GET") return json(res, 200, { ok: true });
+    if (await discussionStartApi.handle(req, res)) return;
+    if (await discussionActions.handle(req, res)) return;
     if (await runStoreApi.handle(req, res)) return;
     if (url.pathname === "/api/commands" && req.method === "POST") {
+      if (!hasTrustedLocalWriteHeaders(req)) {
+        return json(res, 403, { error: "Forbidden local write request" });
+      }
+      if (!hasJsonContentType(req)) {
+        return json(res, 415, { error: "Command requests require application/json" });
+      }
       try {
         const body = await parseBody(req);
         if (!isCommandRequest(body)) return json(res, 400, { error: "Invalid command request" });

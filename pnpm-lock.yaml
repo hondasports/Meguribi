@@ -57,6 +57,9 @@ importers:
       '@meguribi/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
+      '@meguribi/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@meguribi/core':
         specifier: workspace:*
         version: link:../../packages/core

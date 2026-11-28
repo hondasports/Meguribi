@@ -71,6 +71,56 @@ describe("FileSystemRunStore", () => {
     expect(latest?.runId).toBe(created.runId);
   });
 
+
+
+  it("creates, loads, and lists issue-less consultation runs without an issue-0 path", async () => {
+    const root = await tempRoot();
+    const store = new FileSystemRunStore({
+      rootDir: root,
+      now: () => new Date("2026-07-26T12:00:00.000Z"),
+      randomId: () => "c0nsul",
+    });
+
+    const created = await store.create({
+      repository: "owner/repo",
+      command: "consult",
+      maxFixAttempts: 0,
+      consultation: {
+        worktreePath: "/tmp/repository",
+        remoteIdentity: "github.com/owner/repo",
+      },
+    });
+
+    expect(created).toMatchObject({
+      command: "consult",
+      issueNumber: null,
+      branch: null,
+      worktreePath: "/tmp/repository",
+      baseRef: null,
+      baseSha: null,
+      headSha: null,
+      remoteIdentity: "github.com/owner/repo",
+    });
+    const statePath = path.join(
+      root,
+      "runs",
+      "owner",
+      "repo",
+      "consultations",
+      created.runId,
+      "state.json",
+    );
+    await expect(fs.access(statePath)).resolves.toBeUndefined();
+    await expect(fs.access(path.join(root, "runs", "owner", "repo", "issue-0"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const loaded = await store.load(created.runId);
+    expect(loaded).toMatchObject({ runId: created.runId, command: "consult", issueNumber: null });
+    await expect(store.listRecent()).resolves.toEqual([
+      expect.objectContaining({ runId: created.runId, command: "consult" }),
+    ]);
+    await expect(store.loadLatest("owner/repo", 0)).resolves.toBeNull();
+  });
+
   it("acquires exclusive issue locks", async () => {
     const root = await tempRoot();
     const store = new FileSystemRunStore({ rootDir: root });

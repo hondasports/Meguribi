@@ -110,6 +110,7 @@ describe("runWorkflowListCommand", () => {
     expect(stdout.join("")).toBe(
       "delivery (built-in, 7 steps): plan, implement, verify, review, fix-after-verify, fix-after-review, publish\n" +
         "discuss (built-in, 2 steps): discuss, approve\n" +
+        "discuss-to-pr (built-in, 10 steps): discuss, approve, specify, plan, implement, verify, review, fix-after-verify, fix-after-review, publish\n" +
         "discuss-to-pr (.meguribi/workflows/discuss-to-pr.yml, 2 steps): discuss, publish\n",
     );
   });

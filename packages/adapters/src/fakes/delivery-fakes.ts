@@ -551,20 +551,12 @@ export function createMemoryRunStore(options: { now?: () => Date } = {}): RunSto
       seq += 1;
       const runId = `${now().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")}-${seq.toString(16).padStart(6, "0")}`;
       const createdAt = isoNow(now);
-      const state: RunState = {
-        schemaVersion: 1,
+      const base = {
+        schemaVersion: 1 as const,
         runId,
         repository: input.repository,
-        issueNumber: input.issueNumber,
-        command: input.command,
-        status: "created",
+        status: "created" as const,
         completedSteps: [],
-        branch: input.identity.branch,
-        worktreePath: input.identity.worktreePath,
-        baseRef: input.identity.baseRef,
-        baseSha: input.identity.baseSha,
-        headSha: input.identity.headSha,
-        remoteIdentity: input.identity.remoteIdentity,
         pullRequestNumber: null,
         agentSessions: {},
         fixAttempts: 0,
@@ -572,6 +564,29 @@ export function createMemoryRunStore(options: { now?: () => Date } = {}): RunSto
         createdAt,
         updatedAt: createdAt,
       };
+      const state: RunState = input.command === "consult"
+        ? {
+            ...base,
+            command: "consult",
+            issueNumber: null,
+            branch: null,
+            worktreePath: input.consultation.worktreePath,
+            baseRef: null,
+            baseSha: null,
+            headSha: null,
+            remoteIdentity: input.consultation.remoteIdentity,
+          }
+        : {
+            ...base,
+            command: input.command,
+            issueNumber: input.issueNumber,
+            branch: input.identity.branch,
+            worktreePath: input.identity.worktreePath,
+            baseRef: input.identity.baseRef,
+            baseSha: input.identity.baseSha,
+            headSha: input.identity.headSha,
+            remoteIdentity: input.identity.remoteIdentity,
+          };
       states.set(runId, state);
       artifacts.set(runId, new Map());
       return structuredClone(state);
@@ -594,7 +609,7 @@ export function createMemoryRunStore(options: { now?: () => Date } = {}): RunSto
       if (!current) {
         throw new Error(`Run not found: ${runId}`);
       }
-      const next: RunState = {
+      const next = {
         ...current,
         ...patch,
         schemaVersion: 1,
@@ -602,7 +617,7 @@ export function createMemoryRunStore(options: { now?: () => Date } = {}): RunSto
         repository: current.repository,
         issueNumber: current.issueNumber,
         updatedAt: patch.updatedAt ?? isoNow(now),
-      };
+      } as RunState;
       states.set(runId, next);
       return structuredClone(next);
     },

@@ -13,7 +13,9 @@ import {
   createFakeCodexForDelivery,
   createFakeGitAdapter,
   createFakeGitHubAdapter,
+  createFakeDeliveryDeps,
   createFakeDiscussionRoleAgent as createAdaptersFakeDiscussionRoleAgent,
+  specifyApprovedConclusion,
   createFakeVerifier,
   createGitAdapter,
   createGitHubAdapter,
@@ -47,7 +49,7 @@ import {
   loadDevinConfig,
   loadImplementerConfig,
 } from "@meguribi/config";
-import { buildSummarizerPrompt, RoleAssignmentError } from "@meguribi/core";
+import { buildSpecificationPrompt, buildSummarizerPrompt, RoleAssignmentError, validateRoleAssignments, type RunStore } from "@meguribi/core";
 import type {
   CleanupDependencies,
   DiscoverDependencies,
@@ -69,6 +71,7 @@ import type {
   GitHubAdapter,
   PolicyEngine,
   SummarizeDiscussionInput,
+  DiscussToPrDependencies,
 } from "@meguribi/core";
 import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
@@ -960,6 +963,13 @@ export interface CreateDiscussionDepsOptions extends AgentWiringOverrides {
   useLocalFakes?: boolean;
   localOnly?: boolean;
   nonInteractive?: boolean;
+  /**
+   * Run ごとの参加者上書き（`meguribi discuss --discussants`）。
+   * 永続設定（.meguribi.yml）は変更せず、この Run の配線だけに適用する。
+   */
+  discussants?: readonly string[];
+  /** Run ごとの summarizer 上書き。未指定なら roles.summarizer → discussants[0] の従来どおり。 */
+  summarizer?: string;
 }
 
 /**
@@ -972,7 +982,8 @@ export interface DiscussionWiringDependencies {
   github: GitHubAdapter;
   git: GitAdapter;
   policy: PolicyEngine;
-  runStore: FileSystemRunStore;
+  /** core の RunStore ポートが境界。消費側はポートのメソッドだけを使う。 */
+  runStore: RunStore;
   discussants: readonly RoleAgent[];
   summarizer: RoleAgent;
   parseEnvelope: typeof parseDiscussionEnvelope;
@@ -992,6 +1003,89 @@ function assertDiscussionTransport(profile: AgentProfile, role: string): void {
   }
 }
 
+function createFakeSpecificationRoleAgent(profile: AgentProfile): RoleAgent {
+  const base = createAdaptersFakeDiscussionRoleAgent(profile);
+  const payload = {
+    problem: null,
+    targetUsers: [],
+    requirements: [
+      {
+        id: "req-fake",
+        priority: "must",
+        statement: "fake specification requirement",
+      },
+    ],
+    acceptanceCriteria: [
+      {
+        id: "ac-fake",
+        seed: "fake acceptance seed",
+        given: "an approved conclusion exists",
+        when: "the specification is prepared",
+        // oxlint-disable-next-line unicorn/no-thenable -- Given/When/Then の `then` はデータフィールドであり thenable ではない
+        then: "the fake delivery can continue",
+        requirementIds: ["req-fake"],
+      },
+    ],
+    inScope: [],
+    outOfScope: [],
+    testPlan: [],
+    successMetrics: [],
+    guardrails: [],
+    openQuestions: [],
+  };
+
+  return {
+    ...base,
+    async openSession(input) {
+      if (input.role !== "specifier") {
+        return await base.openSession(input);
+      }
+      return {
+        sessionId: `fake-specifier-${profile.id}`,
+        async send() {
+          return {
+            sessionId: `fake-specifier-${profile.id}`,
+            text: [
+              "Requirement/specification draft:",
+              "```json",
+              JSON.stringify(payload, null, 2),
+              "```",
+            ].join("\n"),
+            stopReason: "end_turn",
+            events: [],
+          };
+        },
+        async close() {},
+      };
+    },
+  };
+}
+
+function assertSpecifierTransport(profile: AgentProfile): void {
+  if (profile.transport === "sdk") {
+    throw new RoleAssignmentError(
+      "transport_unsupported",
+      `specifier profile ${profile.id} uses sdk transport, which is not supported by specification generation`,
+      "`roles.specifier` または fallback 先の `roles.planner` には `transport: acp` のプロファイルを指定してください",
+    );
+  }
+}
+
+function createFakeDeliveryWiring(
+  runStore: RunStore,
+  onAgentEvent: ((event: LiveLogEvent) => void) | undefined,
+): { deps: DeliveryDependencies; inheritedMcpPolicy: InheritedMcpPolicy } {
+  const bundle = createFakeDeliveryDeps();
+  return {
+    deps: {
+      ...bundle.deps,
+      runStore,
+      ...(onAgentEvent === undefined ? {} : { onAgentEvent }),
+    },
+    inheritedMcpPolicy: "deny",
+  };
+}
+
 /** Wiring for the discussion commands (`discuss` / `say` / `approve` / `reject`). */
 export async function createDiscussionDependencies(
   options: CreateDiscussionDepsOptions = {},
@@ -1009,7 +1103,7 @@ export async function createDiscussionDependencies(
     ...configSourceOptions(options),
   });
 
-  const discussantIds = agents.roles.discussants;
+  const discussantIds = options.discussants ?? agents.roles.discussants;
   if (discussantIds.length < 2 || discussantIds.length > 4) {
     throw new RoleAssignmentError(
       "invalid_discussants",
@@ -1040,7 +1134,7 @@ export async function createDiscussionDependencies(
   for (const id of discussantIds) {
     discussants.push(await buildAgent(requiredProfile(agents.profiles, id), "discussant"));
   }
-  const summarizerId = agents.roles.summarizer ?? discussantIds[0];
+  const summarizerId = options.summarizer ?? agents.roles.summarizer ?? discussantIds[0];
   const summarizer = await buildAgent(
     requiredProfile(agents.profiles, summarizerId as string),
     "summarizer",
@@ -1068,5 +1162,109 @@ export async function createDiscussionDependencies(
     hashConclusion,
     createStore: (runId) => new FileSystemDiscussionStore({ runStore, runId }),
     now: () => new Date(),
+  };
+}
+
+export interface CreateDiscussToPrDepsOptions extends AgentWiringOverrides {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  runsRoot?: string;
+  useLocalFakes?: boolean;
+  localOnly?: boolean;
+  nonInteractive?: boolean;
+  implementer?: string;
+  allowInheritedMcp?: boolean;
+  onAgentEvent?: (event: LiveLogEvent) => void;
+  /** Run ごとの参加者上書き（discuss 工程）。永続設定は変更しない。 */
+  discussants?: readonly string[];
+  summarizer?: string;
+}
+
+export interface DiscussToPrWiring {
+  deps: DiscussToPrDependencies;
+  inheritedMcpPolicy: InheritedMcpPolicy;
+}
+
+/**
+ * `workflow run discuss-to-pr` の本番依存。
+ * 議論・delivery・specifier を束ね、implementer と reviewer の同一プロファイルを
+ * 既定で禁止する（allowSameImplementerReviewer: true の明示設定だけ例外）。
+ */
+export async function createDiscussToPrDependencies(
+  options: CreateDiscussToPrDepsOptions = {},
+): Promise<DiscussToPrWiring> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const nonInteractive = options.nonInteractive ?? false;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+
+  const loadAgents = options.loadAgentsConfig ?? loadAgentsConfig;
+  const agents = await loadAgents({
+    repositoryPath,
+    cli: {},
+    nonInteractive,
+    ...configSourceOptions(options),
+  });
+  validateRoleAssignments({
+    discussants: agents.roles.discussants,
+    ...(agents.roles.summarizer !== undefined ? { summarizer: agents.roles.summarizer } : {}),
+    ...(agents.roles.specifier !== undefined ? { specifier: agents.roles.specifier } : {}),
+    planner: agents.roles.planner,
+    ...(options.implementer !== undefined || agents.roles.implementer !== undefined
+      ? { implementer: options.implementer ?? agents.roles.implementer }
+      : {}),
+    reviewer: agents.roles.reviewer,
+    allowSameImplementerReviewer: agents.roles.allowSameImplementerReviewer,
+  }, agents.profiles);
+
+  const discussion = await createDiscussionDependencies({
+    ...options,
+    cwd,
+    repositoryPath,
+    nonInteractive,
+    useLocalFakes,
+  });
+  const deliveryWiring = useLocalFakes
+    ? createFakeDeliveryWiring(discussion.runStore, options.onAgentEvent)
+    : await createDeliveryDeps({
+        ...options,
+        cwd,
+        repositoryPath,
+        nonInteractive,
+        useLocalFakes,
+      });
+
+  const specifierId = agents.roles.specifier ?? agents.roles.planner;
+  const specifierProfile = requiredProfile(agents.profiles, specifierId);
+  assertSpecifierTransport(specifierProfile);
+  const specifier: RoleAgent = useLocalFakes
+    ? createFakeSpecificationRoleAgent(specifierProfile)
+    : await createAcpPlanningAgent(specifierProfile, {
+        ...options,
+        repositoryPath,
+        nonInteractive,
+      });
+
+  // fake 経路でも本番と同じ specifyApprovedConclusion の検証・分類を通し、
+  // Requirement/Specification のスキーマ不整合が wiring テストで検出できるようにする。
+  const specify: DiscussToPrDependencies["specify"] = (input) =>
+    specifyApprovedConclusion({
+      specifier,
+      cwd: input.cwd,
+      artifactRoot: input.artifactRoot,
+      conclusion: input.conclusion,
+      ...(input.abortSignal !== undefined ? { abortSignal: input.abortSignal } : {}),
+    }, buildSpecificationPrompt);
+
+  return {
+    deps: {
+      discussion,
+      delivery: deliveryWiring.deps,
+      specify,
+      now: () => new Date(),
+    },
+    inheritedMcpPolicy: deliveryWiring.inheritedMcpPolicy,
   };
 }

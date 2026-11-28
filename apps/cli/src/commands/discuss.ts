@@ -2,8 +2,10 @@ import path from "node:path";
 import { homedir } from "node:os";
 import {
   approveDiscussion,
+  continueDiscussToPrAfterApproval,
   createLiveLogRenderer,
   DEFAULT_DISCUSSION_LIMITS,
+  hasDiscussToPrContinuation,
   rejectDiscussion,
   runDiscussionWorkflow,
   type DiscussionConclusion,
@@ -16,6 +18,7 @@ import {
   type RunState,
   type RunStore,
   type WorkflowEvent,
+  runConsultation,
 } from "@meguribi/core";
 import {
   FileSystemDiscussionStore,
@@ -28,7 +31,9 @@ import {
 import { parseIssueTarget } from "../target.js";
 import {
   createDiscussionDependencies,
+  createDiscussToPrDependencies,
   type CreateDiscussionDepsOptions,
+  type CreateDiscussToPrDepsOptions,
   type DiscussionWiringDependencies,
 } from "../wiring/create-delivery-deps.js";
 
@@ -40,6 +45,74 @@ export interface DiscussCommandOptions {
   log?: string;
   json?: boolean;
   nonInteractive?: boolean;
+  /** Run ごとの参加者上書き（カンマ区切りのプロファイル ID）。永続設定は変更しない。 */
+  discussants?: string;
+  /** Run ごとの summarizer 上書き（プロファイル ID）。 */
+  summarizer?: string;
+  /** Issue を持たない read-only 相談のトピック。target 省略時は必須。 */
+  prompt?: string;
+}
+
+/**
+ * Run ごとの参加者上書き。redo 時に同じメンバーでやり直すため、
+ * RunStore に `discussion-participants.json` として保存する。
+ */
+export interface ParticipantOverride {
+  discussants?: readonly string[];
+  summarizer?: string;
+}
+
+export function parseParticipantOverride(options: DiscussCommandOptions): ParticipantOverride {
+  const override: { discussants?: string[]; summarizer?: string } = {};
+  if (options.discussants !== undefined) {
+    // サーバー（Command Desk）と同じ検証: 重複を除いた 2〜4 件のプロファイル。
+    // 件数・ACP transport・既知プロファイルの検証は配線側で共通に行われる。
+    override.discussants = [
+      ...new Set(
+        options.discussants
+          .split(",")
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0),
+      ),
+    ];
+  }
+  if (options.summarizer !== undefined) {
+    override.summarizer = options.summarizer;
+  }
+  return override;
+}
+
+const PARTICIPANT_OVERRIDE_ARTIFACT = "discussion-participants.json";
+
+export async function saveParticipantOverride(
+  runStore: RunStore,
+  runId: string,
+  override: ParticipantOverride,
+): Promise<void> {
+  if (override.discussants === undefined && override.summarizer === undefined) {
+    return;
+  }
+  await runStore.saveArtifact(runId, PARTICIPANT_OVERRIDE_ARTIFACT, {
+    ...(override.discussants !== undefined ? { discussants: [...override.discussants] } : {}),
+    ...(override.summarizer !== undefined ? { summarizer: override.summarizer } : {}),
+  });
+}
+
+async function readParticipantOverride(
+  runStore: RunStore,
+  runId: string,
+): Promise<ParticipantOverride> {
+  const value = await runStore.readArtifact<{
+    discussants?: readonly string[];
+    summarizer?: string;
+  }>(runId, PARTICIPANT_OVERRIDE_ARTIFACT);
+  if (value === null) {
+    return {};
+  }
+  return {
+    ...(Array.isArray(value.discussants) ? { discussants: value.discussants } : {}),
+    ...(typeof value.summarizer === "string" ? { summarizer: value.summarizer } : {}),
+  };
 }
 
 export interface ApproveCommandOptions {
@@ -71,6 +144,10 @@ export interface DiscussionCommandDeps {
   createDependencies?: (
     options: CreateDiscussionDepsOptions,
   ) => Promise<DiscussionWiringDependencies>;
+  createDiscussToPrDeps?: (
+    options: CreateDiscussToPrDepsOptions,
+  ) => ReturnType<typeof createDiscussToPrDependencies>;
+  continueWorkflow?: typeof continueDiscussToPrAfterApproval;
   runStore?: RunStore;
   createStore?: (runId: string) => DiscussionInboxStore;
   resolveApprover?: (input: { worktreePath: string }) => Promise<string | undefined>;
@@ -163,6 +240,63 @@ function defaultCreateStore(runStore: RunStore): (runId: string) => DiscussionIn
       return new FileSystemDiscussionStore({ runStore, runId });
     }
     throw new Error("createStore must be injected when runStore is not a FileSystemRunStore");
+  };
+}
+
+/**
+ * 相談 Run の repository / remoteIdentity を git origin から引く。
+ * remote が無い・解読できない場合は local: パス形式にフォールバックする。
+ */
+async function resolveConsultationIdentity(
+  repositoryPath: string,
+): Promise<{ repository: string; remoteIdentity: string }> {
+  // remote が無い場合のフォールバック。repository は owner/repo 形状が必須のため
+  // local/<basename> とし、remoteIdentity は adapters 倣いの local:<path> 形式。
+  const fallback = {
+    repository: `local/${path.basename(path.resolve(repositoryPath))}`,
+    remoteIdentity: `local:${path.resolve(repositoryPath)}`,
+  };
+  const runner = new ProcessGitCommandRunner();
+  let remote: string;
+  try {
+    const result = await runner.run(["remote", "get-url", "origin"], repositoryPath);
+    if (result.exitCode !== 0) return fallback;
+    remote = result.stdout.trim();
+    if (remote.length === 0) return fallback;
+  } catch {
+    return fallback;
+  }
+  const normalized = normalizeRemoteUrl(remote);
+  if (normalized === undefined) return fallback;
+  return { repository: normalized.repository, remoteIdentity: normalized.remoteIdentity };
+}
+
+/** https/ssh の git URL から host/owner/repo と owner/repo を引く。 */
+function normalizeRemoteUrl(
+  value: string,
+): { repository: string; remoteIdentity: string } | undefined {
+  let host: string;
+  let pathname: string;
+  const ssh = /^(?:ssh:\/\/)?git@([^:/]+)[:/](.+)$/.exec(value);
+  if (ssh !== null) {
+    host = ssh[1]!;
+    pathname = ssh[2]!;
+  } else {
+    try {
+      const url = new URL(value);
+      host = url.hostname;
+      pathname = url.pathname.replace(/^\//, "");
+    } catch {
+      return undefined;
+    }
+  }
+  const cleaned = pathname.replace(/\.git$/, "").replace(/\/+$/, "");
+  const segments = cleaned.split("/").filter((part) => part.length > 0);
+  if (segments.length < 2) return undefined;
+  const repository = `${segments[segments.length - 2]!}/${segments[segments.length - 1]!}`;
+  return {
+    repository,
+    remoteIdentity: `${host.toLowerCase()}/${cleaned}`.toLowerCase(),
   };
 }
 
@@ -402,11 +536,126 @@ function successStatus(status: RunState["status"]): boolean {
   return status === "awaiting_human" || status === "completed";
 }
 
+/**
+ * Issue を持たない prompt 単独の read-only 相談を実行する。
+ * GitHub Issue・ラベル・承認記録・delivery 継続設定を一切作らず、
+ * 結論の保存だけを行う。実装・PR へ進む経路は存在しない。
+ */
+async function runConsultationCommand(
+  options: DiscussCommandOptions,
+  deps: DiscussionCommandDeps,
+): Promise<{ exitCode: number }> {
+  const topic = options.prompt?.trim() ?? "";
+  if (topic.length === 0) {
+    err(deps, "target を省略した相談には --prompt が必要です\n");
+    return { exitCode: 1 };
+  }
+  const mode = parseLogMode(options.log);
+  const maxTurns = parseMaxTurns(options.maxTurns);
+  const cwd = deps.cwd ?? process.cwd();
+  const repositoryPath = options.repoPath ?? cwd;
+  const nonInteractive = options.nonInteractive ?? false;
+
+  const renderer =
+    mode === "none" || options.json === true
+      ? undefined
+      : createRenderer((text) => err(deps, text), { mode, color: liveLogColor() });
+
+  const participantOverride = parseParticipantOverride(options);
+  const wiring = await resolveWiring(deps, {
+    cwd,
+    repositoryPath,
+    nonInteractive,
+    localOnly: options.local,
+    ...(participantOverride.discussants !== undefined
+      ? { discussants: participantOverride.discussants }
+      : {}),
+    ...(participantOverride.summarizer !== undefined
+      ? { summarizer: participantOverride.summarizer }
+      : {}),
+  });
+
+  // D 確定契約: command "consult"、issueNumber/branch/baseRef/baseSha/headSha は null。
+  // GitHub 上の Issue やブランチ・worktree は一切作らない。
+  const identity = await resolveConsultationIdentity(repositoryPath);
+  const state = await wiring.runStore.create({
+    repository: identity.repository,
+    command: "consult",
+    consultation: {
+      worktreePath: repositoryPath,
+      remoteIdentity: identity.remoteIdentity,
+    },
+    maxFixAttempts: 0,
+  });
+
+  const pipeline = createEventPipeline({
+    runStore: wiring.runStore,
+    stderr: (text) => err(deps, text),
+    ...(renderer === undefined ? {} : { renderer }),
+  });
+  pipeline.captureRunId(state.runId);
+  // サーバー開始プロトコル: Run 作成直後に永続 Run ID を stdout へ早期報告する。
+  // --json では stdout を純 JSON に保つため出力しない。
+  if (options.json !== true) {
+    out(deps, `Run ID: ${state.runId}\n`);
+  }
+
+  const artifactRoot = path.join(localDataRoot(), "consultations", state.runId);
+  const store = wiring.createStore(state.runId);
+  try {
+    const result = await runConsultation({
+      runId: state.runId,
+      cwd: repositoryPath,
+      artifactRoot,
+      topic,
+      ...(options.request !== undefined ? { userRequest: options.request } : {}),
+      limits: {
+        ...DEFAULT_DISCUSSION_LIMITS,
+        ...(maxTurns !== undefined ? { maxTurns } : {}),
+      },
+      store,
+      onEvent: pipeline.onWorkflowEvent,
+      ...(deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {}),
+    }, {
+      discussants: wiring.discussants,
+      summarizer: wiring.summarizer,
+      parseEnvelope: wiring.parseEnvelope,
+      summarize: wiring.summarize,
+      now: deps.now ?? (() => new Date()),
+    });
+
+    await wiring.runStore.update(state.runId, { status: "completed" });
+    await saveParticipantOverride(wiring.runStore, state.runId, participantOverride).catch(() => undefined);
+    renderer?.flush();
+    await pipeline.flush();
+
+    if (options.json === true) {
+      out(deps, `${JSON.stringify({ runId: state.runId, status: "completed", conclusion: result.conclusion }, null, 2)}\n`);
+    } else {
+      out(deps, formatConclusion(result.conclusion));
+      out(deps, `相談は完了しました: ${state.runId}\n`);
+    }
+    return { exitCode: 0 };
+  } catch (error) {
+    await wiring.runStore.update(state.runId, { status: "failed" }).catch(() => undefined);
+    renderer?.flush();
+    await pipeline.flush().catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function runDiscussCommand(
-  target: string,
+  target: string | undefined,
   options: DiscussCommandOptions,
   deps: DiscussionCommandDeps = {},
 ): Promise<{ exitCode: number }> {
+  if (target === undefined) {
+    return runConsultationCommand(options, deps);
+  }
+  if (options.prompt !== undefined) {
+    err(deps, "--prompt は target 省略時だけ指定してください。Issue への追記は --request を使います\n");
+    return { exitCode: 1 };
+  }
   const mode = parseLogMode(options.log);
   const maxTurns = parseMaxTurns(options.maxTurns);
   const parsed = parseIssueTarget(target);
@@ -419,12 +668,19 @@ export async function runDiscussCommand(
       ? undefined
       : createRenderer((text) => err(deps, text), { mode, color: liveLogColor() });
 
+  const participantOverride = parseParticipantOverride(options);
   const wiring = await resolveWiring(deps, {
     cwd,
     repositoryPath,
     repository: parsed.repository,
     nonInteractive,
     localOnly: options.local,
+    ...(participantOverride.discussants !== undefined
+      ? { discussants: participantOverride.discussants }
+      : {}),
+    ...(participantOverride.summarizer !== undefined
+      ? { summarizer: participantOverride.summarizer }
+      : {}),
   });
   const runWorkflow = deps.runWorkflow ?? runDiscussionWorkflow;
 
@@ -433,6 +689,7 @@ export async function runDiscussCommand(
     stderr: (text) => err(deps, text),
     ...(renderer === undefined ? {} : { renderer }),
   });
+  let runIdReported = false;
 
   const input: RunDiscussionWorkflowInput = {
     repository: parsed.repository,
@@ -457,12 +714,20 @@ export async function runDiscussCommand(
     ...wiring,
     onWorkflowEvent: pipeline.onWorkflowEvent,
     onStateChange: (state) => {
+      // サーバー開始プロトコル: Run 作成直後に永続 Run ID を stdout へ早期報告する。
+      // --json では stdout を純 JSON に保つため出力しない。
+      if (!runIdReported && options.json !== true) {
+        runIdReported = true;
+        out(deps, `Run ID: ${state.runId}\n`);
+      }
       pipeline.captureRunId(state.runId);
     },
     now: deps.now ?? (() => new Date()),
   };
 
   const result: DiscussionWorkflowResult = await runWorkflow(input, workflowDeps);
+  // 参加者 override は redo で同じメンバーを復元するため Run に保存する。
+  await saveParticipantOverride(wiring.runStore, result.runId, participantOverride).catch(() => undefined);
   // state change が一度も無くても、結果の runId で buffer を flush できるようにする。
   pipeline.captureRunId(result.runId);
   renderer?.flush();
@@ -506,7 +771,7 @@ export async function runSayCommand(
     err(deps, `Run が見つかりません: ${runId}\n`);
     return { exitCode: 1 };
   }
-  if (state.command !== "discuss") {
+  if (state.command !== "discuss" && state.command !== "consult") {
     err(deps, `Run ${runId} は議論の Run ではありません (command: ${state.command})\n`);
     return { exitCode: 1 };
   }
@@ -546,19 +811,77 @@ export async function runApproveCommand(
     err(deps, resolved.error);
     return { exitCode: 1 };
   }
-  const result = await approve(
-    {
-      runId,
-      approver: resolved.approver,
-      ...(options.comment !== undefined ? { comment: options.comment } : {}),
-    },
-    approvalDeps(runStore, deps),
-  );
-  if (result.status === "completed") {
+
+  // discuss-to-pr の Run かどうかで分岐する。
+  // 対象なら承認記録のあと、そのプロセスで specify 以降の継続実行へ進む（設計書 §6.5）。
+  const isDiscussToPr = await hasDiscussToPrContinuation(runStore, runId);
+  const existingApproval = isDiscussToPr
+    ? await runStore.readArtifact(runId, "approval.json")
+    : null;
+
+  if (existingApproval === null) {
+    const result = await approve(
+      {
+        runId,
+        approver: resolved.approver,
+        ...(options.comment !== undefined ? { comment: options.comment } : {}),
+      },
+      approvalDeps(runStore, deps),
+    );
+    if (result.status !== "completed") {
+      err(deps, `承認できませんでした (status: ${result.status})\n`);
+      for (const reason of result.reasons) {
+        err(deps, `- ${reason}\n`);
+      }
+      return { exitCode: 1 };
+    }
     out(deps, `Run ${runId} の結論を承認しました\n`);
+  } else {
+    // 継続が途中失敗したあとの再入口: 承認は記録済みなので二重記録せず継続だけ行う。
+    out(deps, `Run ${runId} の承認は記録済みです。継続を再開します\n`);
+  }
+
+  if (!isDiscussToPr) {
     return { exitCode: 0 };
   }
-  err(deps, `承認できませんでした (status: ${result.status})\n`);
+
+  return continueDiscussToPrRun(runId, runStore, deps);
+}
+
+/**
+ * discuss-to-pr Run の継続実行。
+ * wiring は caller の cwd ではなく保存済み discussion-input.json の値で復元する
+ * （別 cwd から approve しても同じ依存ができる）。
+ */
+async function continueDiscussToPrRun(
+  runId: string,
+  runStore: RunStore,
+  deps: DiscussionCommandDeps,
+): Promise<{ exitCode: number }> {
+  const cwd = deps.cwd ?? process.cwd();
+  const persisted = await readPersistedDiscussionInput(runStore, runId);
+  const repositoryPath = persisted?.repositoryPath ?? cwd;
+  const create = deps.createDiscussToPrDeps ?? createDiscussToPrDependencies;
+  const wiring = await create({
+    cwd,
+    repositoryPath,
+    localOnly: persisted === null ? undefined : persisted.baseRef === "HEAD",
+    nonInteractive: persisted?.nonInteractive ?? false,
+  });
+  const continueWorkflow = deps.continueWorkflow ?? continueDiscussToPrAfterApproval;
+  const result = await continueWorkflow(
+    {
+      runId,
+      ...(deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {}),
+    },
+    wiring.deps,
+  );
+  if (result.published) {
+    const pr = result.pullRequestNumber !== undefined ? ` (Draft PR: #${String(result.pullRequestNumber)})` : "";
+    out(deps, `specify 以降が完了し、公開まで進みました${pr}\n`);
+    return { exitCode: 0 };
+  }
+  err(deps, `継続は ${result.status} で終了しました。復旧後に meguribi approve ${runId} で再開できます\n`);
   for (const reason of result.reasons) {
     err(deps, `- ${reason}\n`);
   }
@@ -596,12 +919,16 @@ export async function runRejectCommand(
     const cwd = deps.cwd ?? process.cwd();
     const persisted = await readPersistedDiscussionInput(runStore, runId);
     const repositoryPath = options.repoPath ?? persisted?.repositoryPath ?? cwd;
+    // redo は同じ参加者・要約でやり直す。override は永続設定ではなく Run に保存したものを使う。
+    const participants = await readParticipantOverride(runStore, runId);
     const wiring = await resolveWiring(deps, {
       cwd,
       repositoryPath,
       // baseRef が HEAD になるのは --local で開始された議論だけ。
       localOnly: persisted === null ? undefined : persisted.baseRef === "HEAD",
       nonInteractive: persisted?.nonInteractive ?? false,
+      ...(participants.discussants !== undefined ? { discussants: participants.discussants } : {}),
+      ...(participants.summarizer !== undefined ? { summarizer: participants.summarizer } : {}),
     });
     renderer = createRenderer((text) => err(deps, text), {
       mode: "stream",

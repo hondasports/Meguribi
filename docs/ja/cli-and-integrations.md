@@ -33,9 +33,15 @@ meguribi desk --port 4199
 
 `meguribi desk` は Meguribi リポジトリのルートで `pnpm --filter @meguribi/web dev` を引数配列として起動し、表示された URL（既定は `http://127.0.0.1:4173`）を開いて使います。子プロセスの終了コードはそのまま CLI の終了コードになります。
 
-`コマンド` タブでは、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。stdout / stderr は SSE で表示され、成果物は通常の RunStore に保存されます。
+初期画面の `相談` タブでは、大きな複数行入力に相談内容を書き、実設定から取得した参加エージェントを 2〜4 件選んで開始できます。Issue target は任意の補助入力です。候補と既定選択は `GET /api/discussion/profiles`、開始は `POST /api/discussions` を使います。Issue target を付けた通常開始でも、実装・push・Draft PR 作成へ自動では進みません。実装まで進める `discuss-to-pr` は、明示的に選択した workflow だけです。
 
-`Run` タブでは、RunStore に保存された最近の Run 一覧、delivery 工程のパイプライン、エージェントの活動状態と応答なし警告、エージェント別ライブログペイン、全体ログを読み取り専用で表示します。Command Desk から開始した Run だけでなく、CLI で実行した `meguribi run` / `resume` の Run も同じ RunStore を読むため表示されます。RunStore の場所は CLI と同じ規則で解決し、テスト用には `MEGURIBI_RUNS_ROOT` でルートを明示できます。
+開始後は同じ画面の先頭に、実際の相談内容、話者別の会話、追加入力が表示されます。大きな新規入力フォームは畳まれ、小さな `新しい相談` ボタンから入力画面へ戻れます。`相談へ戻る` で進行中の会話へ復帰できます。
+
+`既存操作` タブでは、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。`Run履歴` タブでは、RunStore に保存された最近の Run 一覧、delivery 工程、エージェントの活動状態、ライブログを表示します。
+
+Issue を持たない相談は `command: "consult"` の Run として `consultations/<runId>` に保存され、`issueNumber` / `branch` / `baseRef` / `baseSha` / `headSha` は `null` です。Issue に紐付く従来の議論 Run は `command: "discuss"` を維持します。`consult` / `discuss` の発言は `replyTo` に沿ったスレッドで表示し、話者ごとの色と話者名で区別します。形式不正のターンには目印を付け、結論に含まれる turn ID から該当ターンへスクロールできます。
+
+議論エンジンが動いている Run では、発言挿入欄から人間の発言を送れます。送信はサーバーが `meguribi say <runId> <message>` を引数配列で起動して行い、サーバー自身は `inbox/` を直接書き換えません。Issue に紐付く従来の `discuss` Run が `awaiting_human` のときは、画面内の確認表示から承認または却下・再議論を実行できます。`consult` は結論保存後に完了し、実装・PR 作成へは進みません。
 
 認証・リモート公開・マルチユーザー運用は提供しません。詳細は `apps/web/README.md` を参照してください。
 
@@ -790,3 +796,37 @@ git worktree remove
 - 想定外の dirty state がある
 
 安全側へ倒せない状況で推測して継続しません。
+
+## 12. discuss-to-pr ワークフロー
+
+組み込み `discuss-to-pr` ワークフローは、Issue の議論から仕様化、実装、検証、レビュー、Draft PR 作成までを1つの宣言的ワークフローとして実行します。工程は `discuss → approve → specify → plan → implement → verify → review → publish` で、検証失敗時は `fix-after-verify`、レビュー修正要求時は `fix-after-review` へ上限付きで遷移します。
+
+```bash
+meguribi workflow run discuss-to-pr owner/repo#123 \
+  --repo-path /path/to/repo \
+  --request "補足の相談内容"
+```
+
+主なオプションは `--local`、`--implementer <profile>`、`--allow-inherited-mcp`、`--non-interactive` です。実行可能な組み込みワークフローは現在 `discuss-to-pr` のみです。議論だけ行う場合は `meguribi discuss`、従来の delivery だけを行う場合は `meguribi run` を使います。
+
+第1フェーズでは、read-only の discussant が議論し、summarizer が結論を作ります。結論を自動承認せず、`--non-interactive` でも `awaiting_human` で停止します。継続に必要な設定は `discuss-to-pr.json` として Run 単位で保存され、承認待ち状態が外部から見える前に書き込まれます。
+
+```bash
+meguribi approve <runId>
+meguribi reject <runId> --reason "やり直したい点" [--redo]
+```
+
+`approve` は承認者、時刻、結論ハッシュを `approval.json` に記録します。`discuss-to-pr` の Run では承認後に同じコマンドが `specify` 以降へ進みます。継続が途中で失敗した場合も、承認を二重記録せず `meguribi approve <runId>` で再開できます。再開時は `steps/<stepId>.json` の未完工程を優先し、完了済み工程の outcome に従うため、完了後の再実行では implement や Draft PR 作成を繰り返しません。`reject` は実装へ進まず、`--redo` の場合だけ議論をやり直します。
+
+`specify` 工程では read-only の specifier が承認済み結論から `requirement.json` と `specification.json` を作ります。承認時の結論ハッシュと現在の結論が一致しない場合は停止します。受け入れ条件 seed に1対1で対応できない条件や、存在しない requirement への参照は推測で補わず、機械可読な受け入れ条件から外して `openQuestions` に記録します。
+
+主な RunStore 成果物は次のとおりです。
+
+- `discussion/transcript.jsonl`、`discussion/conclusion.json`
+- `approval.json`、`approval-history.json`
+- `discuss-to-pr.json`
+- `requirement.json`、`specification.json`
+- `plan.json`、`implementation-result.json`、`verification.json`、`review.json`
+- `steps/<stepId>.json`
+
+Draft PR 本文には `Closes #<issue>` に加えて、保存済み `specification.json` の `## 受け入れ条件`、対象範囲、範囲外、残課題が含まれます。implementer と reviewer は既定で別プロファイルにし、同一プロファイルは明示設定がある場合だけ許可されます。
