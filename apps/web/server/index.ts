@@ -16,6 +16,7 @@ import {
 } from "./discussion-actions.js";
 import { createRunStoreApi } from "./run-store-api.js";
 import { createDiscussionStartApi } from "./discussion-start.js";
+import { createDiscussionIssuesApi } from "./discussion-issues.js";
 
 interface RunRecord {
   id: string;
@@ -197,6 +198,7 @@ async function createAppServer(): Promise<http.Server> {
     runStore,
     cli: { run: runMeguribiCli },
   });
+  const discussionIssuesApi = createDiscussionIssuesApi({ repositoryPath: repositoryRoot });
   const discussionStartApi = createDiscussionStartApi({
     repositoryPath: repositoryRoot,
     startCli: (args) =>
@@ -209,6 +211,7 @@ async function createAppServer(): Promise<http.Server> {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api/health" && req.method === "GET") return json(res, 200, { ok: true });
+    if (await discussionIssuesApi.handle(req, res)) return;
     if (await discussionStartApi.handle(req, res)) return;
     if (await discussionActions.handle(req, res)) return;
     if (await runStoreApi.handle(req, res)) return;

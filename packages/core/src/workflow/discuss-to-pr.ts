@@ -7,7 +7,7 @@ import type {
   DeliveryResult,
   RunDeliveryInput,
 } from "../delivery.js";
-import type { RunStore } from "../delivery.js";
+import type { RunStatus, RunStore } from "../delivery.js";
 import { requireIssueRunState } from "../delivery.js";
 import { runWorkflow } from "../workflow-engine/engine.js";
 import { createRunStoreStepStateStore } from "../workflow-engine/run-store-step-state.js";
@@ -65,6 +65,7 @@ export interface DiscussToPrDependencies {
 
 const CONTINUATION_ARTIFACT = "discuss-to-pr.json";
 const DISCUSSION_INPUT_ARTIFACT = "discussion-input.json";
+const PUBLISH_OUTCOME_ARTIFACT = "publish-outcome.json";
 
 interface PersistedDiscussionInput {
   repositoryPath: string;
@@ -100,6 +101,127 @@ function continuationConfig(input: RunDiscussToPrInput): DiscussToPrContinuation
     ...(input.noPush !== undefined ? { noPush: input.noPush } : {}),
     ...(input.noPr !== undefined ? { noPr: input.noPr } : {}),
   };
+}
+
+interface PublishOutcomeArtifact {
+  schemaVersion: 1;
+  artifactType: "publish-outcome";
+  outcome: "in_progress" | "published" | "unpublished_retryable" | "unpublished_terminal";
+  published: boolean;
+  retryable: boolean;
+  status: RunStatus;
+  pullRequestNumber: number | null;
+  reasons: string[];
+  visit: number;
+  recordedAt: string;
+}
+
+function isPublishOutcomeArtifact(value: unknown): value is PublishOutcomeArtifact {
+  if (!value || typeof value !== "object") return false;
+  const artifact = value as Partial<PublishOutcomeArtifact>;
+  return (
+    artifact.schemaVersion === 1 &&
+    artifact.artifactType === "publish-outcome" &&
+    (artifact.outcome === "in_progress" ||
+      artifact.outcome === "published" ||
+      artifact.outcome === "unpublished_retryable" ||
+      artifact.outcome === "unpublished_terminal") &&
+    typeof artifact.published === "boolean" &&
+    typeof artifact.retryable === "boolean" &&
+    typeof artifact.status === "string" &&
+    (artifact.pullRequestNumber === null || typeof artifact.pullRequestNumber === "number") &&
+    Array.isArray(artifact.reasons) &&
+    artifact.reasons.every((reason) => typeof reason === "string") &&
+    typeof artifact.visit === "number" &&
+    typeof artifact.recordedAt === "string"
+  );
+}
+
+function inProgressPublishOutcome(input: {
+  state: { status: RunStatus; pullRequestNumber: number | null };
+  visit: number;
+  recordedAt: string;
+}): PublishOutcomeArtifact {
+  return {
+    schemaVersion: 1,
+    artifactType: "publish-outcome",
+    outcome: "in_progress",
+    published: false,
+    retryable: false,
+    status: input.state.status,
+    pullRequestNumber: input.state.pullRequestNumber,
+    reasons: ["publish started; final outcome unknown"],
+    visit: input.visit,
+    recordedAt: input.recordedAt,
+  };
+}
+
+function classifyPublishOutcome(input: {
+  result: DeliveryResult;
+  noPr: boolean;
+  visit: number;
+  recordedAt: string;
+}): PublishOutcomeArtifact {
+  const pullRequestNumber = input.result.pullRequestNumber ?? null;
+  if (input.result.published && input.noPr) {
+    const reason = "pull request creation disabled by noPr";
+    return {
+      schemaVersion: 1,
+      artifactType: "publish-outcome",
+      outcome: "unpublished_terminal",
+      published: false,
+      retryable: false,
+      status: input.result.status,
+      pullRequestNumber,
+      reasons: input.result.reasons.includes(reason)
+        ? [...input.result.reasons]
+        : [...input.result.reasons, reason],
+      visit: input.visit,
+      recordedAt: input.recordedAt,
+    };
+  }
+  if (input.result.published) {
+    return {
+      schemaVersion: 1,
+      artifactType: "publish-outcome",
+      outcome: "published",
+      published: true,
+      retryable: false,
+      status: input.result.status,
+      pullRequestNumber,
+      reasons: [...input.result.reasons],
+      visit: input.visit,
+      recordedAt: input.recordedAt,
+    };
+  }
+  const retryable = input.result.status === "blocked" || input.result.status === "cancelled";
+  return {
+    schemaVersion: 1,
+    artifactType: "publish-outcome",
+    outcome: retryable ? "unpublished_retryable" : "unpublished_terminal",
+    published: false,
+    retryable,
+    status: input.result.status,
+    pullRequestNumber,
+    reasons: [...input.result.reasons],
+    visit: input.visit,
+    recordedAt: input.recordedAt,
+  };
+}
+
+async function readPublishOutcome(
+  runStore: RunStore,
+  runId: string,
+): Promise<PublishOutcomeArtifact | null> {
+  const value = await runStore.readArtifact<unknown>(runId, PUBLISH_OUTCOME_ARTIFACT);
+  if (value === null) return null;
+  if (!isPublishOutcomeArtifact(value)) {
+    throw new DiscussToPrContinuationError(
+      "missing_artifact",
+      "publish-outcome.json が不正です。Run を壊さないよう継続を停止します",
+    );
+  }
+  return value;
 }
 
 export async function runDiscussToPr(
@@ -217,7 +339,7 @@ export class DiscussToPrContinuationError extends Error {
  * - 排他: Run のロックを取得し、並行 approve / 復帰の二重実行を防ぐ
  * - 常時検証: 再開位置に関わらず、承認ハッシュと現在の結論を照合する
  * - 復元: 永続済みの仕様・plan・implementation 等を context に再読み込みする
- * - 冪等: 全工程完了済みなら何も実行せず現在の状態を返す（二重実装・二重 PR 防止）
+ * - 冪等: 公開済みなら何も実行せず現在の状態を返し、未公開 stop だけを結果に応じて扱う
  */
 export async function continueDiscussToPrAfterApproval(
   input: { runId: string; abortSignal?: AbortSignal },
@@ -316,18 +438,48 @@ export async function continueDiscussToPrAfterApproval(
 
     const issue = await deliveryDeps.github.getIssue(lockedState.repository, lockedState.issueNumber);
     const definition = createDiscussToPrWorkflow(config.maxFixAttempts);
-    const startAt = await findContinuationStartStep(runStore, runId, definition);
-
-    if (startAt === null) {
-      // 全工程が完了済み: 再実行せず現在の状態を返す（二重 PR 防止の要）
+    const recordedStartAt = await findContinuationStartStep(runStore, runId, definition);
+    const publishStepRecord = await runStore.readArtifact<StepStateSnapshot>(runId, "steps/publish.json");
+    const publishOutcome = await readPublishOutcome(runStore, runId);
+    if (recordedStartAt === "publish" && publishStepRecord !== null) {
       const latest = await runStore.load(runId);
       return {
         runId,
-        status: latest?.status ?? "completed",
-        published: true,
-        pullRequestNumber: latest?.pullRequestNumber,
-        reasons: ["discuss-to-pr run already completed; nothing re-executed"],
+        status: latest?.status ?? publishOutcome?.status ?? "failed",
+        published: false,
+        pullRequestNumber: latest?.pullRequestNumber ?? publishOutcome?.pullRequestNumber ?? null,
+        reasons: [
+          "publish was interrupted after it may have started side effects; manual inspection required before retry",
+        ],
       };
+    }
+    let startAt = recordedStartAt;
+
+    if (startAt === null) {
+      const latest = await runStore.load(runId);
+      if (publishOutcome?.outcome === "published") {
+        return {
+          runId,
+          status: latest?.status ?? publishOutcome.status,
+          published: true,
+          pullRequestNumber: latest?.pullRequestNumber ?? publishOutcome.pullRequestNumber,
+          reasons: ["discuss-to-pr run already published; nothing re-executed"],
+        };
+      }
+      if (publishOutcome?.outcome === "unpublished_retryable") {
+        startAt = "publish";
+      } else {
+        const reasons = publishOutcome?.reasons ?? [
+          "publish completed without a trustworthy publish outcome artifact",
+        ];
+        return {
+          runId,
+          status: latest?.status ?? publishOutcome?.status ?? "blocked",
+          published: false,
+          pullRequestNumber: latest?.pullRequestNumber ?? publishOutcome?.pullRequestNumber ?? null,
+          reasons: [...reasons, "publish is terminal or unsafe to retry; nothing re-executed"],
+        };
+      }
     }
 
     const preflight = deliveryDeps.assertImplementerReady ?? deliveryDeps.assertDevinReady;
@@ -402,12 +554,48 @@ export async function continueDiscussToPrAfterApproval(
     };
 
     const deliveryHandlers = createDeliveryStepHandlers();
+    const basePublishHandler = deliveryHandlers.publish;
+    if (basePublishHandler === undefined) {
+      throw new Error("publish step handler is not registered");
+    }
+    const publishHandler: NonNullable<typeof deliveryHandlers.publish> = async (handlerContext) => {
+      await runStore.saveArtifact(
+        runId,
+        PUBLISH_OUTCOME_ARTIFACT,
+        inProgressPublishOutcome({
+          state: handlerContext.context.state,
+          visit: handlerContext.visit,
+          recordedAt: nowIso(deps.now),
+        }),
+      );
+      const outcome = await basePublishHandler(handlerContext);
+      if (outcome.type !== "stop") {
+        return outcome;
+      }
+      const publishOutcome = classifyPublishOutcome({
+        result: outcome.result,
+        noPr: deliveryInput.noPr === true,
+        visit: handlerContext.visit,
+        recordedAt: nowIso(deps.now),
+      });
+      await runStore.saveArtifact(runId, PUBLISH_OUTCOME_ARTIFACT, publishOutcome);
+      return {
+        type: "stop",
+        result: {
+          ...outcome.result,
+          published: publishOutcome.published,
+          pullRequestNumber: publishOutcome.pullRequestNumber,
+          reasons: publishOutcome.reasons,
+        },
+      };
+    };
     try {
       const workflowResult = await runWorkflow<DeliveryRunContext, DeliveryResult>({
         runId,
         definition,
         handlers: {
           ...deliveryHandlers,
+          publish: publishHandler,
           specify: specifyHandler,
         },
         context,

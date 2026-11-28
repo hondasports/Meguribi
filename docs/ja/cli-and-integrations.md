@@ -818,6 +818,8 @@ meguribi reject <runId> --reason "やり直したい点" [--redo]
 
 `approve` は承認者、時刻、結論ハッシュを `approval.json` に記録します。`discuss-to-pr` の Run では承認後に同じコマンドが `specify` 以降へ進みます。継続が途中で失敗した場合も、承認を二重記録せず `meguribi approve <runId>` で再開できます。再開時は `steps/<stepId>.json` の未完工程を優先し、完了済み工程の outcome に従うため、完了後の再実行では implement や Draft PR 作成を繰り返しません。`reject` は実装へ進まず、`--redo` の場合だけ議論をやり直します。
 
+`publish` 工程は step の完了とは別に、実際の公開結果を `publish-outcome.json` へ保存します。Draft PR 作成まで完了した場合だけ `published` です。policy block や publish 副作用前の cancel は `unpublished_retryable` なので、条件修正後の再開では publish だけを retry します。`noPr` で PR を作らない完了は `unpublished_terminal` として retry しません。push や PR 作成などの副作用途中で失敗した可能性がある publish は自動 retry せず、人手で worktree・remote・PR を確認してください。
+
 `specify` 工程では read-only の specifier が承認済み結論から `requirement.json` と `specification.json` を作ります。承認時の結論ハッシュと現在の結論が一致しない場合は停止します。受け入れ条件 seed に1対1で対応できない条件や、存在しない requirement への参照は推測で補わず、機械可読な受け入れ条件から外して `openQuestions` に記録します。
 
 主な RunStore 成果物は次のとおりです。
@@ -828,5 +830,6 @@ meguribi reject <runId> --reason "やり直したい点" [--redo]
 - `requirement.json`、`specification.json`
 - `plan.json`、`implementation-result.json`、`verification.json`、`review.json`
 - `steps/<stepId>.json`
+- `publish-outcome.json`
 
 Draft PR 本文には `Closes #<issue>` に加えて、保存済み `specification.json` の `## 受け入れ条件`、対象範囲、範囲外、残課題が含まれます。implementer と reviewer は既定で別プロファイルにし、同一プロファイルは明示設定がある場合だけ許可されます。

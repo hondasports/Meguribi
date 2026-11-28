@@ -19,6 +19,7 @@ import {
   type RunStore,
   type WorkflowEvent,
   runConsultation,
+  type ApprovalRecord,
 } from "@meguribi/core";
 import {
   FileSystemDiscussionStore,
@@ -787,6 +788,29 @@ export async function runSayCommand(
   return { exitCode: 0 };
 }
 
+/**
+ * 継続再試行で再利用できるのは「現在の結論への有効な承認」だけ。
+ * decision が approved で、conclusionHash が現在の結論ハッシュと一致する場合に限る。
+ * rejected レコードや、承認後に結論が変わった（redo 後の新結論を含む）レコードは
+ * 再利用せず、人間の明示的な新規承認を必ず記録する。
+ */
+async function isReusableApproval(
+  runStore: RunStore,
+  deps: DiscussionCommandDeps,
+  runId: string,
+  approval: ApprovalRecord | null,
+): Promise<boolean> {
+  if (approval === null || approval.decision !== "approved") {
+    return false;
+  }
+  const store = (deps.createStore ?? defaultCreateStore(runStore))(runId);
+  const conclusion = await store.readConclusion();
+  if (conclusion === null) {
+    return false;
+  }
+  return hashConclusion(conclusion) === approval.conclusionHash;
+}
+
 function approvalDeps(
   runStore: RunStore,
   deps: DiscussionCommandDeps,
@@ -816,10 +840,15 @@ export async function runApproveCommand(
   // 対象なら承認記録のあと、そのプロセスで specify 以降の継続実行へ進む（設計書 §6.5）。
   const isDiscussToPr = await hasDiscussToPrContinuation(runStore, runId);
   const existingApproval = isDiscussToPr
-    ? await runStore.readArtifact(runId, "approval.json")
+    ? await runStore.readArtifact<ApprovalRecord>(runId, "approval.json")
     : null;
+  // rejected レコードやハッシュの合わないレコードでは承認をスキップしない。
+  // スキップできるのは現在の結論への有効な承認が既にある場合だけ。
+  const reusable = isDiscussToPr
+    ? await isReusableApproval(runStore, deps, runId, existingApproval)
+    : false;
 
-  if (existingApproval === null) {
+  if (!reusable) {
     const result = await approve(
       {
         runId,
@@ -837,7 +866,8 @@ export async function runApproveCommand(
     }
     out(deps, `Run ${runId} の結論を承認しました\n`);
   } else {
-    // 継続が途中失敗したあとの再入口: 承認は記録済みなので二重記録せず継続だけ行う。
+    // 継続が途中失敗したあとの再入口: 現在の結論への有効な承認は記録済みなので
+    // 二重記録せず継続だけ行う。ハッシュの書き換えは行わない。
     out(deps, `Run ${runId} の承認は記録済みです。継続を再開します\n`);
   }
 

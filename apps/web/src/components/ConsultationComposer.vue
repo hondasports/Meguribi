@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { DiscussionProfile, StartDiscussionInput } from "../consultation-api.js";
+import type {
+  DiscussionIssue,
+  DiscussionIssuesResponse,
+  DiscussionProfile,
+  StartDiscussionInput,
+} from "../consultation-api.js";
 import { validateConsultationInput } from "../consultation-api.js";
 import { MAX_CONSULTATION_PROMPT_LENGTH } from "../consultation-contract.js";
 
@@ -11,6 +16,7 @@ const props = defineProps<{
   starting: boolean;
   loadError: string | null;
   startError: string | null;
+  loadIssues: () => Promise<DiscussionIssuesResponse>;
 }>();
 
 const emit = defineEmits<{
@@ -19,6 +25,10 @@ const emit = defineEmits<{
 
 const prompt = ref("");
 const target = ref("");
+const issuePickerVisible = ref(false);
+const issues = ref<DiscussionIssue[]>([]);
+const issuesLoading = ref(false);
+const issuesError = ref<string | null>(null);
 const selectedIds = ref<string[]>([]);
 const validationError = ref<string | null>(null);
 let submitInFlight = false;
@@ -37,6 +47,32 @@ const disabledReason = computed(() => {
   if (props.starting) return "相談を開始しています";
   return validateConsultationInput({ prompt: prompt.value, profileIds: selectedIds.value });
 });
+
+function openIssuePicker(): void {
+  issuePickerVisible.value = true;
+  if (issuesLoading.value || issuesError.value !== null || issues.value.length > 0) return;
+  issuesLoading.value = true;
+  void props
+    .loadIssues()
+    .then((result) => {
+      issues.value = result.issues;
+    })
+    .catch((cause: unknown) => {
+      issuesError.value =
+        cause instanceof Error ? cause.message : "Issue一覧を読み込めませんでした";
+    })
+    .finally(() => {
+      issuesLoading.value = false;
+    });
+}
+
+function selectIssue(issueTarget: string): void {
+  target.value = issueTarget;
+}
+
+function clearIssue(): void {
+  target.value = "";
+}
 
 function toggle(id: string): void {
   selectedIds.value = selectedIds.value.includes(id)
@@ -102,15 +138,62 @@ watch(
       </div>
     </fieldset>
 
-    <label class="target-field">
-      Issue（任意）
-      <input
-        v-model="target"
-        type="text"
-        placeholder="owner/repo#123（空欄なら紐付けなし）"
+    <div class="issue-auxiliary">
+      <button
+        v-if="!issuePickerVisible"
+        class="secondary-link-button issue-add-button"
+        type="button"
         :disabled="starting"
-      />
-    </label>
+        @click="openIssuePicker"
+      >
+        Issueを追加（任意）
+      </button>
+      <section v-else class="issue-picker" aria-labelledby="issue-picker-title">
+        <div class="issue-picker-header">
+          <h2 id="issue-picker-title">Issue（任意）</h2>
+          <button
+            class="secondary-link-button"
+            type="button"
+            :disabled="starting || target.trim().length === 0"
+            @click="clearIssue"
+          >
+            紐付けを解除
+          </button>
+        </div>
+        <p v-if="issuesLoading" class="muted">Issue一覧を読み込んでいます…</p>
+        <p v-else-if="issuesError" class="issue-load-error" role="status">
+          Issue一覧を読み込めませんでした。手入力は使えます。
+        </p>
+        <fieldset v-if="issues.length > 0" class="issue-options">
+          <legend>既存Issue</legend>
+          <label v-for="issue in issues" :key="issue.target" class="issue-option">
+            <input
+              type="radio"
+              name="consultation-issue"
+              :checked="target === issue.target"
+              :disabled="starting"
+              @change="selectIssue(issue.target)"
+            />
+            <span>
+              <b>{{ issue.target }}</b>
+              <small>{{ issue.title }}</small>
+            </span>
+          </label>
+        </fieldset>
+        <p v-else-if="!issuesLoading && issuesError === null" class="muted">
+          選択できるIssueはありません
+        </p>
+        <label class="target-field manual-target-field">
+          別のIssueを手入力
+          <input
+            v-model="target"
+            type="text"
+            placeholder="owner/repo#123（空欄なら紐付けなし）"
+            :disabled="starting"
+          />
+        </label>
+      </section>
+    </div>
 
     <div class="consultation-actions">
       <button

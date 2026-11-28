@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMemoryRunStore } from "@meguribi/adapters";
+import { createMemoryRunStore, hashConclusion } from "@meguribi/adapters";
 import type {
   DiscussionConclusion,
   DiscussionDependencies,
@@ -587,9 +587,16 @@ describe("runApproveCommand (discuss-to-pr continuation)", () => {
     // 1回目: 承認は記録されるが継続が途中失敗する
     let calls = 0;
     let approveCalls = 0;
+    // 承認レコードは本番と同じく現在の結論の実ハッシュを持つ。
+    // 再利用判定はハッシュ一致を検証するため、store はその結論を返す必要がある。
+    const conclusion = conclusionFixture();
+    const conclusionStore = {
+      ...inboxStoreFake().createStore(state.runId),
+      readConclusion: async () => conclusion,
+    };
     const failing = discussDeps({
       runStore,
-      createStore: inboxStoreFake().createStore,
+      createStore: () => conclusionStore,
       resolveApprover: async () => "Test Approver",
       approveWorkflow: async (input) => {
         approveCalls += 1;
@@ -597,7 +604,7 @@ describe("runApproveCommand (discuss-to-pr continuation)", () => {
           decision: "approved",
           approver: "Test Approver",
           at: new Date().toISOString(),
-          conclusionHash: "hash",
+          conclusionHash: hashConclusion(conclusion),
         });
         return { runId: input.runId, status: "completed", reasons: [] };
       },
@@ -619,7 +626,7 @@ describe("runApproveCommand (discuss-to-pr continuation)", () => {
     // 2回目: 承認は二重記録せず継続だけを再開する
     const secondOut = discussDeps({
       runStore,
-      createStore: inboxStoreFake().createStore,
+      createStore: () => conclusionStore,
       resolveApprover: async () => "Test Approver",
       approveWorkflow: async () => {
         throw new Error("approval must not be recorded twice");

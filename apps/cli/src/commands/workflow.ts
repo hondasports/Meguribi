@@ -132,6 +132,7 @@ export interface WorkflowRunCommandOptions {
   implementer?: string;
   allowInheritedMcp?: boolean;
   maxFixAttempts?: number;
+  json?: boolean;
   /** Run ごとの参加者上書き（カンマ区切り）。永続設定は変更しない。 */
   discussants?: string;
   summarizer?: string;
@@ -244,13 +245,42 @@ export async function runWorkflowRunCommand(
     ...(deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {}),
   };
 
+  let reportedRunId: string | undefined;
+  const originalOnStateChange = wiring.deps.discussion.onStateChange;
+  const workflowDeps: typeof wiring.deps = {
+    ...wiring.deps,
+    discussion: {
+      ...wiring.deps.discussion,
+      onStateChange: async (state) => {
+        if (reportedRunId === undefined && options.json !== true) {
+          reportedRunId = state.runId;
+          stdout(`Run ID: ${state.runId}\n`);
+        }
+        await originalOnStateChange?.(state);
+      },
+    },
+  };
+
   const run = deps.runWorkflow ?? runDiscussToPr;
-  const result = await run(input, wiring.deps);
+  const result = await run(input, workflowDeps);
   // redo で同じ参加者を復元できるよう Run に保存する。
-  await saveParticipantOverride(wiring.deps.discussion.runStore, result.runId, participantOverride).catch(() => undefined);
+  await saveParticipantOverride(
+    wiring.deps.discussion.runStore,
+    result.runId,
+    participantOverride,
+  ).catch(() => undefined);
+
+  if (options.json === true) {
+    stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return {
+      exitCode: result.status === "awaiting_human" || result.status === "completed" ? 0 : 1,
+    };
+  }
 
   if (result.status === "awaiting_human") {
-    stdout(`Run ID: ${result.runId}\n`);
+    if (reportedRunId !== result.runId) {
+      stdout(`Run ID: ${result.runId}\n`);
+    }
     if (result.conclusion !== undefined) {
       stdout(`結論: ${result.conclusion.conclusion}\n`);
     }

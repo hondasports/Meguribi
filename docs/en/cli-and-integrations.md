@@ -809,6 +809,8 @@ meguribi reject <runId> --reason "what should be redone" [--redo]
 
 `approve` records the approver, timestamp, and conclusion hash in `approval.json`. For a `discuss-to-pr` Run, the same command then continues from `specify`. If continuation fails partway, running `meguribi approve <runId>` resumes it without recording approval twice. Resume prioritizes incomplete steps in `steps/<stepId>.json` and follows the outcome of completed steps, so invoking it after completion does not repeat implementation or Draft PR creation. `reject` never continues to implementation; `--redo` only restarts the discussion.
 
+The `publish` step persists its actual publication result in `publish-outcome.json`, separately from step completion. The outcome is `published` only when Draft PR creation has completed. A policy block or a cancellation before publish side effects is `unpublished_retryable`, so a later continuation retries only the publish step after the blocking condition is fixed. Completion with `noPr` is `unpublished_terminal` and is not retried. If publishing may have failed partway through push or PR creation, continuation does not retry it automatically; inspect the worktree, remote branch, and PR manually first.
+
 In the `specify` step, a read-only specifier creates `requirement.json` and `specification.json` from the approved conclusion. Execution stops if the current conclusion hash differs from the approved one. Acceptance criteria that cannot be mapped one-to-one to a seed, or references to nonexistent requirements, are not guessed: they are excluded from machine-readable acceptance criteria and recorded in `openQuestions`.
 
 The main RunStore artifacts are:
@@ -819,5 +821,6 @@ The main RunStore artifacts are:
 - `requirement.json`, `specification.json`
 - `plan.json`, `implementation-result.json`, `verification.json`, `review.json`
 - `steps/<stepId>.json`
+- `publish-outcome.json`
 
 The Draft PR body contains `Closes #<issue>` plus the persisted `specification.json` acceptance criteria, scope, out-of-scope items, and open questions. Implementer and reviewer use different profiles by default; the same profile is allowed only through explicit configuration.

@@ -10,6 +10,15 @@ export interface DiscussionProfilesResponse {
   defaultProfileIds: string[];
 }
 
+export interface DiscussionIssue {
+  target: string;
+  title: string;
+}
+
+export interface DiscussionIssuesResponse {
+  issues: DiscussionIssue[];
+}
+
 export interface StartDiscussionInput {
   prompt: string;
   profileIds: string[];
@@ -22,6 +31,7 @@ export interface StartDiscussionResult {
 
 export interface ConsultationApi {
   loadProfiles(): Promise<DiscussionProfilesResponse>;
+  loadIssues(): Promise<DiscussionIssuesResponse>;
   startDiscussion(input: StartDiscussionInput): Promise<StartDiscussionResult>;
 }
 
@@ -40,6 +50,11 @@ export function createConsultationApi(fetchImpl: FetchLike = fetch): Consultatio
       const result = await fetchImpl("/api/discussion/profiles");
       if (!result.ok) throw await readError(result);
       return (await result.json()) as DiscussionProfilesResponse;
+    },
+    async loadIssues() {
+      const result = await fetchImpl("/api/discussion/issues");
+      if (!result.ok) throw await readError(result);
+      return (await result.json()) as DiscussionIssuesResponse;
     },
     async startDiscussion(input) {
       const body: Record<string, unknown> = {

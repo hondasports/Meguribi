@@ -142,8 +142,11 @@ function createBundle(options: FakeDeliveryBundleOptions = {}) {
   return { deps, deliveryBundle, runStore, prBodies };
 }
 
-async function runToApproval(bundle: ReturnType<typeof createBundle>): Promise<string> {
-  const phase1 = await runDiscussToPr(baseInput(), bundle.deps);
+async function runToApproval(
+  bundle: ReturnType<typeof createBundle>,
+  inputOverrides: Partial<RunDiscussToPrInput> = {},
+): Promise<string> {
+  const phase1 = await runDiscussToPr(baseInput(inputOverrides), bundle.deps);
   expect(phase1.status).toBe("awaiting_human");
   await approveDiscussion(
     { runId: phase1.runId, approver: "fixture-approver" },
@@ -266,6 +269,171 @@ describe("discuss-to-pr fixtures", () => {
     expect(bundle.deliveryBundle.codex.calls.counts.review).toBe(2);
     const state = await bundle.runStore.load(runId);
     expect(state?.fixAttempts).toBe(1);
+  });
+
+  it("treats a policy-blocked publish stop as unpublished instead of completed on the next continuation", async () => {
+    const bundle = createBundle({ policy: { publishAllowed: false, publishReasons: ["policy blocked"] } });
+    const runId = await runToApproval(bundle);
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(false);
+    expect(first.status).toBe("blocked");
+    await expect(
+      bundle.runStore.readArtifact<{ outcome: string; published: boolean; retryable: boolean }>(
+        runId,
+        "publish-outcome.json",
+      ),
+    ).resolves.toMatchObject({
+      outcome: "unpublished_retryable",
+      published: false,
+      retryable: true,
+    });
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(false);
+    expect(second.status).toBe("blocked");
+    expect(second.reasons.join("\n")).not.toContain("already completed");
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+  });
+
+  it("retries a safe unpublished publish stop and does not duplicate an already created PR", async () => {
+    const bundle = createBundle({ policy: { publishAllowed: false, publishReasons: ["policy blocked"] } });
+    const runId = await runToApproval(bundle);
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(false);
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBeUndefined();
+
+    bundle.deliveryBundle.policy.evaluatePublish = async () => ({ allowed: true, reasons: [] });
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(true);
+    await expect(
+      bundle.runStore.readArtifact<{ outcome: string; published: boolean; retryable: boolean }>(
+        runId,
+        "publish-outcome.json",
+      ),
+    ).resolves.toMatchObject({
+      outcome: "published",
+      published: true,
+      retryable: false,
+    });
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+
+    const third = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(third.published).toBe(true);
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
+  });
+
+  it("retries a publish stop cancelled before side effects when continuation is rerun without abort", async () => {
+    const bundle = createBundle();
+    const runId = await runToApproval(bundle);
+    const controller = new AbortController();
+    controller.abort();
+
+    const first = await continueDiscussToPrAfterApproval(
+      { runId, abortSignal: controller.signal },
+      bundle.deps,
+    );
+    expect(first.status).toBe("cancelled");
+    expect(first.published).toBe(false);
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBeUndefined();
+
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(true);
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+  });
+
+  it("does not automatically retry an interrupted publish after potential side effects", async () => {
+    const bundle = createBundle();
+    const runId = await runToApproval(bundle);
+    const originalPush = bundle.deliveryBundle.git.push.bind(bundle.deliveryBundle.git);
+    bundle.deliveryBundle.git.push = async (input) => {
+      await originalPush(input);
+      throw new Error("injected push failure");
+    };
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(false);
+    expect(first.status).toBe("failed");
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.push).toBe(1);
+    await expect(
+      bundle.runStore.readArtifact<{ outcome: string; published: boolean; retryable: boolean }>(
+        runId,
+        "publish-outcome.json",
+      ),
+    ).resolves.toMatchObject({
+      outcome: "in_progress",
+      published: false,
+      retryable: false,
+    });
+
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(false);
+    expect(second.reasons.join("\n")).toContain("manual inspection");
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.push).toBe(1);
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+  });
+
+  it("treats noPr publish completion as terminal unpublished without retrying side effects", async () => {
+    const bundle = createBundle();
+    const runId = await runToApproval(bundle, { noPr: true });
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(false);
+    expect(first.pullRequestNumber ?? null).toBeNull();
+    await expect(
+      bundle.runStore.readArtifact<{ outcome: string; published: boolean; retryable: boolean }>(
+        runId,
+        "publish-outcome.json",
+      ),
+    ).resolves.toMatchObject({
+      outcome: "unpublished_terminal",
+      published: false,
+      retryable: false,
+    });
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(false);
+    expect(second.reasons.join("\n")).toContain("noPr");
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.push).toBe(1);
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBeUndefined();
+  });
+
+  it("does not treat a completed publish as published when the outcome artifact is missing", async () => {
+    const bundle = createBundle();
+    const runId = await runToApproval(bundle);
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(true);
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+
+    bundle.runStore.artifacts.get(runId)?.delete("publish-outcome.json");
+    const second = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(second.published).toBe(false);
+    expect(second.reasons.join("\n")).toContain("trustworthy publish outcome artifact");
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
+  });
+
+  it("stops continuation when the publish outcome artifact is corrupted", async () => {
+    const bundle = createBundle();
+    const runId = await runToApproval(bundle);
+
+    const first = await continueDiscussToPrAfterApproval({ runId }, bundle.deps);
+    expect(first.published).toBe(true);
+    await bundle.runStore.saveArtifact(runId, "publish-outcome.json", { corrupted: true });
+
+    await expect(continueDiscussToPrAfterApproval({ runId }, bundle.deps)).rejects.toThrow(
+      "publish-outcome.json",
+    );
+    expect(bundle.deliveryBundle.github.calls.counts.createDraftPullRequest).toBe(1);
+    expect(bundle.deliveryBundle.git.calls.counts.commit).toBe(1);
   });
 
   it("stops when the conclusion hash no longer matches the approval", async () => {

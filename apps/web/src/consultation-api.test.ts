@@ -32,6 +32,27 @@ describe("consultation api", () => {
     expect(calls).toEqual(["/api/discussion/profiles"]);
   });
 
+  it("loads selectable discussion issues lazily", async () => {
+    const calls: string[] = [];
+    const api = createConsultationApi(async (input) => {
+      calls.push(String(input));
+      return response(200, {
+        issues: [
+          { target: "owner/repo#96", title: "複数エージェント相談" },
+          { target: "owner/repo#97", title: "通知整理" },
+        ],
+      });
+    });
+
+    await expect(api.loadIssues()).resolves.toEqual({
+      issues: [
+        { target: "owner/repo#96", title: "複数エージェント相談" },
+        { target: "owner/repo#97", title: "通知整理" },
+      ],
+    });
+    expect(calls).toEqual(["/api/discussion/issues"]);
+  });
+
   it("starts a discussion with prompt, selected profiles, and optional target", async () => {
     const calls: Array<{ input: string; init?: RequestInit }> = [];
     const api = createConsultationApi(async (input, init) => {

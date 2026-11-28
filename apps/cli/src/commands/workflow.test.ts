@@ -1,7 +1,11 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createProgram } from "../program.js";
-import { runWorkflowListCommand, runWorkflowValidateCommand } from "./workflow.js";
+import {
+  runWorkflowListCommand,
+  runWorkflowRunCommand,
+  runWorkflowValidateCommand,
+} from "./workflow.js";
 
 const discussToPrYaml = `name: discuss-to-pr
 steps:
@@ -134,6 +138,103 @@ describe("runWorkflowListCommand", () => {
     expect(stdout.join("")).toContain(
       ".meguribi/workflows/broken.yml: error: Invalid workflow definition\n",
     );
+  });
+});
+
+
+describe("runWorkflowRunCommand early run id reporting", () => {
+  function wiringWithStateObserver(observe: (runId: string) => void) {
+    return {
+      inheritedMcpPolicy: "deny",
+      deps: {
+        discussion: {
+          runStore: {
+            saveArtifact: async () => "artifact",
+            readArtifact: async () => null,
+          },
+          onStateChange: (state: { runId: string }) => observe(state.runId),
+        },
+        delivery: {},
+        specify: async () => {
+          throw new Error("not used");
+        },
+      },
+    } as never;
+  }
+
+  function runState(runId: string) {
+    return {
+      schemaVersion: 1,
+      runId,
+      repository: "owner/repo",
+      issueNumber: 22,
+      command: "discuss",
+      status: "created",
+      completedSteps: [],
+      branch: "meguribi/issue-22",
+      worktreePath: "/tmp/worktree",
+      baseRef: "origin/main",
+      baseSha: "base",
+      headSha: "head",
+      remoteIdentity: "github.com/owner/repo",
+      pullRequestNumber: null,
+      agentSessions: {},
+      fixAttempts: 0,
+      maxFixAttempts: 0,
+      createdAt: "2026-11-28T00:00:00.000Z",
+      updatedAt: "2026-11-28T00:00:00.000Z",
+    } as never;
+  }
+
+  it("reports the persistent run id before a slow discussion completes and preserves the existing observer", async () => {
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const observed: string[] = [];
+    let sawRunIdBeforeSlowWait = false;
+
+    const result = await runWorkflowRunCommand("discuss-to-pr", "owner/repo#22", {}, {
+      stdout: (text) => stdout.push(text),
+      stderr: (text) => stderr.push(text),
+      createDependencies: async () => wiringWithStateObserver((runId) => observed.push(runId)),
+      runWorkflow: async (_input, workflowDeps) => {
+        await workflowDeps.discussion.onStateChange?.(runState("run-early"));
+        sawRunIdBeforeSlowWait = stdout.join("").includes("Run ID: run-early\n");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return { runId: "run-early", status: "awaiting_human", reasons: [] };
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(sawRunIdBeforeSlowWait).toBe(true);
+    expect(observed).toEqual(["run-early"]);
+    expect(stdout.join("").match(/Run ID: /g)).toHaveLength(1);
+    expect(stdout.join("")).toContain("承認すると specify 以降");
+    expect(stderr.join("")).toBe("");
+  });
+
+  it("keeps stdout machine-readable in json mode while preserving the existing observer", async () => {
+    const stdout: string[] = [];
+    const observed: string[] = [];
+
+    const result = await runWorkflowRunCommand(
+      "discuss-to-pr",
+      "owner/repo#22",
+      { json: true },
+      {
+        stdout: (text) => stdout.push(text),
+        stderr: () => undefined,
+        createDependencies: async () => wiringWithStateObserver((runId) => observed.push(runId)),
+        runWorkflow: async (_input, workflowDeps) => {
+          await workflowDeps.discussion.onStateChange?.(runState("run-json"));
+          return { runId: "run-json", status: "awaiting_human", reasons: [] };
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(observed).toEqual(["run-json"]);
+    expect(JSON.parse(stdout.join(""))).toMatchObject({ runId: "run-json" });
+    expect(stdout.join("")).not.toContain("Run ID: ");
   });
 });
 

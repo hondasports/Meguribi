@@ -668,6 +668,7 @@ onBeforeUnmount(() => {
             :starting="consultationStarting"
             :load-error="consultationProfilesError"
             :start-error="consultationStartError"
+            :load-issues="consultationApi.loadIssues"
             @start="startConsultation"
           />
 
