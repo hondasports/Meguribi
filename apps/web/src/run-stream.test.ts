@@ -26,18 +26,18 @@ function row(id: string): TerminalRow {
 describe("terminal snapshot", () => {
   it("replaces existing rows with the bounded snapshot instead of appending replayed rows", () => {
     const replayed = [row("1"), row("2"), row("3")];
-    expect(applyTerminalSnapshot({ rows: replayed } satisfies TerminalSnapshot).map((item) => item.id)).toEqual([
-      "1",
-      "2",
-      "3",
-    ]);
-    expect(applyTerminalSnapshot({ rows: [row("2")] } satisfies TerminalSnapshot).map((item) => item.id)).toEqual([
-      "2",
-    ]);
+    expect(
+      applyTerminalSnapshot({ rows: replayed } satisfies TerminalSnapshot).map((item) => item.id),
+    ).toEqual(["1", "2", "3"]);
+    expect(
+      applyTerminalSnapshot({ rows: [row("2")] } satisfies TerminalSnapshot).map((item) => item.id),
+    ).toEqual(["2"]);
   });
 
   it("parses a valid terminal SSE payload and rejects malformed payloads without throwing", () => {
-    expect(parseTerminalSnapshot(JSON.stringify({ rows: [row("1")] }))).toEqual({ rows: [row("1")] });
+    expect(parseTerminalSnapshot(JSON.stringify({ rows: [row("1")] }))).toEqual({
+      rows: [row("1")],
+    });
     expect(parseTerminalSnapshot(undefined)).toBeNull();
     expect(parseTerminalSnapshot("not json")).toBeNull();
     expect(parseTerminalSnapshot(JSON.stringify({ rows: [{ id: "broken" }] }))).toBeNull();

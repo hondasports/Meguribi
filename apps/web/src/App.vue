@@ -597,6 +597,7 @@ function openDiscussionTurn(turnId: string): void {
 
 function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): void {
   closeRunEvents();
+  terminalEnded.value = false;
   let streamEnded = false;
   let reconnectAttempt = 0;
 
@@ -658,7 +659,9 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
     });
     events.addEventListener("detail", (event) => {
       if (!isLiveEvents(events)) return;
-      const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
+      const detail = JSON.parse((event as MessageEvent).data) as NonNullable<
+        typeof runDetail.value
+      >;
       runView.value = applyDetail(runView.value, detail);
       markStreamAlive();
       if (
@@ -909,9 +912,17 @@ onBeforeUnmount(() => {
               <p v-if="interjectionNotice" class="action-notice standalone">
                 {{ interjectionNotice }}
               </p>
-              <div v-if="runStreamError" class="run-stream-error terminal-stream-error" role="alert">
+              <div
+                v-if="runStreamError"
+                class="run-stream-error terminal-stream-error"
+                role="alert"
+              >
                 <span>{{ runStreamError }}</span>
-                <button class="secondary-link-button" type="button" @click="reconnectSelectedRunStream">
+                <button
+                  class="secondary-link-button"
+                  type="button"
+                  @click="reconnectSelectedRunStream"
+                >
                   今すぐ再接続
                 </button>
               </div>
