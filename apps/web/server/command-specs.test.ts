@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildCliArgs, redactOutput } from "./command-specs.js";
 
+const platformRepoPath = process.platform === "win32" ? "C:\\workspace\\todo" : "/tmp/meguribi-todo";
+
 describe("command bridge", () => {
   it("builds a safe local run command without a shell string", () => {
     expect(
@@ -9,7 +11,7 @@ describe("command bridge", () => {
         target: "local/todo#1",
         options: {
           local: true,
-          repoPath: "C:\\workspace\\todo",
+          repoPath: platformRepoPath,
           implementer: "devin",
           branch: "meguribi/issue-1",
           nonInteractive: true,
@@ -26,7 +28,7 @@ describe("command bridge", () => {
       "local/todo#1",
       "--local",
       "--repo-path",
-      "C:\\workspace\\todo",
+      platformRepoPath,
       "--implementer",
       "devin",
       "--branch",
@@ -56,7 +58,7 @@ describe("command bridge", () => {
         target: "local/todo#1",
         options: {
           userRequest: "WEBでTODOアプリを作って。",
-          repoPath: "C:\\workspace\\todo",
+          repoPath: platformRepoPath,
         },
       }),
     ).toEqual([
@@ -66,7 +68,7 @@ describe("command bridge", () => {
       "plan",
       "local/todo#1",
       "--repo-path",
-      "C:\\workspace\\todo",
+      platformRepoPath,
       "--request",
       "WEBでTODOアプリを作って。",
       "--json",
@@ -79,7 +81,7 @@ describe("command bridge", () => {
         command: "init",
         target: "local/todo#1",
         options: {
-          repoPath: "C:\\workspace\\todo",
+          repoPath: platformRepoPath,
           implementer: "devin",
           nonInteractive: true,
         },
@@ -89,7 +91,7 @@ describe("command bridge", () => {
       "tsx",
       "apps/cli/src/index.ts",
       "init",
-      "C:\\workspace\\todo",
+      platformRepoPath,
       "--implementer",
       "devin",
       "--non-interactive",
