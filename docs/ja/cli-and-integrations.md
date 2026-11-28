@@ -300,7 +300,7 @@ meguribi discuss owner/repo#125 --request "通知タイミングを重点的に"
 
 主要オプションは `--repo-path <path>`、`--local`、`--request <text>`、`--discussants <ids>`、`--summarizer <id>`、`--discussion-mcp-policy <deny|allow>`、`--max-turns <n>`、`--log <stream|compact|none>`、`--json`、`--non-interactive` です。`--max-turns` の既定値は 20 です。議論全体の既定上限は 30 分、1ターンの既定タイムアウトは 5 分で、同じ参加者が 2 回連続でタイムアウトした場合も議論を終了します。
 
-`--discussion-mcp-policy` は議論 Run だけの明示選択です。`deny` は検出した MCP 接続を停止し、`allow` はこの Run に限って保存済み MCP 設定の継承を許可します。未指定時は従来どおりプロファイルの `inheritedMcpPolicy` に従うため、`warn` は `--non-interactive` では fail-closed で停止します。設定または診断対象のどちらかが固定 `deny` なら、`allow` を選んでも `deny` は弱めません。この選択は永続設定にも redo 入力にも保存されず、summarizer を含む議論役割だけに適用され、`run` / `discuss-to-pr` の implementer や delivery 側 `--allow-inherited-mcp` には波及しません。
+`--discussion-mcp-policy` は議論 Run だけの明示選択です。`deny` は Devin セッションで保存済み MCP 設定の継承を隔離し（`XDG_CONFIG_HOME` の Run 固有隔離と `--process-model in-process`）、残りの経路で検出した MCP 接続を停止し、`allow` はこの Run に限って保存済み MCP 設定の継承を許可します。未指定時は従来どおりプロファイルの `inheritedMcpPolicy` に従うため、`warn` は `--non-interactive` では fail-closed で停止します。設定または診断対象のどちらかが固定 `deny` なら、`allow` を選んでも `deny` は弱めません。この選択は永続設定にも redo 入力にも保存されず、summarizer を含む議論役割だけに適用され、`run` / `discuss-to-pr` の implementer や delivery 側 `--allow-inherited-mcp` には波及しません。
 
 `--log stream` では `discussion.turn` を話者・指名先・ターン数付きで表示し、`discussion.ended` を終了境界として表示します。`compact` ではターン見出しと発言の冒頭 80 文字だけを表示します。形式不正の発言には `(形式不正)` を付けます。
 
@@ -494,12 +494,14 @@ cursor:
 
 `planner` と `reviewer` には、`codex`（`transport: sdk`）、`claude-code` / `codex-acp` などの単体 ACP サーバー、および `devin` / `cursor` のプロファイルを割り当てられます。`kind` が `devin` / `cursor` の場合、CLI はそれぞれ `devin` / `cursor` 設定の `executable` と `inheritedMcpPolicy` で診断し、`acp` サブコマンド付きで read-only の役割セッションとして起動します。役割セッション本体の startup / turn timeout と `inheritedMcpPolicy` には、割り当てたプロファイルの値を使います。`devin` / `cursor` も `transport: acp` のプロファイルとして議論の役割に割り当てられます。
 
-Claude Code / Codex ACP を使う場合は、それぞれ次のパッケージを利用者が明示的に導入し、認証済みであることを確認してください。
+組み込みプロファイル `claude-code` / `codex-acp` の ACP ブリッジ（`@agentclientprotocol/claude-agent-acp` / `@agentclientprotocol/codex-acp`）は Meguribi に同梱されているため、追加インストールは不要です。executable を既定値のまま使う場合は同梱版が解決され、Claude Code / Codex 本体の認証が済んでいればそのまま利用できます。独自に管理したい version やカスタム executable を使う場合だけ、利用者が明示的に導入して `executable` を設定してください。
 
 ```bash
 npm i -g @agentclientprotocol/claude-agent-acp
 npm i -g @agentclientprotocol/codex-acp
 ```
+
+なお議論 Run で `deny` が解決された Codex の役割セッションは、ブリッジではなく Codex 本体の `codex exec` を直接使用します。`--ignore-user-config` でユーザー設定由来の MCP 継承を構造的に遮断し、`--ephemeral` と `--sandbox read-only` を付与します。認証は Codex 本体側の auth が使われ、利用者の永続設定は変更しません。
 
 `inheritedMcpPolicy` は、実装エージェント CLI が利用者の保存済み MCP 設定を継承する可能性をどう扱うかを表します。
 

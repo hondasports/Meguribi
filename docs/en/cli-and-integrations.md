@@ -291,7 +291,7 @@ meguribi discuss owner/repo#125 --request "Focus on notification timing" --max-t
 
 Main options are `--repo-path <path>`, `--local`, `--request <text>`, `--discussants <ids>`, `--summarizer <id>`, `--discussion-mcp-policy <deny|allow>`, `--max-turns <n>`, `--log <stream|compact|none>`, `--json`, and `--non-interactive`. `--max-turns` defaults to 20. The default discussion duration limit is 30 minutes and the default per-turn timeout is five minutes; two consecutive timeouts by the same participant also end the discussion.
 
-`--discussion-mcp-policy` is an explicit choice scoped to one discussion Run. `deny` stops when an inherited MCP connection is detected; `allow` accepts inherited saved MCP configuration only for that Run. When the option is omitted, the profile's `inheritedMcpPolicy` keeps its existing meaning, so `warn` still fails closed in `--non-interactive` mode. If either the configuration or the diagnosed agent is fixed to `deny`, selecting `allow` does not weaken that denial. The choice is not written to persistent configuration or redo input. It applies only to discussion roles, including the summarizer, and does not expand to the implementer or delivery-side `--allow-inherited-mcp` used by `run` / `discuss-to-pr`.
+`--discussion-mcp-policy` is an explicit choice scoped to one discussion Run. `deny` isolates Devin sessions from inherited MCP configuration (per-run `XDG_CONFIG_HOME` isolation with `--process-model in-process`) and stops when a connection is detected through any remaining path; `allow` accepts inherited saved MCP configuration only for that Run. When the option is omitted, the profile's `inheritedMcpPolicy` keeps its existing meaning, so `warn` still fails closed in `--non-interactive` mode. If either the configuration or the diagnosed agent is fixed to `deny`, selecting `allow` does not weaken that denial. The choice is not written to persistent configuration or redo input. It applies only to discussion roles, including the summarizer, and does not expand to the implementer or delivery-side `--allow-inherited-mcp` used by `run` / `discuss-to-pr`.
 
 With `--log stream`, Meguribi renders `discussion.turn` with the speaker, addressee, and turn count, and renders `discussion.ended` as the ending boundary. `compact` prints only the turn heading and the first 80 characters of each message. Malformed messages are marked with `(形式不正)`.
 
@@ -485,12 +485,14 @@ The five built-in profiles are `claude-code`, `codex` (Codex SDK), `codex-acp`, 
 
 `planner` and `reviewer` can be assigned to `codex` (`transport: sdk`), profiles for standalone ACP servers such as `claude-code` / `codex-acp`, and `devin` / `cursor` profiles. When `kind` is `devin` or `cursor`, the CLI diagnoses the agent with the `executable` and `inheritedMcpPolicy` from the corresponding `devin` or `cursor` configuration, then starts a read-only role session with the `acp` subcommand. The role session's own startup / turn timeout and `inheritedMcpPolicy` come from the assigned profile. `devin` / `cursor` can also be assigned to discussion roles as `transport: acp` profiles.
 
-To use Claude Code / Codex ACP, the user must explicitly install the corresponding package and complete authentication:
+The ACP bridges for the built-in `claude-code` / `codex-acp` profiles (`@agentclientprotocol/claude-agent-acp` / `@agentclientprotocol/codex-acp`) are bundled with Meguribi, so no additional installation is required. When the executable is left at its default, the bundled bridge is resolved and the profiles work as long as the Claude Code / Codex CLI itself is authenticated. Install the packages yourself only when you want a self-managed version or a custom `executable`:
 
 ```bash
 npm i -g @agentclientprotocol/claude-agent-acp
 npm i -g @agentclientprotocol/codex-acp
 ```
+
+For Codex role sessions in discussion runs where `deny` is resolved, Meguribi uses the native `codex exec` binary directly instead of the bridge. `--ignore-user-config` structurally blocks MCP inheritance from user configuration, with `--ephemeral` and `--sandbox read-only`. Authentication uses the Codex CLI's own auth, and persistent user settings are never modified.
 
 `inheritedMcpPolicy` controls how Meguribi handles the possibility that the implementer agent CLI inherits the user's saved MCP configuration.
 

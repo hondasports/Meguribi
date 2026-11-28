@@ -119,6 +119,37 @@ type LiveHandlers = {
   ) => acp.RequestPermissionResponse | Promise<acp.RequestPermissionResponse>;
 };
 
+function isExplicitMcpToolIdentity(value: unknown): boolean {
+  return typeof value === "string" &&
+    /(?:^|[^a-z0-9])mcp(?:__|[-_./:]|$)/i.test(value);
+}
+
+function hasExplicitMcpToolMetadata(value: unknown): boolean {
+  return typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>).is_mcp_tool_call === true;
+}
+
+function mcpObservationFromSessionUpdate(update: Record<string, unknown>): string | undefined {
+  if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
+    return undefined;
+  }
+  const serializedEvidence = JSON.stringify({
+    title: update.title,
+    name: update.name,
+    kind: update.kind,
+    status: update.status,
+    content: update.content,
+    rawInput: update.rawInput,
+    rawOutput: update.rawOutput,
+  });
+  const explicitMcpTool = [update.name, update.title].some(isExplicitMcpToolIdentity) ||
+    hasExplicitMcpToolMetadata(update._meta);
+  const explicitToolEvidence = explicitMcpTool ? "MCP tool connected\n" : "";
+  return `${explicitToolEvidence}${serializedEvidence}\n`;
+}
+
 /**
  * Process exit state for one ACP connection, from spawn until intentional terminate.
  */
@@ -409,7 +440,10 @@ class AcpConnectionImpl implements AcpConnection {
     this.handlers.onSessionUpdate = (notification) => {
       const at = new Date().toISOString();
       const update = notification.update as unknown as Record<string, unknown>;
-      this.mcpMonitor?.observe(JSON.stringify(update));
+      const mcpObservation = mcpObservationFromSessionUpdate(update);
+      if (mcpObservation !== undefined) {
+        this.mcpMonitor?.observe(mcpObservation);
+      }
       push({
         kind: "session_update",
         sequence: this.nextSequence(),

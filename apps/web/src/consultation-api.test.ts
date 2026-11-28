@@ -15,8 +15,13 @@ describe("consultation api", () => {
       calls.push(String(input));
       return response(200, {
         profiles: [
-          { id: "claude-code", label: "Claude Code" },
-          { id: "codex-acp", label: "Codex CLI (ACP)" },
+          { id: "claude-code", label: "Claude Code", available: true },
+          {
+            id: "codex-acp",
+            label: "Codex CLI (ACP)",
+            available: false,
+            unavailableReason: "Codex CLIが見つかりません",
+          },
         ],
         defaultProfileIds: ["claude-code", "codex-acp"],
       });
@@ -24,8 +29,13 @@ describe("consultation api", () => {
 
     await expect(api.loadProfiles()).resolves.toEqual({
       profiles: [
-        { id: "claude-code", label: "Claude Code" },
-        { id: "codex-acp", label: "Codex CLI (ACP)" },
+        { id: "claude-code", label: "Claude Code", available: true },
+        {
+          id: "codex-acp",
+          label: "Codex CLI (ACP)",
+          available: false,
+          unavailableReason: "Codex CLIが見つかりません",
+        },
       ],
       defaultProfileIds: ["claude-code", "codex-acp"],
     });

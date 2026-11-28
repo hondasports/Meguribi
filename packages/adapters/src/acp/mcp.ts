@@ -6,22 +6,74 @@ import {
 } from "@meguribi/core";
 import { redactDiagnosticText } from "./redact.js";
 
-export function detectMcpConnection(text: string): McpDetection {
-  // Detection uses in-memory event text; persisted alerts are redacted below.
-  const safe = text.toLowerCase();
-  if (!/(mcp|model context protocol)/.test(safe)) {
+// Meguribi 自身が stderr メタデータとして書き込む既知の行（完全一致でのみ除外）。
+// devin 自身の "WARN: connected to MCP server ..." 等は除外せず検知対象に残す。
+const OWN_METADATA_LINES = new Set([
+  "warn: the agent may inherit saved mcp configuration; complete isolation is not guaranteed.",
+  "security_alert: unexpected-mcp-connection",
+]);
+
+const MCP_MENTION = /mcp|model context protocol/;
+const VERB = "(?:connecting|connected|spawned|spawn|launched|starting|established|listening|handshake)";
+// mcp 言及（model context protocol 含む）と接続確立動詞の近接。
+const VERB_EVIDENCE = new RegExp(
+  `(?:mcp|model context protocol)[^\\n]{0,80}?${VERB}|${VERB}[^\\n]{0,80}?(?:mcp|model context protocol)`,
+);
+// 直接的な transport 証跡: stdio/sse/http endpoint が mcp 言及へ近接。
+const TRANSPORT_EVIDENCE = new RegExp(
+  `(?:mcp|model context protocol)[^\\n]{0,80}?(?:stdio|https?://|\\bsse\\b|http endpoint)|(?:stdio|https?://|http endpoint)[^\\n]{0,80}?(?:mcp|model context protocol)`,
+);
+// benign 文脈は行単位でのみ無効化する。rolling buffer 全体へは適用しない——
+// 先頭の "no MCP" 行が後続の本物の接続行を打ち消すことを防ぐ。
+const BENIGN_LINE = /(no mcp|0 mcp|mcp[^\n]{0,40}(disabled|skipped|skipping|not loaded|unavailable)|may inherit|complete isolation)/;
+
+interface LineHit {
+  detected: boolean;
+  transport: "stdio" | "http" | "unknown";
+}
+
+function evaluateLine(line: string): LineHit {
+  const safe = line.trim().toLowerCase();
+  if (safe.length === 0 || OWN_METADATA_LINES.has(safe)) {
     return { detected: false, transport: "unknown" };
   }
-  if (!/(start|spawn|launch|connect|server|endpoint|transport|stdio|sse)/.test(safe)) {
+  if (!MCP_MENTION.test(safe)) {
     return { detected: false, transport: "unknown" };
   }
-  if (/stdio|spawn.*server|server.*process/.test(safe)) {
+  const hasVerbEvidence = VERB_EVIDENCE.test(safe);
+  const hasTransportEvidence = TRANSPORT_EVIDENCE.test(safe);
+  if (!hasVerbEvidence && !hasTransportEvidence) {
+    return { detected: false, transport: "unknown" };
+  }
+  // benign 行は確立動詞を伴わない限り検知しない。
+  if (BENIGN_LINE.test(safe) && !new RegExp(VERB).test(safe)) {
+    return { detected: false, transport: "unknown" };
+  }
+  if (/stdio|spawn.{0,60}server|server.{0,60}process/.test(safe)) {
     return { detected: true, transport: "stdio" };
   }
-  if (/https?:\/\/|http endpoint|sse/.test(safe)) {
+  if (/https?:\/\/|http endpoint|\bsse\b/.test(safe)) {
     return { detected: true, transport: "http" };
   }
   return { detected: true, transport: "unknown" };
+}
+
+export function detectMcpConnection(text: string): McpDetection {
+  // Detection uses in-memory event text; persisted alerts are redacted below.
+  // rolling buffer 全体ではなく行単位で判定し、混在する benign 行と
+  // 本物の証跡行が打ち消し合わないようにする。
+  let fallback: LineHit | undefined;
+  for (const line of text.split("\n")) {
+    const hit = evaluateLine(line);
+    if (!hit.detected) {
+      continue;
+    }
+    if (hit.transport !== "unknown") {
+      return hit;
+    }
+    fallback ??= hit;
+  }
+  return fallback ?? { detected: false, transport: "unknown" };
 }
 
 export function evaluateMcpOutput(input: {
