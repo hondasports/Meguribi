@@ -36,6 +36,7 @@ export interface StatusCommandDependencies {
 
 const TERMINAL_STATUSES = new Set<RunState["status"]>([
   "awaiting_human",
+  "completed",
   "blocked",
   "failed",
   "cancelled",
@@ -81,8 +82,16 @@ function writeRunNotFound(stderr: (text: string) => void, runId: string): void {
 
 function isLiveLogEvent(
   event: WorkflowEvent,
-): event is LiveLogEvent | Extract<WorkflowEvent, { type: "step.progress" }> {
-  return event.type === "step.started" || event.type === "agent.event" || event.type === "step.progress";
+): event is
+  | LiveLogEvent
+  | Extract<WorkflowEvent, { type: "step.progress" | "discussion.turn" | "discussion.ended" }> {
+  return (
+    event.type === "step.started" ||
+    event.type === "agent.event" ||
+    event.type === "step.progress" ||
+    event.type === "discussion.turn" ||
+    event.type === "discussion.ended"
+  );
 }
 
 function formatElapsed(ms: number): string {

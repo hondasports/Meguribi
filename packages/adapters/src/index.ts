@@ -153,6 +153,7 @@ export {
 } from "./verifier/command-verifier.js";
 export {
   createFakeCodexForDelivery,
+  createFakeDiscussionRoleAgent,
   createFakeDeliveryDeps,
   createFakeDevinAdapter,
   createFakeGitAdapter,

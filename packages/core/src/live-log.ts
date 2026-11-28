@@ -1,4 +1,5 @@
 import type { AgentEvent } from "./agent-event.js";
+import type { DiscussionEndReason, DiscussionTurn } from "./discussion/types.js";
 import type { AgentRole } from "./role-agent.js";
 
 /**
@@ -33,7 +34,27 @@ export interface StepProgressEvent {
   at: string;
 }
 
-export type LiveLogRenderEvent = LiveLogEvent | StepProgressEvent;
+export interface DiscussionTurnEvent {
+  type: "discussion.turn";
+  runId: string;
+  turn: DiscussionTurn;
+  turnNumber: number;
+  maxTurns: number;
+}
+
+export interface DiscussionEndedEvent {
+  type: "discussion.ended";
+  runId: string;
+  endedBy: DiscussionEndReason;
+  turns: number;
+  at: string;
+}
+
+export type LiveLogRenderEvent =
+  | LiveLogEvent
+  | StepProgressEvent
+  | DiscussionTurnEvent
+  | DiscussionEndedEvent;
 
 export type LiveLogMode = "stream" | "compact";
 
@@ -51,6 +72,7 @@ export interface LiveLogRenderer {
 }
 
 const SUMMARY_MAX_LENGTH = 120;
+const DISCUSSION_COMPACT_MESSAGE_MAX_LENGTH = 80;
 const LABEL_COLOR_CYCLE = [36, 35, 33, 32, 34] as const;
 const FAILURE_COLOR = 31;
 const APPROVAL_COLOR = 33;
@@ -71,6 +93,7 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
   let speechSessionId: string | undefined;
   const toolStartedAt = new Map<string, number>();
   const labelColors = new Map<string, number>();
+  const participantLabels = new Map<string, string>();
 
   function emit(text: string): string {
     if (text.length > 0) {
@@ -117,12 +140,15 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
   }
 
   function renderStepStarted(event: Extract<LiveLogEvent, { type: "step.started" }>): string {
-    const rolePart = event.agentLabel !== undefined && event.role !== undefined ? ` (${event.role})` : "";
+    const rolePart =
+      event.agentLabel !== undefined && event.role !== undefined ? ` (${event.role})` : "";
     const plainLabel = event.agentLabel ?? event.label;
     const visibleHead = `── ${event.stepId} · ${plainLabel}${rolePart} `;
     const fill = "─".repeat(Math.max(0, width - visibleHead.length));
     const shownLabel =
-      event.agentLabel !== undefined ? colorizeLabel(event.agentLabel, event.profileId) : event.label;
+      event.agentLabel !== undefined
+        ? colorizeLabel(event.agentLabel, event.profileId)
+        : event.label;
     const head = `── ${event.stepId} · ${shownLabel}${rolePart} `;
     return emit(`${interruptSpeech()}${head}${fill}\n`);
   }
@@ -141,9 +167,7 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
     return emit(`${prefix}● ${colorizeLabel(agentLabel, profileId)}  ${text}`);
   }
 
-  function renderToolStarted(
-    event: Extract<AgentEvent, { type: "tool.started" }>,
-  ): string {
+  function renderToolStarted(event: Extract<AgentEvent, { type: "tool.started" }>): string {
     if (event.toolCallId !== undefined) {
       const startedAt = Date.parse(event.at);
       if (!Number.isNaN(startedAt)) {
@@ -158,9 +182,7 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
     return emit(`${prefix}● ${event.tool}${summary}\n`);
   }
 
-  function renderToolCompleted(
-    event: Extract<AgentEvent, { type: "tool.completed" }>,
-  ): string {
+  function renderToolCompleted(event: Extract<AgentEvent, { type: "tool.completed" }>): string {
     const parts = [`  └ ${event.status ?? "completed"}`];
     if (event.exitCode !== undefined) {
       parts.push(` · exit ${String(event.exitCode)}`);
@@ -208,9 +230,33 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
     return emit(`${interruptSpeech()}  · ${redact(event.label)} ${String(event.current)}${max}\n`);
   }
 
-  function renderAgentEvent(
-    stepEvent: Extract<LiveLogEvent, { type: "agent.event" }>,
-  ): string {
+  function renderDiscussionTurn(event: DiscussionTurnEvent): string {
+    const { turn } = event;
+    const redactedMessage = redact(turn.envelope.message).trimEnd();
+    const message =
+      options.mode === "compact"
+        ? redactedMessage.slice(0, DISCUSSION_COMPACT_MESSAGE_MAX_LENGTH)
+        : redactedMessage;
+    const addressPart =
+      turn.envelope.addressTo.length > 0
+        ? ` → ${turn.envelope.addressTo.map((id) => participantLabels.get(id) ?? id).join(", ")}`
+        : "";
+    const malformedPart = turn.malformed ? " (形式不正)" : "";
+    const visibleHead = `── discuss · turn ${String(event.turnNumber)}/${String(event.maxTurns)} `;
+    const fill = "─".repeat(Math.max(0, width - visibleHead.length));
+    const speaker = colorizeLabel(turn.speakerLabel, turn.speaker);
+    return emit(
+      `${interruptSpeech()}${visibleHead}${fill}\n● ${speaker}${addressPart}  ${message}${malformedPart}\n`,
+    );
+  }
+
+  function renderDiscussionEnded(event: DiscussionEndedEvent): string {
+    return emit(
+      `${interruptSpeech()}── discuss ended: ${event.endedBy} (${String(event.turns)} turns) ──\n`,
+    );
+  }
+
+  function renderAgentEvent(stepEvent: Extract<LiveLogEvent, { type: "agent.event" }>): string {
     const event = stepEvent.event;
     switch (event.type) {
       case "message.delta":
@@ -245,11 +291,18 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
 
   return {
     render(event: LiveLogRenderEvent): string {
+      if (event.type === "discussion.turn") {
+        participantLabels.set(event.turn.speaker, event.turn.speakerLabel);
+      }
       if (options.onlyProfileId !== undefined) {
-        if (event.type === "step.progress") {
+        if (event.type === "step.progress" || event.type === "discussion.ended") {
           return "";
         }
-        if (event.profileId !== options.onlyProfileId) {
+        if (event.type === "discussion.turn") {
+          if (event.turn.speaker !== options.onlyProfileId) {
+            return "";
+          }
+        } else if (event.profileId !== options.onlyProfileId) {
           return "";
         }
       }
@@ -258,6 +311,12 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
       }
       if (event.type === "step.progress") {
         return renderStepProgress(event);
+      }
+      if (event.type === "discussion.turn") {
+        return renderDiscussionTurn(event);
+      }
+      if (event.type === "discussion.ended") {
+        return renderDiscussionEnded(event);
       }
       return renderAgentEvent(event);
     },

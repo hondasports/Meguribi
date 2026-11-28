@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`desk`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`status`、`workflow`、`measure`、`cleanup` です。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`desk`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`status`、`workflow`、`discuss`、`say`、`approve`、`reject`、`measure`、`cleanup` です。
 
 ### Command Desk（ローカル UI）
 
@@ -246,7 +246,7 @@ meguribi status 20260725T120000Z-ab12cd --json
 {"at":"2026-11-28T12:00:00.000Z","event":{"type":"step.progress","runId":"20260725T120000Z-ab12cd","stepId":"verify","label":"verify","current":1,"max":2,"at":"2026-11-28T12:00:00.000Z"}}
 ```
 
-`event` には `workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished`、工程内の `step.started` / `agent.event`、回数や件数を示す `step.progress` が入ります。保存前に secret redaction を行い、append の失敗は Run の結果や終了コードを変えず stderr に 1 回だけ警告します。読み出し時に壊れた行があれば、その行だけを飛ばして警告します。
+`event` には `workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished`、工程内の `step.started` / `agent.event`、回数や件数を示す `step.progress`、議論の `discussion.turn` / `discussion.ended` が入ります。保存前に secret redaction を行い、append の失敗は Run の結果や終了コードを変えず stderr に 1 回だけ警告します。読み出し時に壊れた行があれば、その行だけを飛ばして警告します。
 
 実行中の Run を分割画面で追う例:
 
@@ -278,6 +278,53 @@ meguribi workflow list --repo-path .
 ```
 
 `workflow validate <file>` は YAML を parse し、工程 ID、参照、上限付きループ、publish 前の verify / review などの静的制約を検証します。`workflow list` は組み込み `delivery` の工程 ID と、`<repo>/.meguribi/workflows/*.yml` / `*.yaml` にあるワークフローの工程 ID を一覧します。壊れたファイルは一覧を停止せず、そのファイルの error 行として表示します。
+
+### `meguribi discuss`
+
+組み込み `discuss` ワークフロー（`discuss` → `approve`）を実行し、2〜4人の read-only の discussant に議論させ、summarizer が `DiscussionConclusion` を作成します。結論を自動承認せず、`--non-interactive` でも `awaiting_human` で停止します。
+
+```bash
+meguribi discuss owner/repo#125
+meguribi discuss owner/repo#125 --request "通知タイミングを重点的に" --max-turns 20 --log compact
+```
+
+主要オプションは `--repo-path <path>`、`--local`、`--request <text>`、`--max-turns <n>`、`--log <stream|compact|none>`、`--json`、`--non-interactive` です。`--max-turns` の既定値は 20 です。議論全体の既定上限は 30 分、1ターンの既定タイムアウトは 5 分で、同じ参加者が 2 回連続でタイムアウトした場合も議論を終了します。
+
+`--log stream` では `discussion.turn` を話者・指名先・ターン数付きで表示し、`discussion.ended` を終了境界として表示します。`compact` ではターン見出しと発言の冒頭 80 文字だけを表示します。形式不正の発言には `(形式不正)` を付けます。
+
+議論が終わると結論、論点ごとの立場、不採用案を表示し、`awaiting_human` で停止します。次の操作は `meguribi approve <runId>` または `meguribi reject <runId> --reason "..." [--redo]` です。
+
+### `meguribi say`
+
+エージェントが議論を続けている最中の Run の `inbox/` へだけ、人間の発言を書き込みます。エンジンはターンの合間に未処理の発言を取り込み、話者 `human` のターンとして記録します。`awaiting_human` の承認待ち Run では議論エンジンが停止しているため、発言は受け付けず exit 1 です。
+
+```bash
+meguribi say 20260725T120000Z-ab12cd "既存の設定画面は変えたくない"
+```
+
+対象 Run が `command: "discuss"` でない場合、`awaiting_human` の承認待ちである場合、またはすでに完了している場合は exit 1 です。発言は 4,000 文字までで、超過分は切り捨てられます。
+
+### `meguribi approve`
+
+`awaiting_human` の議論 Run の結論を承認します。`approval.json` には承認者、日時、承認した `discussion/conclusion.json` のハッシュ、任意コメントを保存し、Run を `completed` にします。
+
+```bash
+meguribi approve 20260725T120000Z-ab12cd
+meguribi approve 20260725T120000Z-ab12cd --comment "この方向で進める"
+```
+
+承認後に `discussion/conclusion.json` が書き換えられた場合、後続工程はハッシュ不一致で停止します。
+
+### `meguribi reject`
+
+`awaiting_human` の議論 Run の結論を却下します。`--reason` は必須です。`--redo` を付けると、理由を次の議論へ `<untrusted-redo-note>` として渡し、`discuss` 工程からやり直します。やり直しは Run あたり最大 2 回です。
+
+```bash
+meguribi reject 20260725T120000Z-ab12cd --reason "通知量の上限も検討して"
+meguribi reject 20260725T120000Z-ab12cd --reason "前提が違う" --redo
+```
+
+議論の記録は Run ディレクトリの `discussion/transcript.jsonl`、`discussion/conclusion.json`、`approval.json`、`inbox/` に保存されます。`inbox/` で処理済みになった発言は `inbox/processed/` へ移動します。
 
 ### `meguribi measure`
 
@@ -363,6 +410,8 @@ agents:
     inheritedMcpPolicy: warn
 
 roles:
+  discussants: [claude-code, codex-acp, review-claude]
+  summarizer: review-claude
   planner: codex
   implementer: devin
   reviewer: review-claude
@@ -429,9 +478,9 @@ cursor:
 
 `transport: acp` が MVP の標準です。秘密情報やトークンは設定ファイルへ記述しません。
 
-組み込みプロファイルは `claude-code`、`codex`（Codex SDK）、`codex-acp`、`devin`、`cursor` の5つです。`agents` では同じ `kind` / `transport` / timeout / `inheritedMcpPolicy` を持つ別プロファイルを定義できます。`roles` は `planner`、`implementer`、`reviewer` などの役割へプロファイル ID を割り当てます。`roles.implementer` には `transport: acp` のプロファイルだけを指定でき、`allowSameImplementerReviewer: true` を明示しない限り `implementer` と `reviewer` に同じプロファイルを割り当てられません。`codex`（`transport: sdk`）は計画・レビューの互換経路として使えますが、実装担当には使えません。
+組み込みプロファイルは `claude-code`、`codex`（Codex SDK）、`codex-acp`、`devin`、`cursor` の5つです。`agents` では同じ `kind` / `transport` / timeout / `inheritedMcpPolicy` を持つ別プロファイルを定義できます。`roles` は `discussants`、`summarizer`、`planner`、`implementer`、`reviewer` などの役割へプロファイル ID を割り当てます。`roles.discussants` は議論に参加させる 2〜4 件のプロファイル ID で、重複はできません。`roles.summarizer` を省略した場合は `discussants` の先頭を使います。議論の役割には `transport: acp` のプロファイルだけを指定でき、`codex`（`transport: sdk`）は議論では `transport_unsupported` です。`roles.implementer` にも `transport: acp` のプロファイルだけを指定でき、`allowSameImplementerReviewer: true` を明示しない限り `implementer` と `reviewer` に同じプロファイルを割り当てられません。`codex`（`transport: sdk`）は計画・レビューの互換経路として使えますが、実装担当には使えません。
 
-`planner` と `reviewer` には、`codex`（`transport: sdk`）、`claude-code` / `codex-acp` などの単体 ACP サーバー、および `devin` / `cursor` のプロファイルを割り当てられます。`kind` が `devin` / `cursor` の場合、CLI はそれぞれ `devin` / `cursor` 設定の `executable` と `inheritedMcpPolicy` で診断し、`acp` サブコマンド付きで read-only の役割セッションとして起動します。役割セッション本体の startup / turn timeout と `inheritedMcpPolicy` には、割り当てたプロファイルの値を使います。`devin` / `cursor` を議論の役割で使えるようにする対応は、今後（P3）の予定です。
+`planner` と `reviewer` には、`codex`（`transport: sdk`）、`claude-code` / `codex-acp` などの単体 ACP サーバー、および `devin` / `cursor` のプロファイルを割り当てられます。`kind` が `devin` / `cursor` の場合、CLI はそれぞれ `devin` / `cursor` 設定の `executable` と `inheritedMcpPolicy` で診断し、`acp` サブコマンド付きで read-only の役割セッションとして起動します。役割セッション本体の startup / turn timeout と `inheritedMcpPolicy` には、割り当てたプロファイルの値を使います。`devin` / `cursor` も `transport: acp` のプロファイルとして議論の役割に割り当てられます。
 
 Claude Code / Codex ACP を使う場合は、それぞれ次のパッケージを利用者が明示的に導入し、認証済みであることを確認してください。
 

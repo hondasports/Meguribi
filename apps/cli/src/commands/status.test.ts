@@ -270,6 +270,74 @@ describe("runStatusCommand", () => {
     expect(sleeps).toBe(1);
   });
 
+  it("stops following when a discussion run reaches completed", async () => {
+    const { runStore, state } = await createTestRun();
+    const stdout: string[] = [];
+    let sleeps = 0;
+
+    const result = await runStatusCommand(state.runId, { follow: true }, {
+      runStore,
+      eventLog: new MemoryWorkflowEventLog(),
+      stdout: (text) => stdout.push(text),
+      sleep: async () => {
+        sleeps += 1;
+        await runStore.update(state.runId, { status: "completed" });
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(sleeps).toBe(1);
+  });
+
+  it("renders discussion.turn and discussion.ended events in follow mode", async () => {
+    const { runStore, state } = await createTestRun();
+    const eventLog = new MemoryWorkflowEventLog();
+    eventLog.entries.push(record({
+      type: "discussion.turn",
+      runId: state.runId,
+      turn: {
+        turnId: "t-1",
+        speaker: "claude-code",
+        speakerLabel: "Claude",
+        envelope: {
+          message: "A 案に賛成です",
+          replyTo: [],
+          addressTo: [],
+          positions: [],
+          newIssues: [],
+          done: true,
+        },
+        malformed: false,
+        at: "2026-11-27T12:00:00.000Z",
+      },
+      turnNumber: 1,
+      maxTurns: 20,
+    } as never));
+    const stdout: string[] = [];
+
+    const result = await runStatusCommand(state.runId, { follow: true }, {
+      runStore,
+      eventLog,
+      stdout: (text) => stdout.push(text),
+      sleep: async () => {
+        eventLog.entries.push(record({
+          type: "discussion.ended",
+          runId: state.runId,
+          endedBy: "consensus",
+          turns: 2,
+          at: "2026-11-27T12:00:01.000Z",
+        } as never));
+        await runStore.update(state.runId, { status: "awaiting_human" });
+      },
+    });
+
+    expect(result.exitCode).toBe(0);
+    const text = stdout.join("");
+    expect(text).toContain("discuss · turn 1/20");
+    expect(text).toContain("A 案に賛成です");
+    expect(text).toContain("discuss ended: consensus (2 turns)");
+  });
+
   it("waits in follow mode when the selected agent has no events and exits 0 on abort", async () => {
     const { runStore, state } = await createTestRun();
     const stdout: string[] = [];

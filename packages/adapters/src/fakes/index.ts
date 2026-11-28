@@ -1,5 +1,6 @@
 export {
   createFakeCodexForDelivery,
+  createFakeDiscussionRoleAgent,
   createFakeDeliveryDeps,
   createFakeDevinAdapter,
   createFakeGitAdapter,

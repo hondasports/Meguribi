@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `desk`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `status`, `workflow`, `measure`, and `cleanup`.
+The currently implemented CLI commands are `init`, `doctor`, `desk`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `status`, `workflow`, `discuss`, `say`, `approve`, `reject`, `measure`, and `cleanup`.
 
 ### Command Desk (local UI)
 
@@ -237,7 +237,7 @@ Main options:
 {"at":"2026-11-28T12:00:00.000Z","event":{"type":"step.progress","runId":"20260725T120000Z-ab12cd","stepId":"verify","label":"verify","current":1,"max":2,"at":"2026-11-28T12:00:00.000Z"}}
 ```
 
-The `event` payload can be `workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`, an in-step `step.started` / `agent.event`, or `step.progress` for attempt and command counts. Payloads are redacted before being written. Append failures do not change the Run result or exit code; Meguribi prints one warning to stderr. Malformed lines are skipped with a warning during reads.
+The `event` payload can be `workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`, an in-step `step.started` / `agent.event`, `step.progress` for attempt and command counts, or a discussion `discussion.turn` / `discussion.ended` event. Payloads are redacted before being written. Append failures do not change the Run result or exit code; Meguribi prints one warning to stderr. Malformed lines are skipped with a warning during reads.
 
 Example split-screen workflow for an active Run:
 
@@ -269,6 +269,53 @@ meguribi workflow list --repo-path .
 ```
 
 `workflow validate <file>` parses YAML and statically validates step IDs, references, bounded loops, and rules such as verify / review before publish. `workflow list` prints the step IDs of the built-in `delivery` workflow and of workflows stored in `<repo>/.meguribi/workflows/*.yml` / `*.yaml`. A broken file does not stop the whole list; it is shown as an error line for that file.
+
+### `meguribi discuss`
+
+Run the built-in `discuss` workflow (`discuss` → `approve`), let two to four read-only discussants debate the Issue, and have the summarizer create a `DiscussionConclusion`. Meguribi never approves the conclusion automatically; even `--non-interactive` stops at `awaiting_human`.
+
+```bash
+meguribi discuss owner/repo#125
+meguribi discuss owner/repo#125 --request "Focus on notification timing" --max-turns 20 --log compact
+```
+
+Main options are `--repo-path <path>`, `--local`, `--request <text>`, `--max-turns <n>`, `--log <stream|compact|none>`, `--json`, and `--non-interactive`. `--max-turns` defaults to 20. The default discussion duration limit is 30 minutes and the default per-turn timeout is five minutes; two consecutive timeouts by the same participant also end the discussion.
+
+With `--log stream`, Meguribi renders `discussion.turn` with the speaker, addressee, and turn count, and renders `discussion.ended` as the ending boundary. `compact` prints only the turn heading and the first 80 characters of each message. Malformed messages are marked with `(形式不正)`.
+
+When the discussion ends, Meguribi prints the conclusion, positions by issue, and rejected options, then stops at `awaiting_human`. The next action is `meguribi approve <runId>` or `meguribi reject <runId> --reason "..." [--redo]`.
+
+### `meguribi say`
+
+Write a human message into the `inbox/` only while agents are actively continuing the discussion. The engine imports unprocessed messages between turns and records them as turns spoken by `human`. An `awaiting_human` Run is waiting for approval and its discussion engine is stopped, so the message is rejected with exit 1.
+
+```bash
+meguribi say 20260725T120000Z-ab12cd "Do not change the existing settings screen"
+```
+
+The command exits 1 when the target Run is not `command: "discuss"`, is `awaiting_human`, or has already completed. Messages are limited to 4,000 characters; excess text is truncated.
+
+### `meguribi approve`
+
+Approve the conclusion of an `awaiting_human` discussion Run. `approval.json` records the approver, timestamp, hash of the approved `discussion/conclusion.json`, and optional comment, then the Run becomes `completed`.
+
+```bash
+meguribi approve 20260725T120000Z-ab12cd
+meguribi approve 20260725T120000Z-ab12cd --comment "Proceed in this direction"
+```
+
+If `discussion/conclusion.json` changes after approval, later steps stop with a hash mismatch.
+
+### `meguribi reject`
+
+Reject the conclusion of an `awaiting_human` discussion Run. `--reason` is required. With `--redo`, Meguribi passes the reason to the next discussion as an `<untrusted-redo-note>` and restarts from the `discuss` step. A Run can be redone at most twice.
+
+```bash
+meguribi reject 20260725T120000Z-ab12cd --reason "Also consider a notification-volume cap"
+meguribi reject 20260725T120000Z-ab12cd --reason "The premise is wrong" --redo
+```
+
+Discussion records are stored in the Run directory as `discussion/transcript.jsonl`, `discussion/conclusion.json`, `approval.json`, and `inbox/`. Consumed inbox messages move to `inbox/processed/`.
 
 ### `meguribi measure`
 
@@ -354,6 +401,8 @@ agents:
     inheritedMcpPolicy: warn
 
 roles:
+  discussants: [claude-code, codex-acp, review-claude]
+  summarizer: review-claude
   planner: codex
   implementer: devin
   reviewer: review-claude
@@ -420,9 +469,9 @@ cursor:
 
 `transport: acp` is the MVP default. Never store secrets or tokens in this file.
 
-The five built-in profiles are `claude-code`, `codex` (Codex SDK), `codex-acp`, `devin`, and `cursor`. Use `agents` to define additional profiles with their own `kind` / `transport` / timeout / `inheritedMcpPolicy`. Use `roles` to assign profile IDs to roles such as `planner`, `implementer`, and `reviewer`. `roles.implementer` accepts only a `transport: acp` profile, and the same profile cannot be assigned to both `implementer` and `reviewer` unless `allowSameImplementerReviewer: true` is explicit. `codex` (`transport: sdk`) remains available as the compatibility path for planning and review, but cannot be the implementer.
+The five built-in profiles are `claude-code`, `codex` (Codex SDK), `codex-acp`, `devin`, and `cursor`. Use `agents` to define additional profiles with their own `kind` / `transport` / timeout / `inheritedMcpPolicy`. Use `roles` to assign profile IDs to roles such as `discussants`, `summarizer`, `planner`, `implementer`, and `reviewer`. `roles.discussants` contains two to four unique profile IDs for discussion participants. When `roles.summarizer` is omitted, the first entry in `discussants` is used. Discussion roles accept only `transport: acp` profiles; `codex` (`transport: sdk`) is `transport_unsupported` for discussion. `roles.implementer` also accepts only a `transport: acp` profile, and the same profile cannot be assigned to both `implementer` and `reviewer` unless `allowSameImplementerReviewer: true` is explicit. `codex` (`transport: sdk`) remains available as the compatibility path for planning and review, but cannot be the implementer.
 
-`planner` and `reviewer` can be assigned to `codex` (`transport: sdk`), profiles for standalone ACP servers such as `claude-code` / `codex-acp`, and `devin` / `cursor` profiles. When `kind` is `devin` or `cursor`, the CLI diagnoses the agent with the `executable` and `inheritedMcpPolicy` from the corresponding `devin` or `cursor` configuration, then starts a read-only role session with the `acp` subcommand. The role session's own startup / turn timeout and `inheritedMcpPolicy` come from the assigned profile. Support for using `devin` / `cursor` in discussion roles is planned for a future P3.
+`planner` and `reviewer` can be assigned to `codex` (`transport: sdk`), profiles for standalone ACP servers such as `claude-code` / `codex-acp`, and `devin` / `cursor` profiles. When `kind` is `devin` or `cursor`, the CLI diagnoses the agent with the `executable` and `inheritedMcpPolicy` from the corresponding `devin` or `cursor` configuration, then starts a read-only role session with the `acp` subcommand. The role session's own startup / turn timeout and `inheritedMcpPolicy` come from the assigned profile. `devin` / `cursor` can also be assigned to discussion roles as `transport: acp` profiles.
 
 To use Claude Code / Codex ACP, the user must explicitly install the corresponding package and complete authentication:
 

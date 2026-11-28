@@ -1,7 +1,11 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { loadRepositoryWorkflows, parseWorkflowDefinition } from "@meguribi/config";
-import { createDeliveryWorkflow, validateWorkflowDefinition } from "@meguribi/core";
+import {
+  createDeliveryWorkflow,
+  createDiscussionWorkflow,
+  validateWorkflowDefinition,
+} from "@meguribi/core";
 
 export interface WorkflowValidateCommandDependencies {
   stdout?: (text: string) => void;
@@ -72,7 +76,11 @@ export async function runWorkflowListCommand(
   const repositoryPath = path.resolve(options.repoPath ?? deps.cwd ?? process.cwd());
   const loadWorkflows = deps.loadWorkflows ?? loadRepositoryWorkflows;
   const delivery = createDeliveryWorkflow(2);
-  const lines = [formatWorkflowLine(delivery.name, "built-in", delivery.steps)];
+  const discussion = createDiscussionWorkflow();
+  const lines = [
+    formatWorkflowLine(delivery.name, "built-in", delivery.steps),
+    formatWorkflowLine(discussion.name, "built-in", discussion.steps),
+  ];
 
   for (const workflow of await loadWorkflows(repositoryPath)) {
     const shownPath = displayWorkflowPath(workflow.path, repositoryPath);

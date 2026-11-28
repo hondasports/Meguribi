@@ -265,9 +265,32 @@ export {
   DISCUSSION_PROMPT_VERSION,
   type DiscussionBrief,
 } from "./discussion/prompt.js";
+// discussion room
+export {
+  runDiscussion,
+  type DiscussionPorts,
+  type DiscussionResult,
+  type EnvelopeParseResult,
+  type RunDiscussionInput,
+} from "./discussion/room.js";
 
 // discussion adapters
 export type {
   DiscussionStorePort,
   SummarizeDiscussionInput,
+} from "./discussion/ports.js";
+// discussion workflow
+export {
+  approveDiscussion,
+  createDiscussionWorkflow,
+  rejectDiscussion,
+  runDiscussionWorkflow,
+  type DiscussionDependencies,
+  type DiscussionWorkflowResult,
+  type RejectDiscussionInput,
+  type RunDiscussionWorkflowInput,
+} from "./workflow/discussion.js";
+export type {
+  DiscussionStoreFactory,
+  SummarizeDiscussion,
 } from "./discussion/ports.js";
