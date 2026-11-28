@@ -246,10 +246,15 @@ export {
   type DiscussionLimits,
   type DiscussionTurn,
 } from "./discussion/types.js";
-
 // discussion approval
 export {
   ApprovalError,
   assertApprovedConclusion,
   type ApprovalRecord,
 } from "./discussion/approval.js";
+// discussion turn order / prompt
+export {
+  evaluateDiscussionEnd,
+  pickNextSpeaker,
+  type DiscussionProgress,
+} from "./discussion/turn-order.js";
