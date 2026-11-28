@@ -12,8 +12,15 @@ import {
   type ResumeDeliveryInput,
   type RunState,
   type RunDeliveryInput,
+  type RunStore,
+  type WorkflowEvent,
 } from "@meguribi/core";
-import { DEFAULT_VERIFY_TIMEOUT_MS, redactDiagnosticText } from "@meguribi/adapters";
+import {
+  DEFAULT_VERIFY_TIMEOUT_MS,
+  FileSystemRunStore,
+  FileSystemWorkflowEventLog,
+  redactDiagnosticText,
+} from "@meguribi/adapters";
 import { parseIssueTarget } from "../target.js";
 
 const DEFAULT_PROTECTED_PATHS = [
@@ -129,6 +136,104 @@ function withProgress(
       lastKey = key;
       progress(stderr, formatStateProgress(state));
       await delivery.onStateChange?.(state);
+    },
+  };
+}
+
+function observeRunStoreIdentity(
+  runStore: RunStore,
+  captureRunId: (runId: string) => void,
+): RunStore {
+  return {
+    create: async (input) => {
+      const state = await runStore.create(input);
+      captureRunId(state.runId);
+      return state;
+    },
+    load: async (runId) => {
+      const state = await runStore.load(runId);
+      if (state) captureRunId(state.runId);
+      return state;
+    },
+    loadLatest: async (repository, issueNumber) => {
+      const state = await runStore.loadLatest(repository, issueNumber);
+      if (state) captureRunId(state.runId);
+      return state;
+    },
+    update: (runId, patch) => runStore.update(runId, patch),
+    saveArtifact: (runId, name, value) => runStore.saveArtifact(runId, name, value),
+    readArtifact: <T>(runId: string, name: string) => runStore.readArtifact<T>(runId, name),
+    acquireLock: (input) => runStore.acquireLock(input),
+    releaseLock: (input) => runStore.releaseLock(input),
+  };
+}
+
+function withWorkflowEventRecording(
+  delivery: DeliveryDependencies,
+  stderr: (text: string) => void,
+): { delivery: DeliveryDependencies; flush: () => Promise<void> } {
+  if (!(delivery.runStore instanceof FileSystemRunStore)) {
+    return { delivery, flush: async () => undefined };
+  }
+
+  const eventLog = new FileSystemWorkflowEventLog({ runStore: delivery.runStore });
+  const bufferedEvents: WorkflowEvent[] = [];
+  let runId: string | undefined;
+  let queue: Promise<void> = Promise.resolve();
+  let warningWritten = false;
+
+  const warnOnce = (error: unknown): void => {
+    if (warningWritten) return;
+    warningWritten = true;
+    const message = error instanceof Error ? error.message : String(error);
+    stderr(
+      `warning: failed to append workflow event to events.jsonl; delivery result is unaffected (${redactDiagnosticText(message)})\n`,
+    );
+  };
+
+  const appendEvent = (event: WorkflowEvent): void => {
+    if (runId === undefined) {
+      bufferedEvents.push(event);
+      return;
+    }
+    const targetRunId = runId;
+    queue = queue.then(async () => {
+      try {
+        await eventLog.append(targetRunId, event);
+      } catch (error) {
+        warnOnce(error);
+      }
+    });
+  };
+
+  const captureRunId = (nextRunId: string): void => {
+    if (runId !== undefined) return;
+    runId = nextRunId;
+    const buffered = bufferedEvents.splice(0);
+    for (const event of buffered) {
+      appendEvent(event);
+    }
+  };
+
+  return {
+    delivery: {
+      ...delivery,
+      runStore: observeRunStoreIdentity(delivery.runStore, captureRunId),
+      onStateChange: async (state) => {
+        captureRunId(state.runId);
+        await delivery.onStateChange?.(state);
+      },
+      onWorkflowEvent: (event) => {
+        appendEvent(event);
+        delivery.onWorkflowEvent?.(event);
+      },
+      onAgentEvent: (event) => {
+        appendEvent(event);
+        delivery.onAgentEvent?.(event);
+      },
+    },
+    flush: async () => {
+      await queue;
     },
   };
 }
@@ -338,17 +443,20 @@ export async function runRunCommand(
         },
       };
     }
-    const delivery = withProgress(observableDelivery, writeErr);
+    const recording = withWorkflowEventRecording(observableDelivery, writeErr);
+    const delivery = withProgress(recording.delivery, writeErr);
     const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await run(
         buildRunInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
         delivery,
       );
+      await recording.flush();
       flushLiveLog();
       progress(writeErr, `Delivery finished: ${result.status}`);
       return { exitCode: emitResult(result, options, writeOut), result };
     } finally {
+      await recording.flush();
       flushLiveLog();
     }
   } finally {
@@ -390,17 +498,20 @@ export async function runResumeCommand(
         },
       };
     }
-    const delivery = withProgress(observableDelivery, writeErr);
+    const recording = withWorkflowEventRecording(observableDelivery, writeErr);
+    const delivery = withProgress(recording.delivery, writeErr);
     const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await resume(
         buildResumeInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
         delivery,
       );
+      await recording.flush();
       flushLiveLog();
       progress(writeErr, `Resume finished: ${result.status}`);
       return { exitCode: emitResult(result, options, writeOut), result };
     } finally {
+      await recording.flush();
       flushLiveLog();
     }
   } finally {
