@@ -258,3 +258,10 @@ export {
   pickNextSpeaker,
   type DiscussionProgress,
 } from "./discussion/turn-order.js";
+export {
+  buildDiscussionTurnPrompt,
+  buildEnvelopeRepairPrompt,
+  buildSummarizerPrompt,
+  DISCUSSION_PROMPT_VERSION,
+  type DiscussionBrief,
+} from "./discussion/prompt.js";
