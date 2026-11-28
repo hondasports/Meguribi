@@ -20,7 +20,7 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `measure`, and `cleanup`.
+The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `status`, `workflow`, `measure`, and `cleanup`.
 
 ### Command Desk (local UI)
 
@@ -205,6 +205,63 @@ Resume an interrupted Run from the last completed step. In the MVP, only steps a
 meguribi resume owner/repo#125
 meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
+
+### `meguribi status`
+
+Show Run state and agent activity from `state.json` and the `events.jsonl` file appended by `run` / `resume`. The Run ID is printed on the `Run:` line of `meguribi run` / `resume` output.
+
+```bash
+meguribi status 20260725T120000Z-ab12cd
+meguribi status 20260725T120000Z-ab12cd --follow
+meguribi status 20260725T120000Z-ab12cd --follow --agent devin
+meguribi status 20260725T120000Z-ab12cd --json
+```
+
+Main options:
+
+- `--follow`: follow `events.jsonl` and render displayable step and agent events as a live log
+- `--agent <profileId>`: show only events for one agent profile
+- `--json`: print the Run state and the activity derived by `deriveAgentActivity` as JSON
+- `--runs-root <path>`: override the RunStore root
+
+`events.jsonl` is JSON Lines. Every line uses this envelope:
+
+```json
+{"at":"2026-11-28T12:00:00.000Z","event":{"type":"step.progress","runId":"20260725T120000Z-ab12cd","stepId":"verify","label":"verify","current":1,"max":2,"at":"2026-11-28T12:00:00.000Z"}}
+```
+
+The `event` payload can be `workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`, an in-step `step.started` / `agent.event`, or `step.progress` for attempt and command counts. Payloads are redacted before being written. Append failures do not change the Run result or exit code; Meguribi prints one warning to stderr. Malformed lines are skipped with a warning during reads.
+
+Example split-screen workflow for an active Run:
+
+```bash
+# pane 1: run delivery
+meguribi run owner/repo#125 --log compact
+
+# pane 2: after the Run ID appears, follow everything
+meguribi status 20260725T120000Z-ab12cd --follow
+
+# pane 3: follow only the implementer
+meguribi status 20260725T120000Z-ab12cd --follow --agent devin
+```
+
+In Ghostty, use split right / split down and run the same commands in the new panes. In tmux:
+
+```bash
+tmux split-window -h 'meguribi status 20260725T120000Z-ab12cd --follow'
+tmux split-window -v 'meguribi status 20260725T120000Z-ab12cd --follow --agent devin'
+```
+
+### `meguribi workflow`
+
+Inspect declarative workflow definitions.
+
+```bash
+meguribi workflow validate .meguribi/workflows/discuss-to-pr.yml
+meguribi workflow list --repo-path .
+```
+
+`workflow validate <file>` parses YAML and statically validates step IDs, references, bounded loops, and rules such as verify / review before publish. `workflow list` prints the step IDs of the built-in `delivery` workflow and of workflows stored in `<repo>/.meguribi/workflows/*.yml` / `*.yaml`. A broken file does not stop the whole list; it is shown as an error line for that file.
 
 ### `meguribi measure`
 

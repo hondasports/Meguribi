@@ -28,15 +28,15 @@ GitHub Issue
 - GitHub コメントの冪等更新
 - どの入力から成果物が作られたかの追跡
 
-### 1.1 議論・承認・工程イベントの成果物（計画中）
+### 1.1 議論・承認・工程イベントの成果物
 
-P2/P3 では、Run ディレクトリに次の成果物を追加する計画です。
+P2/P3 では、Run ディレクトリに次の成果物を追加します。`events.jsonl` は P2b で実装済みで、議論・承認・`steps/` は計画中です。
 
 - `discussion/transcript.jsonl`: 議論の全ターン。各発言は話者、turn ID、封筒形式を持つ（P3・計画中）。
 - `discussion/conclusion.json`: `DiscussionConclusion`。採用する方向、論点ごとの立場、不採用案、未解決問い、受け入れ条件の種、終了理由、transcript hash を持つ（P3・計画中）。
 - `approval.json`: 承認者、日時、承認した `conclusion.json` のハッシュ、任意コメントを記録する（P3・計画中）。
 - `steps/<stepId>.json`: 工程ごとの状態（`pending | running | completed | failed | awaiting_human | skipped`）を保存する（P2・計画中）。
-- `events.jsonl`: 全工程のイベント。`step.progress` と `agent.event` を含む（P2・計画中）。
+- `events.jsonl`: 全工程のイベント。`workflow.*`、`step.progress`、`step.started`、`agent.event` を含む（P2b・実装済み）。
 
 発言の封筒形式は次のとおりです。`message` は加工せず他の参加者へ転送し、転送時は話者名と turn ID を付けます。
 
@@ -87,7 +87,7 @@ interface DiscussionConclusion {
               +-- approval.json            # 計画中 (P3)
               +-- steps/                   # 計画中 (P2)
               |   `-- <stepId>.json
-              +-- events.jsonl             # 計画中 (P2)
+              +-- events.jsonl             # workflow / agent events (P2b)
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
@@ -109,6 +109,8 @@ interface DiscussionConclusion {
 ```
 
 Run ID は時刻とランダム値を含み、同一 Issue の再実行を区別します。
+
+`events.jsonl` は 1 行 1 件の JSON Lines で、各行は `{ "at": <記録時刻 ISO8601>, "event": <WorkflowEvent> }` です。`event` は workflow lifecycle（`workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished`）、工程内の `step.started` / `agent.event`、または `step.progress`（`runId`、`stepId`、`label`、`current`、任意の `max`、`at`）です。append 前に secret redaction を行い、壊れた行は読み出し時にスキップして警告します。
 
 `meguribi plan` は branch、worktree、Run state を作成しないため、生成した最新の計画を
 `~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json` に保存します。
