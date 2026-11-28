@@ -7,7 +7,12 @@ import type {
   StartDiscussionInput,
 } from "../consultation-api.js";
 import { validateConsultationInput } from "../consultation-api.js";
+import type { DiscussionMcpPolicy } from "../consultation-api.js";
 import { MAX_CONSULTATION_PROMPT_LENGTH } from "../consultation-contract.js";
+import {
+  discussionMcpPolicyAfterSubmit,
+  initialDiscussionMcpPolicy,
+} from "../consultation-view.js";
 
 const props = defineProps<{
   profiles: DiscussionProfile[];
@@ -30,6 +35,7 @@ const issues = ref<DiscussionIssue[]>([]);
 const issuesLoading = ref(false);
 const issuesError = ref<string | null>(null);
 const selectedIds = ref<string[]>([]);
+const discussionMcpPolicy = ref<DiscussionMcpPolicy>(initialDiscussionMcpPolicy());
 const validationError = ref<string | null>(null);
 let submitInFlight = false;
 
@@ -80,15 +86,22 @@ function toggle(id: string): void {
     : [...selectedIds.value, id];
 }
 
+function selectDiscussionMcpPolicy(policy: DiscussionMcpPolicy): void {
+  discussionMcpPolicy.value = policy;
+}
+
 function submit(): void {
   if (submitInFlight || props.starting) return;
   const error = validateConsultationInput({ prompt: prompt.value, profileIds: selectedIds.value });
   validationError.value = error;
   if (error !== null) return;
   submitInFlight = true;
+  const submittedMcpPolicy = discussionMcpPolicy.value;
+  discussionMcpPolicy.value = discussionMcpPolicyAfterSubmit();
   emit("start", {
     prompt: prompt.value.trim(),
     profileIds: [...selectedIds.value],
+    discussionMcpPolicy: submittedMcpPolicy,
     ...(target.value.trim().length > 0 ? { target: target.value.trim() } : {}),
   });
 }
@@ -133,6 +146,43 @@ watch(
           <span>
             <b>{{ profile.label }}</b>
             <small>{{ profile.id }}</small>
+          </span>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset class="mcp-policy-picker">
+      <legend>MCP（CLIに保存した外部ツール設定）</legend>
+      <p class="muted participant-hint">この相談で使うか選択してください。</p>
+      <div class="participant-options mcp-policy-options">
+        <label class="participant-option mcp-policy-option">
+          <input
+            type="radio"
+            name="discussion-mcp-policy"
+            value="deny"
+            :checked="discussionMcpPolicy === 'deny'"
+            :disabled="starting"
+            @change="selectDiscussionMcpPolicy('deny')"
+          />
+          <span>
+            <b>使わない（deny）</b>
+            <small
+              >MCP接続を検知した場合は停止します。完全な隔離を保証するものではありません。</small
+            >
+          </span>
+        </label>
+        <label class="participant-option mcp-policy-option">
+          <input
+            type="radio"
+            name="discussion-mcp-policy"
+            value="allow"
+            :checked="discussionMcpPolicy === 'allow'"
+            :disabled="starting"
+            @change="selectDiscussionMcpPolicy('allow')"
+          />
+          <span>
+            <b>この相談だけ使う（allow）</b>
+            <small>明示したこの相談だけに適用します。</small>
           </span>
         </label>
       </div>

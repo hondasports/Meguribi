@@ -49,7 +49,7 @@ import {
   loadDevinConfig,
   loadImplementerConfig,
 } from "@meguribi/config";
-import { buildSpecificationPrompt, buildSummarizerPrompt, RoleAssignmentError, validateRoleAssignments, type RunStore } from "@meguribi/core";
+import { buildSpecificationPrompt, buildSummarizerPrompt, resolveDiscussionMcpPolicy, RoleAssignmentError, validateRoleAssignments, type RunStore } from "@meguribi/core";
 import type {
   CleanupDependencies,
   DiscoverDependencies,
@@ -60,6 +60,7 @@ import type {
   MeasureDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
+  DiscussionMcpPolicy,
   LiveLogEvent,
   PlanDependencies,
   ReviewDependencies,
@@ -339,12 +340,44 @@ function roleAgentArtifactRoot(runsRoot?: string): string {
   return path.join(resolveRunsRoot(runsRoot), "role-agent-artifacts");
 }
 
+interface AcpPlanningAgentOptions extends AgentWiringOverrides {
+  repositoryPath: string;
+  nonInteractive: boolean;
+  /** 議論 Run 限定の明示 MCP 方針。planner/reviewer/delivery では未定義のまま。 */
+  discussionMcpPolicy?: DiscussionMcpPolicy;
+}
+
+function effectiveDiscussionMcpPolicy(
+  configured: readonly InheritedMcpPolicy[],
+  discussionMcpPolicy: DiscussionMcpPolicy | undefined,
+): DiscussionMcpPolicy | undefined {
+  if (discussionMcpPolicy === undefined) {
+    return undefined;
+  }
+  return resolveDiscussionMcpPolicy({ configured, discussionMcpPolicy });
+}
+
+function profileWithInheritedMcpPolicy(
+  profile: AgentProfile,
+  inheritedMcpPolicy: InheritedMcpPolicy | undefined,
+): AgentProfile {
+  if (inheritedMcpPolicy === undefined) {
+    return profile;
+  }
+  return { ...profile, inheritedMcpPolicy };
+}
+
+function discussionMcpPolicyOption(options: AcpPlanningAgentOptions): {
+  discussionMcpPolicy?: DiscussionMcpPolicy;
+} {
+  return options.discussionMcpPolicy === undefined
+    ? {}
+    : { discussionMcpPolicy: options.discussionMcpPolicy };
+}
+
 async function createDevinPlanningAgent(
   profile: AgentProfile,
-  options: AgentWiringOverrides & {
-    repositoryPath: string;
-    nonInteractive: boolean;
-  },
+  options: AcpPlanningAgentOptions,
 ): Promise<RoleAgent> {
   const loadConfig = options.loadDevinConfig ?? loadDevinConfig;
   const diagnose = options.diagnoseDevin ?? diagnoseDevin;
@@ -354,31 +387,36 @@ async function createDevinPlanningAgent(
     cli: {},
     nonInteractive: options.nonInteractive,
     ...configSourceOptions(options),
+    ...discussionMcpPolicyOption(options),
   });
-  const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
+  const configuredMcpPolicy = config.config.inheritedMcpPolicy;
+  const effectiveMcpPolicy = effectiveDiscussionMcpPolicy(
+    [configuredMcpPolicy, profile.inheritedMcpPolicy],
+    options.discussionMcpPolicy,
+  );
+  const diagnosisMcpPolicy = effectiveMcpPolicy ?? configuredMcpPolicy;
+  const roleProfile = profileWithInheritedMcpPolicy(profile, effectiveMcpPolicy);
   const diagnosis = await diagnose({
     executable: config.config.executable,
-    inheritedMcpPolicy,
+    inheritedMcpPolicy: diagnosisMcpPolicy,
     nonInteractive: options.nonInteractive,
     cwd: options.repositoryPath,
     probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
     minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   });
   return createRoleAgent({
-    profile,
+    profile: roleProfile,
     executable: config.config.executable,
     acpArgs: ["acp"],
     diagnosis,
     mode: options.nonInteractive ? "non-interactive" : "interactive",
+    ...discussionMcpPolicyOption(options),
   });
 }
 
 async function createCursorPlanningAgent(
   profile: AgentProfile,
-  options: AgentWiringOverrides & {
-    repositoryPath: string;
-    nonInteractive: boolean;
-  },
+  options: AcpPlanningAgentOptions,
 ): Promise<RoleAgent> {
   const loadConfig = options.loadCursorConfig ?? loadCursorConfig;
   const diagnose = options.diagnoseCursor ?? diagnoseCursor;
@@ -388,31 +426,36 @@ async function createCursorPlanningAgent(
     cli: {},
     nonInteractive: options.nonInteractive,
     ...configSourceOptions(options),
+    ...discussionMcpPolicyOption(options),
   });
-  const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
+  const configuredMcpPolicy = config.config.inheritedMcpPolicy;
+  const effectiveMcpPolicy = effectiveDiscussionMcpPolicy(
+    [configuredMcpPolicy, profile.inheritedMcpPolicy],
+    options.discussionMcpPolicy,
+  );
+  const diagnosisMcpPolicy = effectiveMcpPolicy ?? configuredMcpPolicy;
+  const roleProfile = profileWithInheritedMcpPolicy(profile, effectiveMcpPolicy);
   const diagnosis = await diagnose({
     executable: config.config.executable,
-    inheritedMcpPolicy,
+    inheritedMcpPolicy: diagnosisMcpPolicy,
     nonInteractive: options.nonInteractive,
     cwd: options.repositoryPath,
     probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
     minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
   });
   return createRoleAgent({
-    profile,
+    profile: roleProfile,
     executable: diagnosis.executable.path ?? config.config.executable,
     acpArgs: ["acp"],
     diagnosis,
     mode: options.nonInteractive ? "non-interactive" : "interactive",
+    ...discussionMcpPolicyOption(options),
   });
 }
 
 async function createAcpPlanningAgent(
   profile: AgentProfile,
-  options: AgentWiringOverrides & {
-    repositoryPath: string;
-    nonInteractive: boolean;
-  },
+  options: AcpPlanningAgentOptions,
 ): Promise<RoleAgent> {
   if (profile.kind === "devin") {
     return createDevinPlanningAgent(profile, options);
@@ -423,18 +466,24 @@ async function createAcpPlanningAgent(
   const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
   const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
   const executable = profileExecutable(profile);
+  const effectiveMcpPolicy = effectiveDiscussionMcpPolicy(
+    [profile.inheritedMcpPolicy],
+    options.discussionMcpPolicy,
+  );
+  const roleProfile = profileWithInheritedMcpPolicy(profile, effectiveMcpPolicy);
   const diagnosis = await diagnose({
-    profile,
+    profile: roleProfile,
     executable,
     cwd: options.repositoryPath,
     nonInteractive: options.nonInteractive,
     probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
   });
   return createRoleAgent({
-    profile,
+    profile: roleProfile,
     executable,
     diagnosis,
     mode: options.nonInteractive ? "non-interactive" : "interactive",
+    ...discussionMcpPolicyOption(options),
   });
 }
 
@@ -970,6 +1019,12 @@ export interface CreateDiscussionDepsOptions extends AgentWiringOverrides {
   discussants?: readonly string[];
   /** Run ごとの summarizer 上書き。未指定なら roles.summarizer → discussants[0] の従来どおり。 */
   summarizer?: string;
+  /**
+   * 議論エージェントの MCP 継承に対する Run ごとの明示方針（`meguribi discuss --discussion-mcp-policy`）。
+   * 未指定なら従来どおりプロファイルの inheritedMcpPolicy と fail-closed 判定に従う。
+   * P4/delivery の許可には波及しない。
+   */
+  discussionMcpPolicy?: DiscussionMcpPolicy;
 }
 
 /**

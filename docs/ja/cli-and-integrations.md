@@ -294,7 +294,9 @@ meguribi discuss owner/repo#125
 meguribi discuss owner/repo#125 --request "通知タイミングを重点的に" --max-turns 20 --log compact
 ```
 
-主要オプションは `--repo-path <path>`、`--local`、`--request <text>`、`--max-turns <n>`、`--log <stream|compact|none>`、`--json`、`--non-interactive` です。`--max-turns` の既定値は 20 です。議論全体の既定上限は 30 分、1ターンの既定タイムアウトは 5 分で、同じ参加者が 2 回連続でタイムアウトした場合も議論を終了します。
+主要オプションは `--repo-path <path>`、`--local`、`--request <text>`、`--discussants <ids>`、`--summarizer <id>`、`--discussion-mcp-policy <deny|allow>`、`--max-turns <n>`、`--log <stream|compact|none>`、`--json`、`--non-interactive` です。`--max-turns` の既定値は 20 です。議論全体の既定上限は 30 分、1ターンの既定タイムアウトは 5 分で、同じ参加者が 2 回連続でタイムアウトした場合も議論を終了します。
+
+`--discussion-mcp-policy` は議論 Run だけの明示選択です。`deny` は検出した MCP 接続を停止し、`allow` はこの Run に限って保存済み MCP 設定の継承を許可します。未指定時は従来どおりプロファイルの `inheritedMcpPolicy` に従うため、`warn` は `--non-interactive` では fail-closed で停止します。設定または診断対象のどちらかが固定 `deny` なら、`allow` を選んでも `deny` は弱めません。この選択は永続設定にも redo 入力にも保存されず、summarizer を含む議論役割だけに適用され、`run` / `discuss-to-pr` の implementer や delivery 側 `--allow-inherited-mcp` には波及しません。
 
 `--log stream` では `discussion.turn` を話者・指名先・ターン数付きで表示し、`discussion.ended` を終了境界として表示します。`compact` ではターン見出しと発言の冒頭 80 文字だけを表示します。形式不正の発言には `(形式不正)` を付けます。
 

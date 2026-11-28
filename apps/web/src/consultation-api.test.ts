@@ -65,6 +65,7 @@ describe("consultation api", () => {
         prompt: "夜間通知をどうするか相談したい",
         profileIds: ["claude-code", "codex-acp"],
         target: "owner/repo#96",
+        discussionMcpPolicy: "allow",
       }),
     ).resolves.toEqual({ runId: "run-1" });
     expect(calls[0]?.input).toBe("/api/discussions");
@@ -74,6 +75,7 @@ describe("consultation api", () => {
         prompt: "夜間通知をどうするか相談したい",
         profileIds: ["claude-code", "codex-acp"],
         target: "owner/repo#96",
+        discussionMcpPolicy: "allow",
       }),
     );
   });
@@ -85,9 +87,18 @@ describe("consultation api", () => {
       return response(400, { error: "profiles are unavailable" });
     });
     await expect(
-      api.startDiscussion({ prompt: "相談", profileIds: ["a", "b"], target: "  " }),
+      api.startDiscussion({
+        prompt: "相談",
+        profileIds: ["a", "b"],
+        target: "  ",
+        discussionMcpPolicy: "deny",
+      }),
     ).rejects.toThrow("profiles are unavailable");
-    expect(bodies[0]).toEqual({ prompt: "相談", profileIds: ["a", "b"] });
+    expect(bodies[0]).toEqual({
+      prompt: "相談",
+      profileIds: ["a", "b"],
+      discussionMcpPolicy: "deny",
+    });
   });
 });
 

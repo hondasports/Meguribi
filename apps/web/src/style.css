@@ -1245,6 +1245,25 @@ button {
   color: #94a3b8;
 }
 
+.mcp-policy-picker {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.mcp-policy-picker legend {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.mcp-policy-options {
+  align-items: stretch;
+}
+
+.mcp-policy-option small {
+  line-height: 1.45;
+}
+
 .issue-auxiliary {
   display: flex;
 }

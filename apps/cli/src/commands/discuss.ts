@@ -52,6 +52,8 @@ export interface DiscussCommandOptions {
   summarizer?: string;
   /** Issue を持たない read-only 相談のトピック。target 省略時は必須。 */
   prompt?: string;
+  /** 議論エージェントの MCP 継承に対するこの Run の明示方針。未指定は従来の fail-closed 判定。 */
+  discussionMcpPolicy?: string;
 }
 
 /**
@@ -199,6 +201,20 @@ function out(deps: DiscussionCommandDeps, text: string): void {
 
 function err(deps: DiscussionCommandDeps, text: string): void {
   (deps.stderr ?? ((value) => process.stderr.write(value)))(text);
+}
+
+/**
+ * `--discussion-mcp-policy` の値検証。deny / allow だけを受け付ける。
+ * 無効値は fail-closed で exit 1 とし、暗黙の許可に倒れない。
+ */
+function parseDiscussionMcpPolicy(value: string | undefined): "deny" | "allow" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "deny" || value === "allow") {
+    return value;
+  }
+  throw new Error(`--discussion-mcp-policy must be "deny" or "allow" (got: ${value})`);
 }
 
 function parseLogMode(value: string | undefined): LiveLogMode | "none" {
@@ -563,6 +579,13 @@ async function runConsultationCommand(
       : createRenderer((text) => err(deps, text), { mode, color: liveLogColor() });
 
   const participantOverride = parseParticipantOverride(options);
+  let mcpPolicy: "deny" | "allow" | undefined;
+  try {
+    mcpPolicy = parseDiscussionMcpPolicy(options.discussionMcpPolicy);
+  } catch (error) {
+    err(deps, `${error instanceof Error ? error.message : String(error)}\n`);
+    return { exitCode: 1 };
+  }
   const wiring = await resolveWiring(deps, {
     cwd,
     repositoryPath,
@@ -574,6 +597,7 @@ async function runConsultationCommand(
     ...(participantOverride.summarizer !== undefined
       ? { summarizer: participantOverride.summarizer }
       : {}),
+    ...(mcpPolicy !== undefined ? { discussionMcpPolicy: mcpPolicy } : {}),
   });
 
   // D 確定契約: command "consult"、issueNumber/branch/baseRef/baseSha/headSha は null。
@@ -670,6 +694,13 @@ export async function runDiscussCommand(
       : createRenderer((text) => err(deps, text), { mode, color: liveLogColor() });
 
   const participantOverride = parseParticipantOverride(options);
+  let mcpPolicy: "deny" | "allow" | undefined;
+  try {
+    mcpPolicy = parseDiscussionMcpPolicy(options.discussionMcpPolicy);
+  } catch (error) {
+    err(deps, `${error instanceof Error ? error.message : String(error)}\n`);
+    return { exitCode: 1 };
+  }
   const wiring = await resolveWiring(deps, {
     cwd,
     repositoryPath,
@@ -682,6 +713,7 @@ export async function runDiscussCommand(
     ...(participantOverride.summarizer !== undefined
       ? { summarizer: participantOverride.summarizer }
       : {}),
+    ...(mcpPolicy !== undefined ? { discussionMcpPolicy: mcpPolicy } : {}),
   });
   const runWorkflow = deps.runWorkflow ?? runDiscussionWorkflow;
 

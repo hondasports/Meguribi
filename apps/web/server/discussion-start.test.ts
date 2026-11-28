@@ -276,6 +276,93 @@ describe("discussion start API", () => {
     });
   });
 
+  it("passes an explicit discussionMcpPolicy through to the discuss CLI args", async () => {
+    const child = new FakeChild();
+    const calls: string[][] = [];
+    const api = createDiscussionStartApi({
+      repositoryPath: "/repo",
+      loadProfiles: async () => profilesFixture(),
+      startCli: (args) => {
+        calls.push([...args]);
+        return child;
+      },
+    });
+    const server = http.createServer((req, res) => void api.handle(req, res));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (typeof address !== "object" || address === null) throw new Error("missing test port");
+    const pending = request(address.port, "/api/discussions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "MCP 検証",
+        profileIds: ["claude-code", "devin"],
+        discussionMcpPolicy: "allow",
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    child.stdout.emit("data", Buffer.from("Run ID: run-mcp\n"));
+    await pending;
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    expect(calls[0]).toContain("--discussion-mcp-policy");
+    const flagIndex = calls[0]!.indexOf("--discussion-mcp-policy");
+    expect(calls[0]![flagIndex + 1]).toBe("allow");
+  });
+
+  it("does not pass any discussion-mcp-policy flag when the input omits it", async () => {
+    const child = new FakeChild();
+    const calls: string[][] = [];
+    const api = createDiscussionStartApi({
+      repositoryPath: "/repo",
+      loadProfiles: async () => profilesFixture(),
+      startCli: (args) => {
+        calls.push([...args]);
+        return child;
+      },
+    });
+    const server = http.createServer((req, res) => void api.handle(req, res));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (typeof address !== "object" || address === null) throw new Error("missing test port");
+    const pending = request(address.port, "/api/discussions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: "既定の相談", profileIds: ["claude-code", "devin"] }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    child.stdout.emit("data", Buffer.from("Run ID: run-default\n"));
+    await pending;
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    // サーバー既定は許可しない: 省略時はフラグ自体を渡さず CLI の fail-closed に委ねる。
+    expect(calls[0]).not.toContain("--discussion-mcp-policy");
+  });
+
+  it("rejects invalid discussionMcpPolicy values, non-string types, and the discuss-to-pr combination", async () => {
+    await withServer({}, async (port) => {
+      for (const body of [
+        { prompt: "x", profileIds: ["claude-code", "devin"], discussionMcpPolicy: "sometimes" },
+        { prompt: "x", profileIds: ["claude-code", "devin"], discussionMcpPolicy: true },
+        { prompt: "x", profileIds: ["claude-code", "devin"], discussionMcpPolicy: "" },
+        {
+          prompt: "x",
+          profileIds: ["claude-code", "devin"],
+          target: "owner/repo#22",
+          workflow: "discuss-to-pr",
+          discussionMcpPolicy: "allow",
+        },
+      ]) {
+        const response = await request(port, "/api/discussions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        expect(response.status).toBe(400);
+      }
+    });
+  });
+
   it("rejects invalid agent sets, blank prompt, sdk profiles, and foreign origins", async () => {
     await withServer({}, async (port) => {
       for (const body of [

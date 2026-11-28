@@ -259,6 +259,49 @@ describe("createAcpRoleAgent integration", () => {
     await expect(session.close()).resolves.toBeUndefined();
   });
 
+  it.each([
+    { profilePolicy: "warn", runPolicy: "allow", expected: "allow" },
+    { profilePolicy: "warn", runPolicy: "deny", expected: "deny" },
+    { profilePolicy: "allow", runPolicy: "deny", expected: "deny" },
+    { profilePolicy: "deny", runPolicy: "allow", expected: "deny" },
+    { profilePolicy: "warn", runPolicy: undefined, expected: "warn" },
+  ] as const)(
+    "passes the effective MCP policy to the actual ACP session ($profilePolicy + $runPolicy)",
+    async ({ profilePolicy, runPolicy, expected }) => {
+      const startedMcpPolicies: unknown[] = [];
+      const transport: AcpTransport = {
+        start: async (input) => {
+          startedMcpPolicies.push(input.mcpPolicy);
+          return fakeTransportConnection("fake-transport-mcp-policy");
+        },
+      };
+      const { cwd, artifactRoot } = await tempGit();
+      const options = {
+        profile: claudeCodeProfile({ inheritedMcpPolicy: profilePolicy }),
+        executable: "fake-agent-cli",
+        diagnosis: runnableDiagnosis(),
+        mode: "non-interactive" as const,
+        transport,
+        ...(runPolicy === undefined ? {} : { discussionMcpPolicy: runPolicy }),
+      };
+      const agent = createAcpRoleAgent(options);
+      const session = await agent.openSession({
+        cwd,
+        mode: "read-only",
+        role: "planner",
+        artifactRoot,
+      });
+      await session.close();
+
+      expect(startedMcpPolicies).toHaveLength(1);
+      expect(startedMcpPolicies[0]).toMatchObject({
+        policy: expected,
+        mode: "non-interactive",
+        explicitAllow: false,
+      });
+    },
+  );
+
   it("does not raise write violations in write mode", async () => {
     const { cwd, artifactRoot } = await tempGit();
     const agent = agentFor("write-in-scope");

@@ -101,6 +101,7 @@ function validateStartBody(
     profileIds?: unknown;
     target?: unknown;
     workflow?: unknown;
+    discussionMcpPolicy?: unknown;
   };
   if (typeof input.prompt !== "string" || input.prompt.trim().length === 0) {
     return { error: "prompt is required" };
@@ -134,6 +135,17 @@ function validateStartBody(
   if (input.workflow === "discuss-to-pr" && input.target === undefined) {
     return { error: "discuss-to-pr requires target" };
   }
+  // discussionMcpPolicy は省略時に許可しない（サーバー既定はフラグを渡さない）。
+  // 指定時は "deny" | "allow" の文字列だけを受け付け、それ以外は fail-closed で拒否する。
+  if (input.discussionMcpPolicy !== undefined) {
+    if (input.discussionMcpPolicy !== "deny" && input.discussionMcpPolicy !== "allow") {
+      return { error: "discussionMcpPolicy must be deny or allow" };
+    }
+    // P4/delivery の許可には広げない: discuss-to-pr との併用は拒否する。
+    if (input.workflow === "discuss-to-pr") {
+      return { error: "discussionMcpPolicy is only valid for discussions, not discuss-to-pr" };
+    }
+  }
   if (input.target !== undefined) {
     if (
       typeof input.target !== "string" ||
@@ -148,19 +160,31 @@ function validateStartBody(
       profileIds: string[];
       target: string;
       workflow?: "discuss" | "discuss-to-pr";
+      discussionMcpPolicy?: "deny" | "allow";
     } = {
       prompt: input.prompt,
       profileIds,
       target: input.target.trim(),
     };
     if (input.workflow !== undefined) result.workflow = input.workflow;
+    if (input.discussionMcpPolicy !== undefined) {
+      result.discussionMcpPolicy = input.discussionMcpPolicy as "deny" | "allow";
+    }
     return result;
   }
-  const result: { prompt: string; profileIds: string[]; workflow?: "discuss" | "discuss-to-pr" } = {
+  const result: {
+    prompt: string;
+    profileIds: string[];
+    workflow?: "discuss" | "discuss-to-pr";
+    discussionMcpPolicy?: "deny" | "allow";
+  } = {
     prompt: input.prompt,
     profileIds,
   };
   if (input.workflow !== undefined) result.workflow = input.workflow;
+  if (input.discussionMcpPolicy !== undefined) {
+    result.discussionMcpPolicy = input.discussionMcpPolicy as "deny" | "allow";
+  }
   return result;
 }
 
@@ -170,11 +194,13 @@ function cliArgs(
     profileIds: string[];
     target?: string;
     workflow?: "discuss" | "discuss-to-pr";
+    discussionMcpPolicy?: "deny" | "allow";
   },
   repositoryPath: string,
 ): string[] {
   const discussants = input.profileIds.join(",");
   if (input.target !== undefined && input.workflow === "discuss-to-pr") {
+    // discuss-to-pr には discussion-mcp-policy を渡さない（delivery の許可に広げない）。
     return [
       "workflow",
       "run",
@@ -197,6 +223,10 @@ function cliArgs(
     args.push("--prompt", input.prompt);
   }
   args.push("--repo-path", repositoryPath, "--discussants", discussants, "--non-interactive");
+  // 明示指定されたときだけフラグを渡す。省略時は CLI の fail-closed 判定に委ねる。
+  if (input.discussionMcpPolicy !== undefined) {
+    args.push("--discussion-mcp-policy", input.discussionMcpPolicy);
+  }
   return args;
 }
 
