@@ -37,6 +37,8 @@ The initial `Consult` tab provides a large multiline prompt and a two-to-four pa
 
 After startup, the screen becomes a thread workspace: consultations and discussions are listed on the left, the prompt and speaker-labeled conversation are centered, and the interjection input stays at the bottom. The list can be searched by title or identifier and navigated with arrow keys. Status labels appear both in the list and in the conversation header. The large composer collapses; `New consultation` returns to it, and `Back to consultation` restores the active conversation. Long conversations scroll in the center conversation area while the input remains docked at the bottom.
 
+The terminal view sits above the consultation input and shows agent messages, tool activity, and status changes in chronological order. It follows new rows only while you are at the bottom; scrolling up to read earlier output pauses following, and returning to the bottom resumes it. You can switch between the combined view and individual speakers, and long messages or tool output are collapsed so you can expand only the rows you need.
+
 The `Existing operations` tab runs only validated Meguribi commands as argument arrays. The `Run history` tab shows recent Runs, delivery progress, agent activity, and live logs from the same RunStore used by the CLI.
 
 Issue-less consultations are stored as `command: "consult"` under `consultations/<runId>` with `issueNumber` / `branch` / `baseRef` / `baseSha` / `headSha` set to `null`. Existing Issue-linked discussion Runs keep `command: "discuss"`. Messages in `consult` / `discuss` Runs are threaded by `replyTo`, distinguished by speaker color and speaker name, and malformed turns are marked. Turn IDs in a conclusion link to existing turns; missing IDs are plain text.
@@ -244,6 +246,8 @@ Main options:
 ```
 
 The `event` payload can be `workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`, an in-step `step.started` / `agent.event`, `step.progress` for attempt and command counts, or a discussion `discussion.turn` / `discussion.ended` event. Payloads are redacted before being written. Append failures do not change the Run result or exit code; Meguribi prints one warning to stderr. Malformed lines are skipped with a warning during reads.
+
+For terminal display, the Web UI receives these persisted events as a bounded SSE snapshot named `terminal`. The payload is `{ rows: TerminalRow[] }`; each `TerminalRow` has `id`, `at`, `profileId`, `label`, `kind` (`message`, `tool`, or `status`), `text`, and `active`. The SSE event carries the latest bounded snapshot rather than an unbounded delta stream, so a client that attaches mid-run converges to the same terminal state.
 
 Example split-screen workflow for an active Run:
 

@@ -1714,9 +1714,25 @@ body {
   background: rgba(8, 10, 11, 0.98);
   padding: 12px clamp(14px, 3vw, 42px) 14px;
 }
+.thread-input-dock .live-terminal,
 .thread-input-dock .interject-box {
   max-width: 880px;
   margin: 0 auto;
+}
+.thread-input-dock .live-terminal {
+  margin-bottom: 10px;
+}
+.terminal-stream-error {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0 auto 8px;
+  max-width: 880px;
+}
+.terminal-stream-error .secondary-link-button {
+  flex-shrink: 0;
+  min-height: 30px;
 }
 .thread-input-dock .action-error.standalone,
 .thread-input-dock .action-notice.standalone {
