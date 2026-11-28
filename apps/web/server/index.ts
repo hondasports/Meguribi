@@ -1,11 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { homedir } from "node:os";
 import { createReadStream } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
+import { FileSystemRunStore, FileSystemWorkflowEventLog } from "@meguribi/adapters";
 import { buildCliArgs, commandIds, redactOutput, type CommandRequest } from "./command-specs.js";
+import { createRunStoreApi } from "./run-store-api.js";
 
 interface RunRecord {
   id: string;
@@ -23,6 +26,20 @@ const repositoryRoot = process.env.MEGURIBI_ROOT
   : path.resolve(appDirectory, "../..");
 const port = Number(process.env.MEGURIBI_WEB_PORT ?? 4173);
 const pnpmExecutable = process.platform === "win32" ? process.execPath : "pnpm";
+
+function localDataRoot(): string {
+  if (process.env.XDG_DATA_HOME) return path.join(process.env.XDG_DATA_HOME, "meguribi");
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA ?? path.join(homedir(), "AppData", "Local"), "meguribi");
+  }
+  return path.join(homedir(), ".local", "share", "meguribi");
+}
+
+function runStoreRoot(): string {
+  return process.env.MEGURIBI_RUNS_ROOT
+    ? path.resolve(process.env.MEGURIBI_RUNS_ROOT)
+    : localDataRoot();
+}
 
 function pnpmArguments(args: readonly string[]): string[] {
   if (process.platform !== "win32") return [...args];
@@ -136,9 +153,13 @@ async function createAppServer(): Promise<http.Server> {
       server: { middlewareMode: true },
       appType: "spa",
     });
+  const runStore = new FileSystemRunStore({ rootDir: runStoreRoot() });
+  const eventLog = new FileSystemWorkflowEventLog({ runStore });
+  const runStoreApi = createRunStoreApi({ runStore, eventLog });
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api/health" && req.method === "GET") return json(res, 200, { ok: true });
+    if (await runStoreApi.handle(req, res)) return;
     if (url.pathname === "/api/commands" && req.method === "POST") {
       try {
         const body = await parseBody(req);

@@ -30,6 +30,7 @@ import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommand
 import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
 import { runMeasureCommand, type MeasureCommandDependencies, type MeasureCommandOptions } from "./commands/measure.js";
 import { runStatusCommand, type StatusCommandDependencies, type StatusCommandOptions } from "./commands/status.js";
+import { runDeskCommand, type DeskCommandDependencies, type DeskCommandOptions } from "./commands/desk.js";
 import {
   runWorkflowListCommand,
   runWorkflowValidateCommand,
@@ -57,7 +58,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies, WorkflowValidateCommandDependencies, WorkflowListCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies, WorkflowValidateCommandDependencies, WorkflowListCommandDependencies, DeskCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -455,6 +456,26 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         process.exitCode = 1;
       } finally {
         process.off("SIGINT", onSigInt);
+      }
+    });
+
+  program
+    .command("desk")
+    .description("Start the local Command Desk web UI")
+    .option("--port <number>", "Command Desk port", (value: string) => {
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+        throw new Error(`Invalid --port: ${value}`);
+      }
+      return parsed;
+    })
+    .action(async (cliOptions: DeskCommandOptions) => {
+      try {
+        const result = await runDeskCommand(cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
       }
     });
 

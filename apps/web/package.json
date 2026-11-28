@@ -10,9 +10,12 @@
     "test": "vitest run",
     "lint": "oxlint server src vite.config.ts --deny-warnings",
     "format:check": "oxfmt --check src server vite.config.ts",
-    "start": "tsx server/index.ts --production"
+    "start": "tsx server/index.ts --production",
+    "predev": "pnpm --filter @meguribi/adapters... build"
   },
   "dependencies": {
+    "@meguribi/adapters": "workspace:*",
+    "@meguribi/core": "workspace:*",
     "vue": "^3.5.18"
   },
   "devDependencies": {

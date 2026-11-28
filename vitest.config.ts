@@ -18,6 +18,7 @@ export default defineConfig({
     include: [
       "packages/*/src/**/*.test.ts",
       "apps/*/src/**/*.test.ts",
+      "apps/*/server/**/*.test.ts",
       "experiments/devin-acp/test/**/*.test.ts",
     ],
   },

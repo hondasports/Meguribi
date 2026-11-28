@@ -118,6 +118,26 @@ export class FileSystemRunStore implements RunStore {
     return null;
   }
 
+  async listRecent(limit = 50): Promise<RunState[]> {
+    const normalizedLimit = normalizeListRecentLimit(limit);
+    if (normalizedLimit === 0) {
+      return [];
+    }
+    const stateFiles = await collectStateFiles(this.runsRoot());
+    const states: RunState[] = [];
+    for (const stateFile of stateFiles) {
+      const state = await this.readStateForList(path.dirname(stateFile));
+      if (state) {
+        states.push(state);
+      }
+    }
+    states.sort((left, right) => {
+      const byUpdatedAt = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+      return byUpdatedAt !== 0 ? byUpdatedAt : right.runId.localeCompare(left.runId);
+    });
+    return states.slice(0, normalizedLimit);
+  }
+
   async update(runId: string, patch: Partial<RunState>): Promise<RunState> {
     const runDir = await this.resolveRunDirById(runId);
     if (!runDir) {
@@ -290,6 +310,18 @@ export class FileSystemRunStore implements RunStore {
     return runDir;
   }
 
+  private async readStateForList(runDir: string): Promise<RunState | null> {
+    try {
+      return await this.readState(runDir);
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === undefined) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   private async writeState(runDir: string, state: RunState): Promise<void> {
     await atomicWriteFile(
       path.join(runDir, "state.json"),
@@ -365,6 +397,37 @@ function sanitizeArtifactName(name: string): string {
     throw new Error(`Invalid artifact name: ${name}`);
   }
   return normalized;
+}
+
+function normalizeListRecentLimit(limit: number): number {
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return 0;
+  }
+  return Math.min(Math.floor(limit), 200);
+}
+
+async function collectStateFiles(root: string): Promise<string[]> {
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectStateFiles(entryPath));
+    } else if (entry.isFile() && entry.name === "state.json") {
+      files.push(entryPath);
+    }
+  }
+  return files;
 }
 
 async function atomicWriteFile(filePath: string, contents: string): Promise<void> {

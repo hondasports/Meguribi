@@ -1,0 +1,451 @@
+import fs from "node:fs/promises";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  FileSystemRunStore,
+  FileSystemWorkflowEventLog,
+} from "@meguribi/adapters";
+import type {
+  RunState,
+  WorkflowEvent,
+  WorkflowEventLog,
+  WorkflowEventRecord,
+} from "@meguribi/core";
+import { createRunStoreApi } from "./run-store-api.js";
+
+const tempDirs: string[] = [];
+
+class CountingWorkflowEventLog implements WorkflowEventLog {
+  reads = 0;
+
+  constructor(private readonly inner: FileSystemWorkflowEventLog) {}
+
+  async append(runId: string, event: WorkflowEvent, at?: string): Promise<void> {
+    await this.inner.append(runId, event, at);
+  }
+
+  async read(runId: string, fromLine = 0): Promise<{
+    records: WorkflowEventRecord[];
+    nextLine: number;
+    skippedLines: number;
+  }> {
+    this.reads += 1;
+    return this.inner.read(runId, fromLine);
+  }
+}
+
+async function tempRoot(): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "meguribi-web-runs-"));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+});
+
+async function createFixture() {
+  const rootDir = await tempRoot();
+  let randomIndex = 0;
+  const runStore = new FileSystemRunStore({
+    rootDir,
+    now: () => new Date("2026-11-28T12:00:00.000Z"),
+    randomId: () => `test${String(++randomIndex).padStart(2, "0")}`,
+  });
+  const realEventLog = new FileSystemWorkflowEventLog({ runStore });
+  const eventLog = new CountingWorkflowEventLog(realEventLog);
+  return { rootDir, runStore, eventLog };
+}
+
+async function createRun(runStore: FileSystemRunStore, issueNumber = 42): Promise<RunState> {
+  return runStore.create({
+    repository: "owner/repo",
+    issueNumber,
+    command: "run",
+    maxFixAttempts: 1,
+    identity: {
+      repository: "owner/repo",
+      issueNumber,
+      branch: `meguribi/issue-${String(issueNumber)}`,
+      worktreePath: "/tmp/worktree",
+      baseRef: "origin/main",
+      baseSha: "base",
+      headSha: "head",
+      remoteIdentity: "github.com/owner/repo",
+    },
+  });
+}
+
+function liveStepStarted(profileId = "devin", stepId = "implement"): WorkflowEvent {
+  return {
+    type: "step.started",
+    stepId,
+    label: stepId,
+    role: "implementer",
+    profileId,
+    agentLabel: profileId === "devin" ? "Devin" : profileId,
+  };
+}
+
+function liveMessage(profileId: string, text: string, at: string): WorkflowEvent {
+  return {
+    type: "agent.event",
+    stepId: "implement",
+    profileId,
+    agentLabel: profileId === "devin" ? "Devin" : profileId,
+    role: "implementer",
+    event: {
+      type: "message.delta",
+      sessionId: `${profileId}-session`,
+      text,
+      at,
+    },
+  };
+}
+
+function liveToolStarted(profileId: string, at: string): WorkflowEvent {
+  return {
+    type: "agent.event",
+    stepId: "implement",
+    profileId,
+    agentLabel: profileId === "devin" ? "Devin" : profileId,
+    role: "implementer",
+    event: {
+      type: "tool.started",
+      sessionId: `${profileId}-session`,
+      tool: "Terminal",
+      toolCallId: `${profileId}-tool-1`,
+      summary: "pnpm test",
+      at,
+    },
+  };
+}
+
+async function withApiServer(
+  options: Parameters<typeof createRunStoreApi>[0],
+  run: (port: number) => Promise<void>,
+): Promise<void> {
+  const api = createRunStoreApi(options);
+  const server = http.createServer((req, res) => {
+    api
+      .handle(req, res)
+      .then((handled) => {
+        if (!handled) {
+          res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ error: "Not found" }));
+        }
+      })
+      .catch((error: unknown) => {
+        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+      });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (typeof address !== "object" || address === null) {
+    throw new Error("test server did not expose a port");
+  }
+  try {
+    await run(address.port);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+async function getJson(port: number, requestPath: string): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ host: "127.0.0.1", port, path: requestPath }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        try {
+          resolve({ status: res.statusCode ?? 0, body: body ? JSON.parse(body) : null });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on("error", reject);
+  });
+}
+
+interface CapturedSseEvent {
+  name: string;
+  data: string;
+}
+
+interface SseClient {
+  events: CapturedSseEvent[];
+  close: () => void;
+  closed: Promise<void>;
+}
+
+function connectSse(port: number, requestPath: string): SseClient {
+  const events: CapturedSseEvent[] = [];
+  let buffer = "";
+  let resolveClosed!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
+  const req = http.get({ host: "127.0.0.1", port, path: requestPath }, (res) => {
+    res.setEncoding("utf8");
+    res.on("data", (chunk: string) => {
+      buffer += chunk;
+      let frameEnd = buffer.indexOf("\n\n");
+      while (frameEnd >= 0) {
+        const frame = buffer.slice(0, frameEnd);
+        buffer = buffer.slice(frameEnd + 2);
+        const lines = frame.split("\n");
+        const name = lines.find((line) => line.startsWith("event: "))?.slice(7);
+        const data = lines
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice(6))
+          .join("\n");
+        if (name) {
+          events.push({ name, data });
+        }
+        frameEnd = buffer.indexOf("\n\n");
+      }
+    });
+    res.on("end", resolveClosed);
+    res.on("close", resolveClosed);
+  });
+  req.on("error", resolveClosed);
+  req.on("close", resolveClosed);
+  return { events, close: () => req.destroy(), closed };
+}
+
+async function waitFor(condition: () => boolean, message: string): Promise<void> {
+  const deadline = Date.now() + 2500;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+function logChunks(client: SseClient): Array<{ pane: string; text: string }> {
+  return client.events
+    .filter((event) => event.name === "log")
+    .map((event) => JSON.parse(event.data) as { pane: string; text: string });
+}
+
+describe("run-store api", () => {
+  it("lists recent runs as summaries", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const older = await createRun(runStore, 42);
+    const newer = await createRun(runStore, 43);
+    await runStore.update(older.runId, {
+      status: "awaiting_human",
+      updatedAt: "2026-11-28T12:00:01.000Z",
+      pullRequestNumber: 101,
+    });
+    await runStore.update(newer.runId, {
+      status: "implementing",
+      currentStep: "implementing",
+      updatedAt: "2026-11-28T12:00:02.000Z",
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs?limit=2");
+      expect(response.status).toBe(200);
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body.map((run) => run.runId)).toEqual([newer.runId, older.runId]);
+      expect(body[0]).toEqual({
+        runId: newer.runId,
+        repository: "owner/repo",
+        issueNumber: 43,
+        command: "run",
+        status: "implementing",
+        currentStep: "implementing",
+        updatedAt: "2026-11-28T12:00:02.000Z",
+        pullRequestNumber: null,
+      });
+      expect(body[1]?.pullRequestNumber).toBe(101);
+    });
+  });
+
+  it("returns run detail with delivery pipeline state and agent activities", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+    await runStore.update(run.runId, { status: "implementing", currentStep: "implementing" });
+    await eventLog.append(run.runId, {
+      type: "workflow.started",
+      runId: run.runId,
+      workflow: "delivery",
+      at: "2026-11-28T12:00:00.000Z",
+    }, "2026-11-28T12:00:00.000Z");
+    await eventLog.append(run.runId, {
+      type: "workflow.step.started",
+      runId: run.runId,
+      stepId: "plan",
+      kind: "plan",
+      visit: 1,
+      at: "2026-11-28T12:00:01.000Z",
+    }, "2026-11-28T12:00:01.000Z");
+    await eventLog.append(run.runId, {
+      type: "workflow.step.completed",
+      runId: run.runId,
+      stepId: "plan",
+      kind: "plan",
+      outcome: "continue",
+      at: "2026-11-28T12:00:02.000Z",
+    }, "2026-11-28T12:00:02.000Z");
+    await eventLog.append(run.runId, {
+      type: "workflow.step.started",
+      runId: run.runId,
+      stepId: "implement",
+      kind: "implement",
+      visit: 1,
+      at: "2026-11-28T12:00:03.000Z",
+    }, "2026-11-28T12:00:03.000Z");
+    await eventLog.append(run.runId, liveToolStarted("devin", "2026-11-28T12:00:04.000Z"), "2026-11-28T12:00:04.000Z");
+
+    await withApiServer({
+      runStore,
+      eventLog,
+      now: () => new Date("2026-11-28T12:00:16.000Z"),
+    }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}`);
+      expect(response.status).toBe(200);
+      const detail = response.body as {
+        state: RunState;
+        pipeline: Array<{ stepId: string; kind: string; status: string; visit: number }>;
+        activities: Array<{ profileId: string; state: string; detail?: string }>;
+      };
+      expect(detail.state.runId).toBe(run.runId);
+      expect(detail.pipeline.map((step) => [step.stepId, step.status, step.visit])).toEqual([
+        ["plan", "completed", 1],
+        ["implement", "running", 1],
+        ["verify", "pending", 0],
+        ["review", "pending", 0],
+        ["fix-after-verify", "pending", 0],
+        ["fix-after-review", "pending", 0],
+        ["publish", "pending", 0],
+      ]);
+      expect(detail.pipeline[0]?.kind).toBe("plan");
+      expect(detail.activities).toHaveLength(1);
+      expect(detail.activities[0]).toMatchObject({
+        profileId: "devin",
+        state: "running_tool",
+        detail: "pnpm test",
+      });
+    });
+  });
+
+  it("returns pending pipeline and empty activities when events.jsonl does not exist", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}`);
+      expect(response.status).toBe(200);
+      const detail = response.body as {
+        pipeline: Array<{ status: string; visit: number }>;
+        activities: unknown[];
+      };
+      expect(detail.pipeline).toHaveLength(7);
+      expect(detail.pipeline.every((step) => step.status === "pending" && step.visit === 0)).toBe(true);
+      expect(detail.activities).toEqual([]);
+    });
+  });
+
+  it("streams existing and appended logs independently to two clients, then ends", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+    await runStore.update(run.runId, { status: "implementing", currentStep: "implementing" });
+    await eventLog.append(run.runId, liveStepStarted(), "2026-11-28T12:00:00.000Z");
+    await eventLog.append(run.runId, liveMessage("devin", "hello", "2026-11-28T12:00:01.000Z"), "2026-11-28T12:00:01.000Z");
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const first = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      const second = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await waitFor(
+        () => logChunks(first).length >= 2 && logChunks(second).length >= 2,
+        "initial live logs on both clients",
+      );
+
+      await eventLog.append(run.runId, liveToolStarted("devin", "2026-11-28T12:00:02.000Z"), "2026-11-28T12:00:02.000Z");
+      await eventLog.append(run.runId, liveMessage("codex", "reviewing", "2026-11-28T12:00:03.000Z"), "2026-11-28T12:00:03.000Z");
+      await runStore.update(run.runId, { status: "awaiting_human" });
+      await waitFor(
+        () => first.events.some((event) => event.name === "end") && second.events.some((event) => event.name === "end"),
+        "end events on both clients",
+      );
+      await Promise.all([first.closed, second.closed]);
+
+      for (const client of [first, second]) {
+        const chunks = logChunks(client);
+        const allText = chunks.filter((chunk) => chunk.pane === "all").map((chunk) => chunk.text).join("");
+        const devinText = chunks.filter((chunk) => chunk.pane === "devin").map((chunk) => chunk.text).join("");
+        const codexText = chunks.filter((chunk) => chunk.pane === "codex").map((chunk) => chunk.text).join("");
+        expect(allText).toContain("── implement · Devin (implementer)");
+        expect(allText).toContain("● Devin  hello");
+        expect(allText).toContain("● Terminal  pnpm test");
+        expect(allText).toContain("● codex  reviewing");
+        expect(devinText).toContain("● Devin  hello");
+        expect(devinText).toContain("● Terminal  pnpm test");
+        expect(devinText).not.toContain("reviewing");
+        expect(codexText).toContain("● codex  reviewing");
+        expect(client.events.some((event) => event.name === "detail")).toBe(true);
+      }
+    });
+  });
+
+  it("closes an already terminal run after replaying existing events", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+    await eventLog.append(run.runId, liveMessage("devin", "done", "2026-11-28T12:00:00.000Z"), "2026-11-28T12:00:00.000Z");
+    await runStore.update(run.runId, { status: "awaiting_human" });
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const client = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await waitFor(() => client.events.some((event) => event.name === "end"), "terminal end event");
+      await client.closed;
+      expect(logChunks(client).some((chunk) => chunk.pane === "all" && chunk.text.includes("done"))).toBe(true);
+    });
+  });
+
+  it("stops polling the event log after the client disconnects", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+    await runStore.update(run.runId, { status: "implementing", currentStep: "implementing" });
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const client = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await waitFor(() => eventLog.reads > 0, "initial event log read");
+      client.close();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const readsAfterDisconnect = eventLog.reads;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(eventLog.reads).toBe(readsAfterDisconnect);
+    });
+  });
+
+  it("rejects invalid run ids and reports missing runs", async () => {
+    const { runStore, eventLog } = await createFixture();
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      for (const requestPath of [
+        "/api/run-store/runs/..",
+        "/api/run-store/runs/..%2Fsecret",
+        "/api/run-store/runs/bad%5Cid",
+        "/api/run-store/runs/..%2Fsecret/stream",
+      ]) {
+        const response = await getJson(port, requestPath);
+        expect(response.status).toBe(400);
+      }
+      const missing = await getJson(port, "/api/run-store/runs/missing-run");
+      expect(missing.status).toBe(404);
+    });
+  });
+});

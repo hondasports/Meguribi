@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import type { RunSummary } from "../server/run-store-api.js";
+import ActivityBar from "./components/ActivityBar.vue";
+import AgentPanes from "./components/AgentPanes.vue";
+import RunList from "./components/RunList.vue";
+import RunPipeline from "./components/RunPipeline.vue";
+import { applyDetail, applyLog, createRunViewState } from "./run-view.js";
 
 type CommandId =
   | "doctor"
@@ -236,13 +242,132 @@ async function runCommand(): Promise<void> {
   }
 }
 
+const activeView = ref<"commands" | "runs">("commands");
+const runSummaries = ref<RunSummary[]>([]);
+const runsLoading = ref(false);
+const runListError = ref<string | null>(null);
+const runStreamError = ref<string | null>(null);
+const selectedRunId = ref<string | null>(null);
+const runView = ref(createRunViewState());
+const runDetail = computed(() => runView.value.detail);
+let runListTimer: ReturnType<typeof setInterval> | undefined;
+let runEvents: EventSource | undefined;
+
+const runStatusLabels: Record<string, string> = {
+  created: "作成済み",
+  planning: "計画中",
+  planned: "計画済み",
+  implementing: "実装中",
+  verifying: "検証中",
+  reviewing: "レビュー中",
+  fixing: "修正中",
+  publishing: "公開中",
+  awaiting_human: "承認待ち",
+  blocked: "停止",
+  failed: "失敗",
+  cancelled: "中止",
+  interrupted: "中断",
+  timed_out: "タイムアウト",
+  completed: "完了",
+};
+
+function runStatusLabel(status: string): string {
+  return runStatusLabels[status] ?? status;
+}
+
+function setPaneMode(value: "agents" | "all"): void {
+  runView.value = { ...runView.value, selectedPane: value };
+}
+
+function closeRunEvents(): void {
+  runEvents?.close();
+  runEvents = undefined;
+}
+
+function openRunEvents(runId: string): void {
+  closeRunEvents();
+  let streamEnded = false;
+  const events = new EventSource(`/api/run-store/runs/${encodeURIComponent(runId)}/stream`);
+  runEvents = events;
+  events.addEventListener("log", (event) => {
+    if (selectedRunId.value !== runId) return;
+    const chunk = JSON.parse((event as MessageEvent).data) as { pane: string; text: string };
+    runView.value = applyLog(runView.value, chunk);
+  });
+  events.addEventListener("detail", (event) => {
+    if (selectedRunId.value !== runId) return;
+    const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
+    runView.value = applyDetail(runView.value, detail);
+  });
+  events.addEventListener("end", () => {
+    streamEnded = true;
+    events.close();
+  });
+  events.addEventListener("error", (event) => {
+    if (selectedRunId.value !== runId) return;
+    const payload = JSON.parse((event as MessageEvent).data) as { message?: string };
+    runStreamError.value = payload.message ?? "Run の読み込みでエラーが発生しました";
+  });
+  events.onerror = () => {
+    if (!streamEnded && selectedRunId.value === runId) {
+      runStreamError.value = "Run のライブログとの接続が切れました";
+    }
+    events.close();
+  };
+}
+
+function selectRun(runId: string): void {
+  if (selectedRunId.value === runId) return;
+  selectedRunId.value = runId;
+  runView.value = createRunViewState();
+  runStreamError.value = null;
+  openRunEvents(runId);
+}
+
+function clearSelectedRun(): void {
+  selectedRunId.value = null;
+  runView.value = createRunViewState();
+  closeRunEvents();
+}
+
+async function loadRuns(): Promise<void> {
+  runsLoading.value = true;
+  try {
+    const response = await fetch("/api/run-store/runs?limit=50");
+    if (!response.ok)
+      throw new Error(`Run 一覧を取得できませんでした (${String(response.status)})`);
+    const runs = (await response.json()) as RunSummary[];
+    runSummaries.value = runs;
+    runListError.value = null;
+    if (runs.length === 0) {
+      clearSelectedRun();
+    } else if (
+      selectedRunId.value === null ||
+      !runs.some((run) => run.runId === selectedRunId.value)
+    ) {
+      selectRun(runs[0]!.runId);
+    }
+  } catch (cause) {
+    runListError.value = cause instanceof Error ? cause.message : String(cause);
+  } finally {
+    runsLoading.value = false;
+  }
+}
+
 onMounted(async () => {
+  void loadRuns();
+  runListTimer = setInterval(() => void loadRuns(), 5000);
   try {
     const response = await fetch("/api/health");
     if (response.ok) connection.value = "online";
   } catch {
     connection.value = "offline";
   }
+});
+
+onBeforeUnmount(() => {
+  if (runListTimer !== undefined) clearInterval(runListTimer);
+  closeRunEvents();
 });
 </script>
 
@@ -253,6 +378,22 @@ onMounted(async () => {
         <span class="brand-mark">↻</span>
         <div><strong>Meguribi</strong><span>Command Desk</span></div>
       </div>
+      <nav class="view-tabs" aria-label="画面切り替え">
+        <button
+          :class="['view-tab', { active: activeView === 'commands' }]"
+          type="button"
+          @click="activeView = 'commands'"
+        >
+          コマンド
+        </button>
+        <button
+          :class="['view-tab', { active: activeView === 'runs' }]"
+          type="button"
+          @click="activeView = 'runs'"
+        >
+          Run
+        </button>
+      </nav>
       <div class="connection">
         <span :class="['dot', connection]"></span
         >{{ connection === "online" ? "ローカルブリッジ接続中" : "待機中" }}
@@ -260,143 +401,194 @@ onMounted(async () => {
     </header>
 
     <div class="workspace">
-      <aside class="sidebar">
-        <div class="eyebrow">COMMANDS</div>
-        <section v-for="group in commandGroups" :key="group" class="command-group">
-          <div class="group-label">{{ group }}</div>
-          <button
-            v-for="command in commands.filter((item) => item.group === group)"
-            :key="command.id"
-            :class="['command-item', { active: selectedCommand === command.id }]"
-            @click="selectCommand(command.id)"
-          >
-            <span class="command-icon">{{
-              command.id === "run" ? "▶" : command.id === "doctor" ? "✦" : "·"
-            }}</span>
-            <span
-              ><b>{{ command.label }}</b
-              ><small>{{ command.description }}</small></span
+      <template v-if="activeView === 'commands'">
+        <aside class="sidebar">
+          <div class="eyebrow">COMMANDS</div>
+          <section v-for="group in commandGroups" :key="group" class="command-group">
+            <div class="group-label">{{ group }}</div>
+            <button
+              v-for="command in commands.filter((item) => item.group === group)"
+              :key="command.id"
+              :class="['command-item', { active: selectedCommand === command.id }]"
+              @click="selectCommand(command.id)"
             >
-          </button>
-        </section>
-      </aside>
-
-      <section class="content">
-        <div class="page-heading">
-          <div>
-            <div class="eyebrow">LOCAL ORCHESTRATOR</div>
-            <h1>{{ selected.label }}</h1>
-            <p>{{ selected.description }}</p>
-          </div>
-          <span class="badge">REAL CLI</span>
-        </div>
-
-        <div class="grid">
-          <form class="card form-card" @submit.prevent="runCommand">
-            <div class="card-heading">
-              <div>
-                <span class="step">01</span>
-                <h2>実行設定</h2>
-              </div>
-              <span class="safe-label">● local-first</span>
-            </div>
-            <label v-if="selected.requiresTarget"
-              >Target<input v-model="form.target" placeholder="owner/repo#123 または local/todo#1"
-            /></label>
-            <label
-              >Repository path<input
-                v-model="form.repoPath"
-                :required="selectedCommand === 'init'"
-                placeholder="C:\\Users\\tatsuya\\Documents\\sourcecode\\todo"
-              /><small v-if="selectedCommand === 'init'"
-                >initではこのパスのルートに .meguribi.yml を作成します。</small
-              ></label
-            >
-            <label v-if="selectedCommand === 'plan'" class="request-field"
-              >User request<textarea
-                v-model="form.userRequest"
-                rows="5"
-                maxlength="12000"
-                placeholder="例: WEBでTODOアプリを作って。"
-              ></textarea
-              ><small
-                >Issueの内容に加えて、今回作りたいものや重視したい条件を入力します。</small
-              ></label
-            >
-            <div class="two-col">
-              <label
-                >Implementer<select v-model="form.implementer">
-                  <option value="devin">Devin ACP</option>
-                  <option value="cursor">Cursor ACP</option>
-                </select></label
-              >
-              <label v-if="selectedCommand === 'require'"
-                >Solution number<input v-model="form.solution" type="number" min="1"
-              /></label>
-              <label v-else-if="selectedCommand === 'measure'"
-                >Period<input v-model="form.period" placeholder="14d"
-              /></label>
-              <label v-else>Branch<input v-model="form.branch" /></label>
-            </div>
-            <label v-if="selectedCommand === 'run'"
-              >Worktree path<input v-model="form.worktreePath" placeholder="空欄ならCLIの既定値"
-            /></label>
-            <div class="switches">
-              <label class="switch"
-                ><input v-model="form.local" type="checkbox" /><span></span>Local
-                mode（GitHubを呼ばない）</label
-              >
-              <label class="switch"
-                ><input v-model="form.nonInteractive" type="checkbox" /><span></span
-                >Non-interactive</label
-              >
-              <label v-if="selectedCommand === 'run'" class="switch"
-                ><input v-model="form.allowInheritedMcp" type="checkbox" /><span></span>Inherited
-                MCP を許可</label
-              >
-              <label v-if="selectedCommand === 'run'" class="switch"
-                ><input v-model="form.noPush" type="checkbox" /><span></span>Pushしない</label
-              >
-              <label v-if="selectedCommand === 'run'" class="switch"
-                ><input v-model="form.noPr" type="checkbox" /><span></span>PRを作成しない</label
-              >
-            </div>
-            <button class="run-button" :disabled="running" type="submit">
-              <span>{{ running ? "実行中…" : "コマンドを実行" }}</span
-              ><b>⌘ ↵</b>
-            </button>
-            <p v-if="error" class="error-message">{{ error }}</p>
-          </form>
-
-          <section class="card output-card">
-            <div class="card-heading">
-              <div>
-                <span class="step">02</span>
-                <h2>実行ログ</h2>
-              </div>
-              <span v-if="result" :class="['result', result === '成功' ? 'success' : 'failure']">{{
-                result
+              <span class="command-icon">{{
+                command.id === "run" ? "▶" : command.id === "doctor" ? "✦" : "·"
               }}</span>
-            </div>
-            <div class="terminal">
-              <div v-if="output.length === 0" class="empty-terminal">
-                <span>_</span>
-                <p>実行すると stdout / stderr がここに表示されます</p>
-              </div>
-              <div v-for="(line, index) in output" :key="index" :class="['log-line', line.stream]">
-                <i>{{ line.stream === "stderr" ? "!" : line.stream === "system" ? "›" : "$" }}</i
-                ><span>{{ line.text }}</span>
-              </div>
-            </div>
-            <div class="artifact-note">
-              <span>◈</span>
-              <p>
-                成果物と Run 状態は<br /><code>%LOCALAPPDATA%\meguribi\runs</code> に保存されます。
-              </p>
-            </div>
+              <span
+                ><b>{{ command.label }}</b
+                ><small>{{ command.description }}</small></span
+              >
+            </button>
           </section>
-        </div>
-      </section>
+        </aside>
+
+        <section class="content">
+          <div class="page-heading">
+            <div>
+              <div class="eyebrow">LOCAL ORCHESTRATOR</div>
+              <h1>{{ selected.label }}</h1>
+              <p>{{ selected.description }}</p>
+            </div>
+            <span class="badge">REAL CLI</span>
+          </div>
+
+          <div class="grid">
+            <form class="card form-card" @submit.prevent="runCommand">
+              <div class="card-heading">
+                <div>
+                  <span class="step">01</span>
+                  <h2>実行設定</h2>
+                </div>
+                <span class="safe-label">● local-first</span>
+              </div>
+              <label v-if="selected.requiresTarget"
+                >Target<input
+                  v-model="form.target"
+                  placeholder="owner/repo#123 または local/todo#1"
+              /></label>
+              <label
+                >Repository path<input
+                  v-model="form.repoPath"
+                  :required="selectedCommand === 'init'"
+                  placeholder="C:\\Users\\tatsuya\\Documents\\sourcecode\\todo"
+                /><small v-if="selectedCommand === 'init'"
+                  >initではこのパスのルートに .meguribi.yml を作成します。</small
+                ></label
+              >
+              <label v-if="selectedCommand === 'plan'" class="request-field"
+                >User request<textarea
+                  v-model="form.userRequest"
+                  rows="5"
+                  maxlength="12000"
+                  placeholder="例: WEBでTODOアプリを作って。"
+                ></textarea
+                ><small
+                  >Issueの内容に加えて、今回作りたいものや重視したい条件を入力します。</small
+                ></label
+              >
+              <div class="two-col">
+                <label
+                  >Implementer<select v-model="form.implementer">
+                    <option value="devin">Devin ACP</option>
+                    <option value="cursor">Cursor ACP</option>
+                  </select></label
+                >
+                <label v-if="selectedCommand === 'require'"
+                  >Solution number<input v-model="form.solution" type="number" min="1"
+                /></label>
+                <label v-else-if="selectedCommand === 'measure'"
+                  >Period<input v-model="form.period" placeholder="14d"
+                /></label>
+                <label v-else>Branch<input v-model="form.branch" /></label>
+              </div>
+              <label v-if="selectedCommand === 'run'"
+                >Worktree path<input v-model="form.worktreePath" placeholder="空欄ならCLIの既定値"
+              /></label>
+              <div class="switches">
+                <label class="switch"
+                  ><input v-model="form.local" type="checkbox" /><span></span>Local
+                  mode（GitHubを呼ばない）</label
+                >
+                <label class="switch"
+                  ><input v-model="form.nonInteractive" type="checkbox" /><span></span
+                  >Non-interactive</label
+                >
+                <label v-if="selectedCommand === 'run'" class="switch"
+                  ><input v-model="form.allowInheritedMcp" type="checkbox" /><span></span>Inherited
+                  MCP を許可</label
+                >
+                <label v-if="selectedCommand === 'run'" class="switch"
+                  ><input v-model="form.noPush" type="checkbox" /><span></span>Pushしない</label
+                >
+                <label v-if="selectedCommand === 'run'" class="switch"
+                  ><input v-model="form.noPr" type="checkbox" /><span></span>PRを作成しない</label
+                >
+              </div>
+              <button class="run-button" :disabled="running" type="submit">
+                <span>{{ running ? "実行中…" : "コマンドを実行" }}</span
+                ><b>⌘ ↵</b>
+              </button>
+              <p v-if="error" class="error-message">{{ error }}</p>
+            </form>
+
+            <section class="card output-card">
+              <div class="card-heading">
+                <div>
+                  <span class="step">02</span>
+                  <h2>実行ログ</h2>
+                </div>
+                <span
+                  v-if="result"
+                  :class="['result', result === '成功' ? 'success' : 'failure']"
+                  >{{ result }}</span
+                >
+              </div>
+              <div class="terminal">
+                <div v-if="output.length === 0" class="empty-terminal">
+                  <span>_</span>
+                  <p>実行すると stdout / stderr がここに表示されます</p>
+                </div>
+                <div
+                  v-for="(line, index) in output"
+                  :key="index"
+                  :class="['log-line', line.stream]"
+                >
+                  <i>{{ line.stream === "stderr" ? "!" : line.stream === "system" ? "›" : "$" }}</i
+                  ><span>{{ line.text }}</span>
+                </div>
+              </div>
+              <div class="artifact-note">
+                <span>◈</span>
+                <p>
+                  成果物と Run 状態は<br /><code>%LOCALAPPDATA%\meguribi\runs</code>
+                  に保存されます。
+                </p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </template>
+
+      <template v-else>
+        <aside class="sidebar run-sidebar">
+          <RunList
+            :runs="runSummaries"
+            :selected-run-id="selectedRunId"
+            :loading="runsLoading"
+            :error="runListError"
+            @select="selectRun"
+          />
+        </aside>
+
+        <section class="content run-content">
+          <div v-if="runDetail" class="run-detail">
+            <div class="page-heading run-page-heading">
+              <div>
+                <div class="eyebrow">RUN</div>
+                <h1>{{ runDetail.state.repository }}#{{ runDetail.state.issueNumber }}</h1>
+                <p>
+                  {{ runDetail.state.command }} · {{ runStatusLabel(runDetail.state.status) }} ·
+                  {{ runDetail.state.runId }}
+                </p>
+              </div>
+              <span class="badge">{{ runStatusLabel(runDetail.state.status) }}</span>
+            </div>
+            <p v-if="runStreamError" class="run-stream-error">{{ runStreamError }}</p>
+            <RunPipeline :pipeline="runDetail.pipeline" />
+            <ActivityBar :activities="runDetail.activities" />
+            <AgentPanes
+              :panes="runView.panes"
+              :selected-pane="runView.selectedPane"
+              @update:selected-pane="setPaneMode"
+            />
+          </div>
+          <div v-else class="empty-terminal empty-run">
+            <span>_</span>
+            <p>左の一覧から Run を選択すると、工程とライブログが表示されます</p>
+          </div>
+        </section>
+      </template>
     </div>
   </main>
 </template>

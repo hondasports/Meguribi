@@ -145,6 +145,54 @@ describe("FileSystemRunStore", () => {
     expect(read).toEqual(record);
   });
 
+  it("lists recent runs in updatedAt order and skips corrupted state files", async () => {
+    const root = await tempRoot();
+    const randomIds = ["aa01", "bb02", "cc03", "dd04"];
+    let randomIndex = 0;
+    const store = new FileSystemRunStore({
+      rootDir: root,
+      now: () => new Date("2026-07-26T12:00:00.000Z"),
+      randomId: () => randomIds[randomIndex++] ?? "ee05",
+    });
+    const identity = (issueNumber: number) => ({
+      repository: "owner/repo",
+      issueNumber,
+      branch: `meguribi/issue-${String(issueNumber)}`,
+      worktreePath: "/tmp/wt",
+      baseRef: "origin/main",
+      baseSha: "base",
+      headSha: "head",
+      remoteIdentity: "github.com/owner/repo",
+    });
+    const createRun = (issueNumber: number) =>
+      store.create({
+        repository: "owner/repo",
+        issueNumber,
+        command: "run",
+        maxFixAttempts: 1,
+        identity: identity(issueNumber),
+      });
+
+    const oldest = await createRun(31);
+    const newest = await createRun(32);
+    const middle = await createRun(33);
+    const corrupted = await createRun(34);
+    await store.update(oldest.runId, { updatedAt: "2026-07-26T12:00:01.000Z" });
+    await store.update(newest.runId, { updatedAt: "2026-07-26T12:00:03.000Z" });
+    await store.update(middle.runId, { updatedAt: "2026-07-26T12:00:02.000Z" });
+    const corruptedDirectory = await store.runDirectory(corrupted.runId);
+    if (corruptedDirectory === null) {
+      throw new Error("corrupted fixture run directory was not created");
+    }
+    await fs.writeFile(path.join(corruptedDirectory, "state.json"), "not json\n", "utf8");
+
+    const all = await store.listRecent();
+    expect(all.map((state) => state.runId)).toEqual([newest.runId, middle.runId, oldest.runId]);
+
+    const limited = await store.listRecent(2);
+    expect(limited.map((state) => state.runId)).toEqual([newest.runId, middle.runId]);
+  });
+
   it("rejects repository path traversal outside rootDir", async () => {
     const root = await tempRoot();
     const store = new FileSystemRunStore({ rootDir: root });
