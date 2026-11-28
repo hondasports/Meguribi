@@ -23,6 +23,11 @@ import {
 import { createDiscussionApi, type DiscussionDetail } from "./discussion-api.js";
 import { buildConclusionView } from "./discussion-view.js";
 import { isCurrentRunSelection, type RunSelectionToken } from "./run-selection.js";
+import {
+  canUseConsultationDrawer,
+  workspaceNavItems,
+  type WorkspaceView,
+} from "./workspace-navigation.js";
 import { applyDetail, applyLog, createRunViewState } from "./run-view.js";
 
 type CommandId =
@@ -260,7 +265,7 @@ async function runCommand(): Promise<void> {
   }
 }
 
-const activeView = ref<"consult" | "commands" | "runs">("consult");
+const activeView = ref<WorkspaceView>("consult");
 const runSummaries = ref<RunSummary[]>([]);
 const runsLoading = ref(false);
 const runListError = ref<string | null>(null);
@@ -294,9 +299,7 @@ const consultationRunSummaries = computed(() =>
 );
 const selectedRunSummary = computed(() => {
   const runId = selectedRunId.value;
-  return runId === null
-    ? null
-    : (runSummaries.value.find((run) => run.runId === runId) ?? null);
+  return runId === null ? null : (runSummaries.value.find((run) => run.runId === runId) ?? null);
 });
 const activeConsultationPrompt = computed(() => {
   const runId = selectedRunId.value;
@@ -405,7 +408,7 @@ function showNewConsultation(): void {
   consultationSidebarOpen.value = false;
 }
 
-function selectWorkspaceView(view: "consult" | "commands" | "runs"): void {
+function selectWorkspaceView(view: WorkspaceView): void {
   activeView.value = view;
   consultationSidebarOpen.value = false;
 }
@@ -679,7 +682,20 @@ onBeforeUnmount(() => {
         <span class="brand-mark">↻</span>
         <div><strong>Meguribi</strong><span>Command Desk</span></div>
       </div>
+      <nav class="topbar-nav" aria-label="画面切り替え">
+        <button
+          v-for="item in workspaceNavItems"
+          :key="item.view"
+          :class="['topbar-nav-item', { active: activeView === item.view }]"
+          type="button"
+          :aria-current="activeView === item.view ? 'page' : undefined"
+          @click="selectWorkspaceView(item.view)"
+        >
+          {{ item.label }}
+        </button>
+      </nav>
       <button
+        v-if="canUseConsultationDrawer(activeView)"
         class="drawer-toggle"
         type="button"
         aria-label="相談ナビゲーションを開く"

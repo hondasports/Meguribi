@@ -71,6 +71,39 @@ button {
     monospace;
   margin-top: 4px;
 }
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #2b3338;
+  border-radius: 999px;
+  background: #101213;
+  padding: 3px;
+}
+.topbar-nav-item {
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #96a09d;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.topbar-nav-item:hover {
+  color: #edf1ee;
+}
+.topbar-nav-item.active {
+  background: #243437;
+  color: #73d4c2;
+  font-weight: 800;
+}
+.topbar-nav-item:focus-visible {
+  outline: 2px solid rgba(115, 212, 194, 0.68);
+  outline-offset: 2px;
+}
+
 .connection {
   color: #8c9caf;
   font:
@@ -1686,6 +1719,25 @@ body {
   display: none;
 }
 @media (max-width: 900px) {
+  .topbar {
+    height: 56px;
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .brand div {
+    display: none;
+  }
+  .topbar-nav {
+    flex: 1;
+    justify-content: center;
+  }
+  .topbar-nav-item {
+    flex: 1;
+    padding-inline: 7px;
+  }
+  .connection {
+    display: none;
+  }
   .workspace {
     display: block;
   }
