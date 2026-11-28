@@ -6,6 +6,8 @@ export interface DiscussionDetail {
   approval: ApprovalRecord | null;
   canInterject: boolean;
   canDecide: boolean;
+  /** 永続化された相談/議論プロンプト。未対応serverでは省略される。 */
+  prompt?: string;
 }
 
 export interface DiscussionActionResult {

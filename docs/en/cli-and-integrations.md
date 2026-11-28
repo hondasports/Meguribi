@@ -35,7 +35,7 @@ meguribi desk --port 4199
 
 The initial `Consult` tab provides a large multiline prompt and a two-to-four participant selector populated from the real configuration. Issue linkage is optional auxiliary input. Candidates and defaults come from `GET /api/discussion/profiles`, and starting a consultation uses `POST /api/discussions`. Even when an Issue target is attached, the normal start path never continues automatically to implementation, push, or Draft PR creation. Only an explicitly selected `discuss-to-pr` workflow follows that path.
 
-After startup, the same screen puts the actual consultation prompt, speaker-separated conversation, and interjection input first. The large composer collapses; the small `New consultation` action returns to it, and `Back to consultation` restores the active conversation.
+After startup, the screen becomes a thread workspace: consultations and discussions are listed on the left, the prompt and speaker-labeled conversation are centered, and the interjection input stays at the bottom. The list can be searched by title or identifier and navigated with arrow keys. Status labels appear both in the list and in the conversation header. The large composer collapses; `New consultation` returns to it, and `Back to consultation` restores the active conversation. Long conversations scroll in the center conversation area while the input remains docked at the bottom.
 
 The `Existing operations` tab runs only validated Meguribi commands as argument arrays. The `Run history` tab shows recent Runs, delivery progress, agent activity, and live logs from the same RunStore used by the CLI.
 

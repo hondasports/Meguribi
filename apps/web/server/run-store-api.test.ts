@@ -342,6 +342,138 @@ describe("run-store api", () => {
     });
   });
 
+  it("includes the persisted consultation topic as a summary title", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createConsultationRun(runStore);
+    await runStore.saveArtifact(state.runId, "consultation-input.json", {
+      schemaVersion: 1,
+      artifactType: "consultation-input",
+      repository: "owner/repo",
+      repositoryPath: "/tmp/repo",
+      artifactRoot: "/tmp/artifacts",
+      topic: "\n通知を減らしたい\n詳細な背景",
+      repositoryRules: "",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      expect(response.status).toBe(200);
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body[0]?.title).toBe("通知を減らしたい");
+    });
+  });
+
+  it("truncates a long consultation title deterministically", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createConsultationRun(runStore);
+    await runStore.saveArtifact(state.runId, "consultation-input.json", {
+      topic: `${"a".repeat(90)} rest`,
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body[0]?.title).toBe(`${"a".repeat(77)}...`);
+    });
+  });
+
+  it("uses the issue discussion userRequest as a summary title when present", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createDiscussionRun(runStore);
+    await runStore.saveArtifact(state.runId, "discussion-input.json", {
+      repositoryPath: "/tmp/repo",
+      worktreePath: "/tmp/worktree",
+      branch: "meguribi/issue-83",
+      baseRef: "origin/main",
+      requiredLabels: [],
+      repositoryRules: "",
+      userRequest: "キャッシュ戦略を議論したい",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+      nonInteractive: true,
+      artifactRoot: "/tmp/artifacts",
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body[0]?.title).toBe("キャッシュ戦略を議論したい");
+    });
+  });
+
+  it("omits the title when no persisted prompt exists or the artifact is malformed", async () => {
+    const { rootDir, runStore, eventLog } = await createFixture();
+    const plain = await createDiscussionRun(runStore, 83);
+    const malformed = await createConsultationRun(runStore);
+    // 破損したアーティファクトを直接書き込む（読み込み失敗で一覧全体を落としてはいけない）。
+    const runDir = path.join(rootDir, "runs", "owner", "repo", "consultations", malformed.runId);
+    await fs.mkdir(runDir, { recursive: true });
+    await fs.writeFile(path.join(runDir, "consultation-input.json"), "{broken json", "utf8");
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      expect(response.status).toBe(200);
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body).toHaveLength(2);
+      expect(body.every((run) => !("title" in run))).toBe(true);
+    });
+    expect(plain.command).toBe("discuss");
+  });
+
+  it("redacts secret-looking content from the summary title before truncating", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createConsultationRun(runStore);
+    const dummySecret = "sk-dummy1234567890abcdef";
+    await runStore.saveArtifact(state.runId, "consultation-input.json", {
+      topic: `API 連携の相談 api_key=${dummySecret} について`,
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      expect(response.status).toBe(200);
+      const body = response.body as Array<Record<string, unknown>>;
+      const title = body[0]?.title;
+      expect(typeof title).toBe("string");
+      expect(title).not.toContain(dummySecret);
+      expect(title).not.toContain("api_key=");
+      expect(title).toContain("[REDACTED]");
+    });
+  });
+
+  it("does not leak a truncated fragment of a long secret token", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createConsultationRun(runStore);
+    // 先頭に長い秘密値を置く。切り詰めが redact に先行すると、
+    // パターンが途中で切れて秘密値の断片がタイトルに残ってしまう。
+    const longToken = `sk-${"x".repeat(100)}`;
+    await runStore.saveArtifact(state.runId, "consultation-input.json", {
+      topic: `${longToken} の取り扱い`,
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      const body = response.body as Array<Record<string, unknown>>;
+      const title = body[0]?.title as string;
+      expect(title).not.toContain("xxxx");
+      expect(title).not.toContain("sk-");
+    });
+  });
+
+  it("ignores non-string or hostile artifact field values", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const state = await createConsultationRun(runStore);
+    await runStore.saveArtifact(state.runId, "consultation-input.json", {
+      topic: { malicious: true },
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, "/api/run-store/runs");
+      expect(response.status).toBe(200);
+      const body = response.body as Array<Record<string, unknown>>;
+      expect(body[0] && "title" in body[0]).toBe(false);
+    });
+  });
+
   it("returns run detail with delivery pipeline state and agent activities", async () => {
     const { runStore, eventLog } = await createFixture();
     const run = await createRun(runStore);
@@ -574,6 +706,81 @@ describe("run-store api", () => {
       );
       expect(terminalResponse.status).toBe(200);
       expect((terminalResponse.body as { canInterject: boolean }).canInterject).toBe(false);
+    });
+  });
+
+  it("includes the masked persisted prompt in consultation detail for history reload", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+    const originalPrompt = "通知を減らしたい\n背景: 毎朝20件来る";
+    await runStore.saveArtifact(run.runId, "consultation-input.json", {
+      schemaVersion: 1,
+      artifactType: "consultation-input",
+      repository: "owner/repo",
+      repositoryPath: "/tmp/repo",
+      artifactRoot: "/tmp/artifacts",
+      topic: originalPrompt,
+      repositoryRules: "",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      expect(response.status).toBe(200);
+      const body = response.body as Record<string, unknown>;
+      // 履歴再読み込みで復元できるよう、切り詰めない全文を返す。
+      expect(body.prompt).toBe(originalPrompt);
+    });
+  });
+
+  it("uses the persisted userRequest as the prompt for issue-backed discussions", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createDiscussionRun(runStore);
+    await runStore.saveArtifact(run.runId, "discussion-input.json", {
+      repositoryPath: "/tmp/repo",
+      worktreePath: "/tmp/worktree",
+      branch: "meguribi/issue-83",
+      baseRef: "origin/main",
+      requiredLabels: [],
+      repositoryRules: "",
+      userRequest: "キャッシュ戦略を議論したい",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+      nonInteractive: true,
+      artifactRoot: "/tmp/artifacts",
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      const body = response.body as Record<string, unknown>;
+      expect(body.prompt).toBe("キャッシュ戦略を議論したい");
+    });
+  });
+
+  it("masks secret-looking content in the detail prompt", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+    const dummySecret = "sk-dummy1234567890abcdef";
+    await runStore.saveArtifact(run.runId, "consultation-input.json", {
+      topic: `api_key=${dummySecret} の相談`,
+    });
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      const body = response.body as Record<string, unknown>;
+      expect(body.prompt).not.toContain(dummySecret);
+      expect(body.prompt).toContain("[REDACTED]");
+    });
+  });
+
+  it("omits the prompt when no persisted input exists", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createConsultationRun(runStore);
+
+    await withApiServer({ runStore, eventLog }, async (port) => {
+      const response = await getJson(port, `/api/run-store/runs/${run.runId}/discussion`);
+      expect(response.status).toBe(200);
+      const body = response.body as Record<string, unknown>;
+      expect("prompt" in body).toBe(false);
     });
   });
 

@@ -9,6 +9,19 @@ export function consultationTitle(prompt: string): string {
   return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
 }
 
+export function consultationPromptForDisplay(input: {
+  persistedPrompt?: string | null;
+  localPrompt?: string | null;
+}): string | null {
+  if (typeof input.persistedPrompt === "string" && input.persistedPrompt.trim().length > 0) {
+    return input.persistedPrompt;
+  }
+  if (typeof input.localPrompt === "string" && input.localPrompt.trim().length > 0) {
+    return input.localPrompt;
+  }
+  return null;
+}
+
 export function isConsultationCommand(command: string): boolean {
   return command === "consult" || command === "discuss";
 }
