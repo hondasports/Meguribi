@@ -40,7 +40,7 @@ pnpm.cmd --filter @meguribi/web dev
 meguribi init --implementer devin ./path/to/repository
 ```
 
-`--implementer devin` または `--implementer cursor` で診断する実装エージェントを明示します。既存の `.meguribi.yml` は上書きせず、存在しない場合だけ雛形を作成します。`--json` は診断結果だけを stdout へ出力し、問題がある場合は非 0 で終了します。
+`--implementer <profile>` で診断する実装エージェントを明示します。`devin`、`cursor`、`claude-code`、`codex-acp`、または `.meguribi.yml` の `agents` で定義したプロファイル ID を指定できます。既存の `.meguribi.yml` は上書きせず、存在しない場合だけ雛形を作成します。`--json` は診断結果だけを stdout へ出力し、問題がある場合は非 0 で終了します。
 
 確認内容:
 
@@ -61,7 +61,7 @@ GitHub へは書き込みません。必要ラベルの自動作成（`--apply-l
 
 ### `meguribi doctor`
 
-実装エージェント CLI（Devin または Cursor）の実行可否を機械的に診断します。`meguribi run` の preflight からも同じ診断 API（`diagnoseCursor` / `diagnoseDevin`）を利用します。
+実装エージェント CLI（Devin / Cursor / Claude Code ACP / Codex ACP）の実行可否を機械的に診断します。`meguribi run` の preflight からも同じ診断 API（`diagnoseCursor` / `diagnoseDevin` / `diagnoseAcpServer`）を利用します。
 
 ```bash
 meguribi doctor
@@ -72,7 +72,7 @@ meguribi doctor --implementer cursor
 
 確認内容:
 
-- 設定された実装エージェント executable（Devin / Cursor / cursor-agent / agent）の解決
+- 設定された実装エージェント executable（Devin / Cursor / cursor-agent / agent / claude-agent-acp / codex-acp）の解決
 - `<executable> --version` の取得と parse（未知 version は無条件許可しない）
 - `<executable> auth status` または `<executable> status` による認証状態（認証情報そのものは読み取らない）
 - `<executable> acp --help` による ACP capability probe（session やネットワーク接続は開始しない）
@@ -164,7 +164,7 @@ meguribi plan owner/repo#125 --request "WEBでTODOアプリを作って。"
 
 ### `meguribi run`
 
-承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`AgentAdapter` port（本番は `createDevinAcpAdapter` または `createCursorAcpAdapter`）へ実装を委譲します。
+承認済み Issue を実装し、検証し、Codex レビューを行い、Draft PR を作成します。CLI は `runDelivery` ユースケースを呼び出し、`AgentAdapter` port（本番は `createDevinAcpAdapter`、`createCursorAcpAdapter`、または `createAcpServerImplementer`）へ実装を委譲します。
 
 ```bash
 meguribi run owner/repo#125
@@ -174,7 +174,8 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 主要オプション:
 
 - `--repo-path <path>`
-- `--implementer <devin|cursor>`
+- `--implementer <profile>`（`devin`、`cursor`、`claude-code`、`codex-acp`、または `.meguribi.yml` のプロファイル ID）
+- `--log <stream|compact|none>`
 - `--base <branch>`
 - `--no-commit`
 - `--no-push`
@@ -189,7 +190,7 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 
 `--json` では最終結果だけを stdout に出し、進行ログは stderr へ出します。Ctrl+C は `AbortSignal` 経由で選択した Agent session の cancel / shutdown に伝播します。
 
-本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は実 `gh` / `git` / Codex SDK / Verifier と、明示された実装エージェントの `createDevinAcpAdapter` または `createCursorAcpAdapter` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。`MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ、fixture 用に GitHub/Git/Codex/Verifier を fake にします。このフラグ無しで外部 adapter を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
+本番の GitHub / Git / Verifier アダプターは port 経由で注入します。CLI 既定 wiring（`createDeliveryDeps`）は実 `gh` / `git` / Verifier、役割割り当てに応じた planner / reviewer bridge、そして明示された実装エージェントの `createDevinAcpAdapter` / `createCursorAcpAdapter` / `createAcpServerImplementer` を選択し、`FileSystemRunStore` と `createDefaultPolicyEngine` を使います。`MEGURIBI_DELIVERY_FAKES=1` を明示した場合だけ、fixture 用に GitHub/Git/Codex/Verifier を fake にします。このフラグ無しで外部 adapter を構築できない場合は silent な fake へ落ちず fail-closed します。fixture テストでは全 fake を使い、実 `gh` / 実 Agent CLI は呼びません。
 
 ### `meguribi review`
 
@@ -245,9 +246,24 @@ meguribi cleanup owner/repo#125 --delete-branch
 --dry-run
 --run-id <id>
 --delete-branch
+--log <stream|compact|none>
 ```
 
-`--json` は stdout に最終 JSON だけを出し、進行ログは stderr へ出します。
+`--json` は stdout に最終 JSON だけを出し、進行ログは stderr へ出します。`run` / `resume` の `--log stream`（既定）では、implement・plan・review の各工程で ACP エージェントの発言、ツール呼び出し、権限判定を起きた順に stderr へ流します。`compact` は工程の切り替わりと要約だけ、`none` はライブログを出しません。`--json` 指定時は `none` 扱いです。
+
+```text
+── plan · Claude Code (planner) ────────────────────────────────
+● Claude Code  対象コードと既存テストを確認します。
+● Read  src/feature.ts
+  └ completed
+── implement · Devin (implementer) ─────────────────────────────
+● Edit  src/feature.ts
+  └ completed · src/feature.ts
+── review · Codex (reviewer) ───────────────────────────────────
+● Codex  完了条件と差分を照合します。
+```
+
+ACP の役割エージェントを使わない Codex SDK 経路では、従来どおり工程進捗だけが表示されます。
 
 ## 4. 終了コード
 
@@ -272,6 +288,21 @@ meguribi cleanup owner/repo#125 --delete-branch
 version: 1
 
 implementer: devin
+
+agents:
+  review-claude:
+    kind: claude-code
+    transport: acp
+    executable: claude-agent-acp
+    startupTimeoutMs: 10000
+    turnTimeoutMinutes: 45
+    inheritedMcpPolicy: warn
+
+roles:
+  planner: codex
+  implementer: devin
+  reviewer: review-claude
+  allowSameImplementerReviewer: false
 
 repository:
   baseBranch: main
@@ -333,6 +364,17 @@ cursor:
 ```
 
 `transport: acp` が MVP の標準です。秘密情報やトークンは設定ファイルへ記述しません。
+
+組み込みプロファイルは `claude-code`、`codex`（Codex SDK）、`codex-acp`、`devin`、`cursor` の5つです。`agents` では同じ `kind` / `transport` / timeout / `inheritedMcpPolicy` を持つ別プロファイルを定義できます。`roles` は `planner`、`implementer`、`reviewer` などの役割へプロファイル ID を割り当てます。`roles.implementer` には `transport: acp` のプロファイルだけを指定でき、`allowSameImplementerReviewer: true` を明示しない限り `implementer` と `reviewer` に同じプロファイルを割り当てられません。`codex`（`transport: sdk`）は計画・レビューの互換経路として使えますが、実装担当には使えません。
+
+`planner` と `reviewer` に割り当てられるのは、`codex`（`transport: sdk`）と、`claude-code` / `codex-acp` などの単体 ACP サーバーのプロファイルです。`kind` が `devin` / `cursor` のプロファイルは、現在 `implementer` にだけ割り当てられます。これらを `planner` / `reviewer` に割り当てると、CLI は `transport_unsupported` の `RoleAssignmentError` で停止します。`devin` / `cursor` を計画・レビュー・議論の役割で使えるようにする対応は、今後（P3）の予定です。
+
+Claude Code / Codex ACP を使う場合は、それぞれ次のパッケージを利用者が明示的に導入し、認証済みであることを確認してください。
+
+```bash
+npm i -g @agentclientprotocol/claude-agent-acp
+npm i -g @agentclientprotocol/codex-acp
+```
 
 `inheritedMcpPolicy` は、実装エージェント CLI が利用者の保存済み MCP 設定を継承する可能性をどう扱うかを表します。
 

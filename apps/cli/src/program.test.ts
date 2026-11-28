@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeDeliveryDeps } from "@meguribi/adapters";
+import { RoleAssignmentError } from "@meguribi/core";
 import type { DevinDiagnosis } from "@meguribi/schemas";
 import type { CodexClient, CodexThreadEvent } from "@meguribi/adapters";
 import { runResumeCommand, runRunCommand } from "./commands/run.js";
@@ -195,6 +196,94 @@ describe("runDoctor", () => {
     const parsed = JSON.parse(chunks.join("")) as DevinDiagnosis;
     expect(parsed.runnable).toBe(false);
     expect(chunks.join("")).not.toContain("✓");
+  });
+
+  it("returns ACP server diagnosis JSON for a Claude Code implementer", async () => {
+    const chunks: string[] = [];
+    let sawProfile: string | undefined;
+    const acpDiagnosis = {
+      executable: { status: "missing" as const },
+      version: { status: "unknown" as const },
+      authentication: { status: "unknown" as const },
+      acp: { status: "unknown" as const },
+      inheritedMcpPolicy: "allow" as const,
+      runnable: false,
+      warnings: [],
+      errors: [
+        {
+          code: "executable_not_found" as const,
+          message: "claude-agent-acp was not found on PATH",
+          nextAction: "npm i -g @agentclientprotocol/claude-agent-acp",
+        },
+      ],
+    };
+    const result = await runDoctor(
+      { json: true, implementer: "claude-code" },
+      {
+        loadConfig: async () => ({
+          kind: "acp-server",
+          profile: {
+            id: "claude-code",
+            kind: "claude-code",
+            transport: "acp",
+            executable: "claude-agent-acp",
+            startupTimeoutMs: 1000,
+            turnTimeoutMinutes: 1,
+            inheritedMcpPolicy: "allow",
+          },
+          snapshot: {},
+        }),
+        diagnoseAcpServer: async (options) => {
+          sawProfile = options.profile.id;
+          return acpDiagnosis;
+        },
+        stdout: (text) => chunks.push(text),
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(sawProfile).toBe("claude-code");
+    expect(JSON.parse(chunks.join(""))).toMatchObject({
+      runnable: false,
+      errors: [
+        {
+          code: "executable_not_found",
+          nextAction: "npm i -g @agentclientprotocol/claude-agent-acp",
+        },
+      ],
+    });
+  });
+
+  it("prints Claude Code human output and exits 0 when an ACP server is runnable", async () => {
+    const chunks: string[] = [];
+    const result = await runDoctor(
+      { implementer: "claude-code" },
+      {
+        loadConfig: async () => ({
+          kind: "acp-server",
+          profile: {
+            id: "claude-code",
+            kind: "claude-code",
+            transport: "acp",
+            executable: "claude-agent-acp",
+            startupTimeoutMs: 1000,
+            turnTimeoutMinutes: 1,
+            inheritedMcpPolicy: "allow",
+          },
+          snapshot: {},
+        }),
+        diagnoseAcpServer: async () => ({
+          ...healthy,
+          executable: { status: "ok", path: "claude-agent-acp" },
+          version: { status: "unknown" },
+          authentication: { status: "unknown" },
+        }),
+        stdout: (text) => chunks.push(text),
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(chunks.join("").split("\n")[0]).toContain("Claude Code");
   });
 
   it("passes nonInteractive to diagnose while keeping loadConfig interactive for warn policy", async () => {
@@ -633,6 +722,31 @@ describe("run --log", () => {
     ]);
     expect(process.exitCode).toBe(1);
     expect(stderr.join("")).toContain("--log must be stream, compact, or none");
+  });
+});
+
+describe("CLI command errors", () => {
+  it("prints RoleAssignmentError nextAction to stderr and exits 1", async () => {
+    const stderr: string[] = [];
+    const program = createProgram({
+      loadConfig: async () => {
+        throw new RoleAssignmentError(
+          "same_implementer_reviewer",
+          "implementer and reviewer must differ: claude-code",
+          "`allowSameImplementerReviewer: true` を明示してください",
+        );
+      },
+      stderr: (text) => stderr.push(text),
+    });
+
+    await program.parseAsync(["node", "meguribi", "doctor", "--implementer", "claude-code"]);
+
+    expect(process.exitCode).toBe(1);
+    expect(stderr.join("")).toContain("implementer and reviewer must differ: claude-code");
+    expect(stderr.join("")).toContain(
+      "Next: `allowSameImplementerReviewer: true` を明示してください",
+    );
+    process.exitCode = undefined;
   });
 });
 
