@@ -36,7 +36,12 @@ import {
   preflightDevin,
   createRoleAgentPlanningBridge,
 } from "@meguribi/adapters";
-import { loadAgentsConfig, loadImplementerConfig } from "@meguribi/config";
+import {
+  loadAgentsConfig,
+  loadCursorConfig,
+  loadDevinConfig,
+  loadImplementerConfig,
+} from "@meguribi/config";
 import { RoleAssignmentError } from "@meguribi/core";
 import type {
   CleanupDependencies,
@@ -61,7 +66,11 @@ export interface AgentWiringOverrides {
   environment?: NodeJS.ProcessEnv;
   loadAgentsConfig?: typeof loadAgentsConfig;
   loadImplementerConfig?: typeof loadImplementerConfig;
+  loadDevinConfig?: typeof loadDevinConfig;
+  loadCursorConfig?: typeof loadCursorConfig;
   diagnoseAcpServer?: typeof diagnoseAcpServer;
+  diagnoseDevin?: typeof diagnoseDevin;
+  diagnoseCursor?: typeof diagnoseCursor;
   createAcpRoleAgent?: typeof createAcpRoleAgent;
   createRoleAgentPlanningBridge?: typeof createRoleAgentPlanningBridge;
   createCodexBridge?: typeof createCodexBridge;
@@ -285,13 +294,6 @@ function assertSupportedPlanningTransport(
   profile: AgentProfile,
   role: "planner" | "reviewer",
 ): void {
-  if (profile.kind === "devin" || profile.kind === "cursor") {
-    throw new RoleAssignmentError(
-      "transport_unsupported",
-      `${role} profile ${profile.id} (kind ${profile.kind}) cannot be used as ${role} yet`,
-      `roles.${role} には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます`,
-    );
-  }
   if (profile.transport === "sdk" && profile.kind !== "codex") {
     throw new RoleAssignmentError(
       "transport_unsupported",
@@ -323,6 +325,74 @@ function roleAgentArtifactRoot(runsRoot?: string): string {
   return path.join(resolveRunsRoot(runsRoot), "role-agent-artifacts");
 }
 
+async function createDevinPlanningAgent(
+  profile: AgentProfile,
+  options: AgentWiringOverrides & {
+    repositoryPath: string;
+    nonInteractive: boolean;
+  },
+): Promise<RoleAgent> {
+  const loadConfig = options.loadDevinConfig ?? loadDevinConfig;
+  const diagnose = options.diagnoseDevin ?? diagnoseDevin;
+  const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
+  const config = await loadConfig({
+    repositoryPath: options.repositoryPath,
+    cli: {},
+    nonInteractive: options.nonInteractive,
+    ...configSourceOptions(options),
+  });
+  const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
+  const diagnosis = await diagnose({
+    executable: config.config.executable,
+    inheritedMcpPolicy,
+    nonInteractive: options.nonInteractive,
+    cwd: options.repositoryPath,
+    probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+    minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+  });
+  return createRoleAgent({
+    profile,
+    executable: config.config.executable,
+    acpArgs: ["acp"],
+    diagnosis,
+    mode: options.nonInteractive ? "non-interactive" : "interactive",
+  });
+}
+
+async function createCursorPlanningAgent(
+  profile: AgentProfile,
+  options: AgentWiringOverrides & {
+    repositoryPath: string;
+    nonInteractive: boolean;
+  },
+): Promise<RoleAgent> {
+  const loadConfig = options.loadCursorConfig ?? loadCursorConfig;
+  const diagnose = options.diagnoseCursor ?? diagnoseCursor;
+  const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
+  const config = await loadConfig({
+    repositoryPath: options.repositoryPath,
+    cli: {},
+    nonInteractive: options.nonInteractive,
+    ...configSourceOptions(options),
+  });
+  const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
+  const diagnosis = await diagnose({
+    executable: config.config.executable,
+    inheritedMcpPolicy,
+    nonInteractive: options.nonInteractive,
+    cwd: options.repositoryPath,
+    probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+    minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+  });
+  return createRoleAgent({
+    profile,
+    executable: diagnosis.executable.path ?? config.config.executable,
+    acpArgs: ["acp"],
+    diagnosis,
+    mode: options.nonInteractive ? "non-interactive" : "interactive",
+  });
+}
+
 async function createAcpPlanningAgent(
   profile: AgentProfile,
   options: AgentWiringOverrides & {
@@ -330,6 +400,12 @@ async function createAcpPlanningAgent(
     nonInteractive: boolean;
   },
 ): Promise<RoleAgent> {
+  if (profile.kind === "devin") {
+    return createDevinPlanningAgent(profile, options);
+  }
+  if (profile.kind === "cursor") {
+    return createCursorPlanningAgent(profile, options);
+  }
   const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
   const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
   const executable = profileExecutable(profile);
