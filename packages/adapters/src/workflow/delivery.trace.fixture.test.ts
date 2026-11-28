@@ -6,7 +6,7 @@ import {
   type DeliveryResult,
   type ImplementationResult,
   type RunDeliveryInput,
-  type RunState,
+  type RunStatePatch,
 } from "@meguribi/core";
 import { createFakeDeliveryDeps } from "../fakes/delivery-fakes.js";
 import { withDeliveryTrace, type DeliveryTrace } from "./delivery-trace.js";
@@ -79,7 +79,7 @@ function seedImplementation(sessionId: string): ImplementationResult {
 
 async function seedRun(
   bundle: ReturnType<typeof createFakeDeliveryDeps>,
-  patch: Partial<RunState>,
+  patch: RunStatePatch,
   maxFixAttempts = 1,
 ): Promise<string> {
   const created = await bundle.runStore.create({

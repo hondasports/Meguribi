@@ -2,11 +2,14 @@ import type {
   GitAdapter,
   GitHubAdapter,
   IssueRecord,
+  IssueRunState,
   PolicyEngine,
   RunState,
+  RunStatePatch,
   RunStatus,
   RunStore,
 } from "../delivery.js";
+import { requireIssueRunState } from "../delivery.js";
 import type { DiscussionBrief } from "../discussion/prompt.js";
 import type {
   DiscussionStoreFactory,
@@ -37,6 +40,11 @@ export interface DiscussionDependencies {
   summarize: SummarizeDiscussion;
   hashConclusion(conclusion: DiscussionConclusion): string;
   onWorkflowEvent?: (event: WorkflowEvent) => void;
+  /**
+   * Run state を永続化する前に呼ばれる fail-closed hook。
+   * 例外を投げた場合、その state update は公開されない。
+   */
+  beforeStateChange?: (runId: string, patch: Readonly<RunStatePatch>) => void | Promise<void>;
   onStateChange?: (state: Readonly<RunState>) => void | Promise<void>;
   now?: () => Date;
 }
@@ -67,7 +75,7 @@ export interface DiscussionWorkflowResult {
 export interface DiscussionWorkflowContext {
   deps: DiscussionDependencies;
   input: RunDiscussionWorkflowInput;
-  state: RunState;
+  state: IssueRunState;
   issue: IssueRecord;
   brief: DiscussionBrief;
   store: DiscussionStorePort;
@@ -81,20 +89,30 @@ function nowIso(deps: Pick<DiscussionDependencies, "now">): string {
 }
 
 export async function updateDiscussionRunState(
-  deps: Pick<DiscussionDependencies, "runStore" | "onStateChange" | "now">,
+  deps: Pick<DiscussionDependencies, "runStore" | "beforeStateChange" | "onStateChange" | "now">,
   runId: string,
-  patch: Partial<RunState>,
+  patch: RunStatePatch,
 ): Promise<RunState> {
-  const next = await deps.runStore.update(runId, {
+  const nextPatch = {
     ...patch,
     updatedAt: nowIso(deps),
-  });
+  };
+  await deps.beforeStateChange?.(runId, nextPatch);
+  const next = await deps.runStore.update(runId, nextPatch);
   try {
     await deps.onStateChange?.(next);
   } catch {
     // State observers must not change the workflow result.
   }
   return next;
+}
+
+async function updateIssueDiscussionRunState(
+  deps: Pick<DiscussionDependencies, "runStore" | "beforeStateChange" | "onStateChange" | "now">,
+  state: IssueRunState,
+  patch: RunStatePatch,
+): Promise<IssueRunState> {
+  return requireIssueRunState(await updateDiscussionRunState(deps, state.runId, patch));
 }
 
 function forwardLiveLogEvent(
@@ -192,7 +210,7 @@ async function approveStep(context: DiscussionWorkflowContext) {
   if (!context.conclusion) {
     throw new Error("discussion conclusion is required before approve");
   }
-  context.state = await updateDiscussionRunState(context.deps, context.state.runId, {
+  context.state = await updateIssueDiscussionRunState(context.deps, context.state, {
     status: "awaiting_human",
     currentStep: "awaiting_human",
   });

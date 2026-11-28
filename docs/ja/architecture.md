@@ -209,6 +209,8 @@ AI の自己申告とは独立して、設定されたコマンドを実行し�
 
 DB は使いません。
 
+Issue に紐づく Run（`run` / `resume` / `discuss`）では、正の `issueNumber`、branch、base/head SHA、worktree、remote identity を必須にします。Issue を持たない read-only 相談は `command: "consult"` で区別し、`issueNumber`、`branch`、`baseRef`、`baseSha`、`headSha` を `null` にします。相談 Run は `runs/<owner>/<repo>/consultations/<runId>/` に保存し、`issue-0` や架空の branch / SHA を作りません。`repository` と `remoteIdentity` には、git remote または明示的な local identity から解決した実在の対象だけを保存します。`worktreePath` は新規 worktree ではなく、相談対象の実在 repository path を指します。`cleanup`、`review`、delivery 再開など Issue / git identity を必要とする処理は、相談 Run を明示的に拒否します。
+
 ## 4. 物理構成
 
 ```text
@@ -217,7 +219,8 @@ DB は使いません。
 
 ~/.local/share/meguribi/
   +-- runs/
-  |   `-- owner/repo/issue-123/run-YYYYMMDD-HHmmss/
+  |   +-- owner/repo/issue-123/run-YYYYMMDD-HHmmss/
+  |   `-- owner/repo/consultations/run-YYYYMMDD-HHmmss/
   +-- worktrees/
   |   `-- owner/repo/issue-123/
   `-- cache/

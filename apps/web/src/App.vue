@@ -1,10 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
-import type { RunSummary } from "../server/run-store-api.js";
+import type { RunDetail, RunSummary } from "../server/run-store-api.js";
 import ActivityBar from "./components/ActivityBar.vue";
 import AgentPanes from "./components/AgentPanes.vue";
+import ConclusionPanel from "./components/ConclusionPanel.vue";
+import ConsultationComposer from "./components/ConsultationComposer.vue";
+import DiscussionThread from "./components/DiscussionThread.vue";
+import InterjectBox from "./components/InterjectBox.vue";
 import RunList from "./components/RunList.vue";
 import RunPipeline from "./components/RunPipeline.vue";
+import {
+  createConsultationApi,
+  type DiscussionProfile,
+  type StartDiscussionInput,
+} from "./consultation-api.js";
+import { consultationTitle, isConsultationCommand } from "./consultation-view.js";
+import { createDiscussionApi, type DiscussionDetail } from "./discussion-api.js";
+import { buildConclusionView } from "./discussion-view.js";
 import { applyDetail, applyLog, createRunViewState } from "./run-view.js";
 
 type CommandId =
@@ -242,7 +254,7 @@ async function runCommand(): Promise<void> {
   }
 }
 
-const activeView = ref<"commands" | "runs">("commands");
+const activeView = ref<"consult" | "commands" | "runs">("consult");
 const runSummaries = ref<RunSummary[]>([]);
 const runsLoading = ref(false);
 const runListError = ref<string | null>(null);
@@ -250,8 +262,54 @@ const runStreamError = ref<string | null>(null);
 const selectedRunId = ref<string | null>(null);
 const runView = ref(createRunViewState());
 const runDetail = computed(() => runView.value.detail);
+const discussionApi = createDiscussionApi();
+const consultationApi = createConsultationApi();
+const consultationProfiles = ref<DiscussionProfile[]>([]);
+const consultationDefaultProfileIds = ref<string[]>([]);
+const consultationProfilesLoading = ref(false);
+const consultationProfilesError = ref<string | null>(null);
+const consultationStartError = ref<string | null>(null);
+const consultationStarting = ref(false);
+const consultationComposerVisible = ref(true);
+const consultationPrompts = ref<Record<string, string>>({});
+const discussionDetail = ref<DiscussionDetail | null>(null);
+const discussionLoading = ref(false);
+const discussionError = ref<string | null>(null);
+const discussionActionError = ref<string | null>(null);
+const discussionActionNotice = ref<string | null>(null);
+const interjectionError = ref<string | null>(null);
+const interjectionNotice = ref<string | null>(null);
+const discussionActionPending = ref<"say" | "approve" | "reject" | null>(null);
+const discussionThreadRef = ref<InstanceType<typeof DiscussionThread> | null>(null);
+const interjectBoxRef = ref<InstanceType<typeof InterjectBox> | null>(null);
+const activeConsultationPrompt = computed(() => {
+  const runId = selectedRunId.value;
+  return runId === null ? null : (consultationPrompts.value[runId] ?? null);
+});
+const activeConsultationTitle = computed(() =>
+  activeConsultationPrompt.value === null
+    ? "相談"
+    : consultationTitle(activeConsultationPrompt.value),
+);
+const selectedRunTitle = computed(() => {
+  const state = runDetail.value?.state;
+  if (state === undefined) return "相談";
+  if (state.command === "consult") return activeConsultationTitle.value;
+  return `${state.repository}#${String(state.issueNumber)}`;
+});
+const selectedRunStatusLabel = computed(() => {
+  const state = runDetail.value?.state;
+  return state === undefined ? "" : runStatusLabel(state.status);
+});
+const conclusionView = computed(() => {
+  const detail = discussionDetail.value;
+  return detail?.conclusion === null || detail?.conclusion === undefined
+    ? null
+    : buildConclusionView(detail.conclusion, detail.turns);
+});
 let runListTimer: ReturnType<typeof setInterval> | undefined;
 let runEvents: EventSource | undefined;
+let discussionLoadingFor: string | null = null;
 
 const runStatusLabels: Record<string, string> = {
   created: "作成済み",
@@ -275,6 +333,46 @@ function runStatusLabel(status: string): string {
   return runStatusLabels[status] ?? status;
 }
 
+async function loadConsultationProfiles(): Promise<void> {
+  consultationProfilesLoading.value = true;
+  consultationProfilesError.value = null;
+  try {
+    const result = await consultationApi.loadProfiles();
+    consultationProfiles.value = result.profiles;
+    consultationDefaultProfileIds.value = result.defaultProfileIds;
+  } catch (cause) {
+    consultationProfilesError.value = errorText(cause);
+  } finally {
+    consultationProfilesLoading.value = false;
+  }
+}
+
+async function startConsultation(input: StartDiscussionInput): Promise<void> {
+  if (consultationStarting.value) return;
+  consultationStarting.value = true;
+  consultationStartError.value = null;
+  try {
+    const result = await consultationApi.startDiscussion(input);
+    consultationPrompts.value = { ...consultationPrompts.value, [result.runId]: input.prompt };
+    consultationComposerVisible.value = false;
+    await loadRuns();
+    selectRun(result.runId);
+  } catch (cause) {
+    consultationStartError.value = errorText(cause);
+  } finally {
+    consultationStarting.value = false;
+  }
+}
+
+function showNewConsultation(): void {
+  consultationStartError.value = null;
+  consultationComposerVisible.value = true;
+}
+
+function returnToConsultation(): void {
+  consultationComposerVisible.value = false;
+}
+
 function setPaneMode(value: "agents" | "all"): void {
   runView.value = { ...runView.value, selectedPane: value };
 }
@@ -282,6 +380,130 @@ function setPaneMode(value: "agents" | "all"): void {
 function closeRunEvents(): void {
   runEvents?.close();
   runEvents = undefined;
+}
+
+function errorText(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+function resetDiscussionState(): void {
+  discussionDetail.value = null;
+  discussionLoading.value = false;
+  discussionLoadingFor = null;
+  discussionError.value = null;
+  discussionActionError.value = null;
+  discussionActionNotice.value = null;
+  interjectionError.value = null;
+  interjectionNotice.value = null;
+  discussionActionPending.value = null;
+}
+
+async function loadDiscussion(runId: string): Promise<void> {
+  if (discussionLoadingFor === runId) return;
+  discussionLoadingFor = runId;
+  discussionLoading.value = true;
+  discussionError.value = null;
+  try {
+    const detail = await discussionApi.load(runId);
+    if (selectedRunId.value === runId) discussionDetail.value = detail;
+  } catch (cause) {
+    if (selectedRunId.value === runId) discussionError.value = errorText(cause);
+  } finally {
+    if (discussionLoadingFor === runId) {
+      discussionLoadingFor = null;
+      if (selectedRunId.value === runId) discussionLoading.value = false;
+    }
+  }
+}
+
+async function refreshRunDetail(runId: string): Promise<void> {
+  const response = await fetch(`/api/run-store/runs/${encodeURIComponent(runId)}`).catch(
+    () => null,
+  );
+  if (response === null || !response.ok) return;
+  try {
+    const detail = (await response.json()) as RunDetail;
+    if (selectedRunId.value === runId) runView.value = applyDetail(runView.value, detail);
+  } catch {
+    return;
+  }
+}
+
+function actionFailureText(result: { stderr?: string }, fallback: string): string {
+  const stderr = result.stderr?.trim();
+  return stderr !== undefined && stderr.length > 0 ? stderr : fallback;
+}
+
+async function submitInterjection(message: string): Promise<void> {
+  const runId = selectedRunId.value;
+  if (runId === null || discussionActionPending.value !== null) return;
+  discussionActionPending.value = "say";
+  interjectionError.value = null;
+  interjectionNotice.value = null;
+  try {
+    const result = await discussionApi.say(runId, message);
+    if (result.ok) {
+      interjectBoxRef.value?.clear();
+      interjectionNotice.value = result.stdout?.trim() || "発言を送りました";
+    } else {
+      interjectionError.value = actionFailureText(result, "発言を送れませんでした");
+    }
+  } catch (cause) {
+    interjectionError.value = errorText(cause);
+  } finally {
+    discussionActionPending.value = null;
+  }
+}
+
+async function approveCurrentDiscussion(): Promise<void> {
+  const runId = selectedRunId.value;
+  if (runId === null || discussionActionPending.value !== null) return;
+  discussionActionPending.value = "approve";
+  discussionActionError.value = null;
+  discussionActionNotice.value = null;
+  try {
+    const result = await discussionApi.approve(runId);
+    if (result.ok) {
+      discussionActionNotice.value = result.stdout?.trim() || "結論を承認しました";
+      await Promise.all([loadDiscussion(runId), refreshRunDetail(runId)]);
+      void loadRuns();
+    } else {
+      discussionActionError.value = actionFailureText(result, "結論を承認できませんでした");
+    }
+  } catch (cause) {
+    discussionActionError.value = errorText(cause);
+  } finally {
+    discussionActionPending.value = null;
+  }
+}
+
+async function rejectCurrentDiscussion(payload: { reason: string; redo: boolean }): Promise<void> {
+  const runId = selectedRunId.value;
+  if (runId === null || discussionActionPending.value !== null) return;
+  discussionActionPending.value = "reject";
+  discussionActionError.value = null;
+  discussionActionNotice.value = null;
+  try {
+    const result = await discussionApi.reject(runId, payload.reason, payload.redo);
+    if (result.ok) {
+      discussionActionNotice.value =
+        result.stdout?.trim() ||
+        (payload.redo ? "却下して再議論を開始しました" : "結論を却下しました");
+      await Promise.all([loadDiscussion(runId), refreshRunDetail(runId)]);
+      if (payload.redo) openRunEvents(runId);
+      void loadRuns();
+    } else {
+      discussionActionError.value = actionFailureText(result, "結論を却下できませんでした");
+    }
+  } catch (cause) {
+    discussionActionError.value = errorText(cause);
+  } finally {
+    discussionActionPending.value = null;
+  }
+}
+
+function openDiscussionTurn(turnId: string): void {
+  discussionThreadRef.value?.focusTurn(turnId);
 }
 
 function openRunEvents(runId: string): void {
@@ -298,6 +520,18 @@ function openRunEvents(runId: string): void {
     if (selectedRunId.value !== runId) return;
     const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
     runView.value = applyDetail(runView.value, detail);
+    if (
+      isConsultationCommand(detail.state.command) &&
+      discussionDetail.value === null &&
+      discussionLoadingFor !== runId
+    ) {
+      void loadDiscussion(runId);
+    }
+  });
+  events.addEventListener("discussion", (event) => {
+    if (selectedRunId.value !== runId) return;
+    discussionDetail.value = JSON.parse((event as MessageEvent).data) as DiscussionDetail;
+    discussionError.value = null;
   });
   events.addEventListener("end", () => {
     streamEnded = true;
@@ -321,12 +555,17 @@ function selectRun(runId: string): void {
   selectedRunId.value = runId;
   runView.value = createRunViewState();
   runStreamError.value = null;
+  resetDiscussionState();
+  if (isConsultationCommand(runSummaries.value.find((run) => run.runId === runId)?.command ?? "")) {
+    void loadDiscussion(runId);
+  }
   openRunEvents(runId);
 }
 
 function clearSelectedRun(): void {
   selectedRunId.value = null;
   runView.value = createRunViewState();
+  resetDiscussionState();
   closeRunEvents();
 }
 
@@ -356,6 +595,7 @@ async function loadRuns(): Promise<void> {
 
 onMounted(async () => {
   void loadRuns();
+  void loadConsultationProfiles();
   runListTimer = setInterval(() => void loadRuns(), 5000);
   try {
     const response = await fetch("/api/health");
@@ -380,18 +620,25 @@ onBeforeUnmount(() => {
       </div>
       <nav class="view-tabs" aria-label="画面切り替え">
         <button
+          :class="['view-tab', { active: activeView === 'consult' }]"
+          type="button"
+          @click="activeView = 'consult'"
+        >
+          相談
+        </button>
+        <button
           :class="['view-tab', { active: activeView === 'commands' }]"
           type="button"
           @click="activeView = 'commands'"
         >
-          コマンド
+          既存操作
         </button>
         <button
           :class="['view-tab', { active: activeView === 'runs' }]"
           type="button"
           @click="activeView = 'runs'"
         >
-          Run
+          Run履歴
         </button>
       </nav>
       <div class="connection">
@@ -401,7 +648,80 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="workspace">
-      <template v-if="activeView === 'commands'">
+      <template v-if="activeView === 'consult'">
+        <section class="content consultation-content">
+          <div v-if="consultationComposerVisible" class="composer-header-row">
+            <button
+              v-if="isConsultationCommand(runDetail?.state.command ?? '')"
+              class="secondary-link-button"
+              type="button"
+              @click="returnToConsultation"
+            >
+              相談へ戻る
+            </button>
+          </div>
+          <ConsultationComposer
+            v-if="consultationComposerVisible"
+            :profiles="consultationProfiles"
+            :default-profile-ids="consultationDefaultProfileIds"
+            :loading="consultationProfilesLoading"
+            :starting="consultationStarting"
+            :load-error="consultationProfilesError"
+            :start-error="consultationStartError"
+            :load-issues="consultationApi.loadIssues"
+            @start="startConsultation"
+          />
+
+          <section
+            v-if="
+              !consultationComposerVisible && isConsultationCommand(runDetail?.state.command ?? '')
+            "
+            class="discussion-area consultation-live"
+          >
+            <div class="consultation-live-header">
+              <div>
+                <h2>{{ selectedRunTitle }}</h2>
+              </div>
+              <div class="consultation-live-actions">
+                <span class="badge">{{ selectedRunStatusLabel }}</span>
+                <button class="secondary-link-button" type="button" @click="showNewConsultation">
+                  新しい相談
+                </button>
+              </div>
+            </div>
+            <section class="consultation-prompt-card" aria-label="相談内容">
+              <h3>相談内容</h3>
+              <p>{{ activeConsultationPrompt ?? "相談内容は現在のAPI応答からは復元できません" }}</p>
+            </section>
+            <p v-if="discussionError" class="run-stream-error">{{ discussionError }}</p>
+            <p v-else-if="discussionLoading" class="discussion-loading">議論を読み込んでいます…</p>
+            <DiscussionThread ref="discussionThreadRef" :turns="discussionDetail?.turns ?? []" />
+            <InterjectBox
+              ref="interjectBoxRef"
+              :can-interject="discussionDetail?.canInterject ?? false"
+              :sending="discussionActionPending === 'say'"
+              @submit="submitInterjection"
+            />
+            <p v-if="interjectionError" class="action-error standalone">{{ interjectionError }}</p>
+            <p v-if="interjectionNotice" class="action-notice standalone">
+              {{ interjectionNotice }}
+            </p>
+            <ConclusionPanel
+              :view="conclusionView"
+              :approval="discussionDetail?.approval ?? null"
+              :can-decide="discussionDetail?.canDecide ?? false"
+              :action-pending="discussionActionPending === 'say' ? null : discussionActionPending"
+              :action-error="discussionActionError"
+              :action-notice="discussionActionNotice"
+              @approve="approveCurrentDiscussion"
+              @reject="rejectCurrentDiscussion"
+              @open-turn="openDiscussionTurn"
+            />
+          </section>
+        </section>
+      </template>
+
+      <template v-else-if="activeView === 'commands'">
         <aside class="sidebar">
           <div class="eyebrow">COMMANDS</div>
           <section v-for="group in commandGroups" :key="group" class="command-group">
@@ -566,7 +886,9 @@ onBeforeUnmount(() => {
             <div class="page-heading run-page-heading">
               <div>
                 <div class="eyebrow">RUN</div>
-                <h1>{{ runDetail.state.repository }}#{{ runDetail.state.issueNumber }}</h1>
+                <h1>
+                  {{ selectedRunTitle }}
+                </h1>
                 <p>
                   {{ runDetail.state.command }} · {{ runStatusLabel(runDetail.state.status) }} ·
                   {{ runDetail.state.runId }}
@@ -577,6 +899,36 @@ onBeforeUnmount(() => {
             <p v-if="runStreamError" class="run-stream-error">{{ runStreamError }}</p>
             <RunPipeline :pipeline="runDetail.pipeline" />
             <ActivityBar :activities="runDetail.activities" />
+            <section v-if="isConsultationCommand(runDetail.state.command)" class="discussion-area">
+              <p v-if="discussionError" class="run-stream-error">{{ discussionError }}</p>
+              <p v-else-if="discussionLoading" class="discussion-loading">
+                議論を読み込んでいます…
+              </p>
+              <DiscussionThread ref="discussionThreadRef" :turns="discussionDetail?.turns ?? []" />
+              <InterjectBox
+                ref="interjectBoxRef"
+                :can-interject="discussionDetail?.canInterject ?? false"
+                :sending="discussionActionPending === 'say'"
+                @submit="submitInterjection"
+              />
+              <p v-if="interjectionError" class="action-error standalone">
+                {{ interjectionError }}
+              </p>
+              <p v-if="interjectionNotice" class="action-notice standalone">
+                {{ interjectionNotice }}
+              </p>
+              <ConclusionPanel
+                :view="conclusionView"
+                :approval="discussionDetail?.approval ?? null"
+                :can-decide="discussionDetail?.canDecide ?? false"
+                :action-pending="discussionActionPending === 'say' ? null : discussionActionPending"
+                :action-error="discussionActionError"
+                :action-notice="discussionActionNotice"
+                @approve="approveCurrentDiscussion"
+                @reject="rejectCurrentDiscussion"
+                @open-turn="openDiscussionTurn"
+              />
+            </section>
             <AgentPanes
               :panes="runView.panes"
               :selected-pane="runView.selectedPane"

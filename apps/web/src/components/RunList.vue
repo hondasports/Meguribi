@@ -72,8 +72,10 @@ function isActive(status: string): boolean {
     >
       <span class="run-list-icon" aria-hidden="true">{{ statusIcon(run.status) }}</span>
       <span class="run-list-main">
-        <b>#{{ run.issueNumber }} {{ statusLabel(run.status) }}</b>
-        <small>{{ run.repository }} · {{ run.command }}</small>
+        <b v-if="run.command === 'consult'">相談 · {{ statusLabel(run.status) }}</b>
+        <b v-else>#{{ run.issueNumber }} {{ statusLabel(run.status) }}</b>
+        <small v-if="run.command === 'consult'">consult</small>
+        <small v-else>{{ run.repository }} · {{ run.command }}</small>
       </span>
     </button>
   </section>

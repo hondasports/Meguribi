@@ -37,10 +37,14 @@ export type {
   DeliveryDependencies,
   DeliveryMcpConfirmation,
   DeliveryResult,
+  ConsultationRunIdentity,
+  ConsultationRunState,
   DeliveryStep,
   GitAdapter,
   GitHubAdapter,
   IssueRecord,
+  IssueRunCommand,
+  IssueRunState,
   PolicyEngine,
   PullRequestRecord,
   PublishDecision,
@@ -49,13 +53,17 @@ export type {
   RunDeliveryInput,
   RunIdentity,
   RunState,
+  RunStateBase,
+  RunStatePatch,
   RunStatus,
   RunStore,
+  RunStoreCreateInput,
   VerificationCommandResult,
   VerificationLogWriter,
   VerificationResult,
   Verifier,
 } from "./delivery.js";
+export { isIssueRunState, requireIssueRunState } from "./delivery.js";
 export {
   cleanupRun,
   type CleanupArtifact,
@@ -294,3 +302,45 @@ export type {
   DiscussionStoreFactory,
   SummarizeDiscussion,
 } from "./discussion/ports.js";
+export {
+  traceAcceptanceCriteria,
+  buildSpecificationArtifacts,
+  saveSpecificationArtifacts,
+  type BuildSpecificationArtifactsInput,
+  type Specification,
+  type SpecificationAcceptanceCriterion,
+  type SeedTraceResult,
+  type SpecificationContent,
+  type SpecifyArtifactsResult,
+} from "./specify/specification.js";
+export {
+  buildSpecificationPrompt,
+  buildSpecificationRepairPrompt,
+  type SpecificationPromptInput,
+} from "./specify/prompt.js";
+
+export {
+  runDiscussToPr,
+  continueDiscussToPrAfterApproval,
+  hasDiscussToPrContinuation,
+  findContinuationStartStep,
+  DiscussToPrContinuationError,
+  type RunDiscussToPrInput,
+  type DiscussToPrDependencies,
+  type DiscussToPrContinuationConfig,
+  type SpecifyPort,
+} from "./workflow/discuss-to-pr.js";
+export { createDiscussToPrWorkflow, DISCUSS_TO_PR_WORKFLOW_NAME } from "./workflow/discuss-to-pr-definition.js";
+
+export {
+  runConsultation,
+  runPersistentConsultation,
+  type ConsultationDependencies,
+  type ConsultationDiscussionStore,
+  type ConsultationInputArtifact,
+  type ConsultationResult,
+  type PersistentConsultationDependencies,
+  type PersistentConsultationResult,
+  type RunConsultationInput,
+  type RunPersistentConsultationInput,
+} from "./discussion/consultation.js";

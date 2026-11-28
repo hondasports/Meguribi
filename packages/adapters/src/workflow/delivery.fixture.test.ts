@@ -4,7 +4,7 @@ import {
   runDelivery,
   type ImplementationResult,
   type RunDeliveryInput,
-  type RunState,
+  type RunStatePatch,
 } from "@meguribi/core";
 import { createFakeDeliveryDeps } from "../fakes/delivery-fakes.js";
 
@@ -386,7 +386,7 @@ describe("delivery workflow fixtures", () => {
         remoteIdentity: "github.com/owner/repo",
       },
     });
-    const mid: Partial<RunState> = {
+    const mid: RunStatePatch = {
       status: "implementing",
       currentStep: "implementing",
       completedSteps: ["planning"],

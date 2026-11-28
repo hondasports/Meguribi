@@ -16,7 +16,8 @@
   "dependencies": {
     "@meguribi/adapters": "workspace:*",
     "@meguribi/core": "workspace:*",
-    "vue": "^3.5.18"
+    "vue": "^3.5.18",
+    "@meguribi/config": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

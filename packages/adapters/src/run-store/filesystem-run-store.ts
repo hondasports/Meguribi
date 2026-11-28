@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type {
-  RunCommand,
-  RunIdentity,
   RunState,
+  RunStatePatch,
   RunStore,
+  RunStoreCreateInput,
 } from "@meguribi/core";
 import { RunStateSchema } from "@meguribi/schemas";
 import * as v from "valibot";
@@ -40,29 +40,15 @@ export class FileSystemRunStore implements RunStore {
     this.randomId = options.randomId ?? (() => randomBytes(3).toString("hex"));
   }
 
-  async create(input: {
-    repository: string;
-    issueNumber: number;
-    command: RunCommand;
-    identity: RunIdentity;
-    maxFixAttempts: number;
-  }): Promise<RunState> {
+  async create(input: RunStoreCreateInput): Promise<RunState> {
     const runId = createRunId(this.now(), this.randomId());
     const createdAt = this.now().toISOString();
-    const state: RunState = {
-      schemaVersion: 1,
+    const base = {
+      schemaVersion: 1 as const,
       runId,
       repository: input.repository,
-      issueNumber: input.issueNumber,
-      command: input.command,
-      status: "created",
+      status: "created" as const,
       completedSteps: [],
-      branch: input.identity.branch,
-      worktreePath: input.identity.worktreePath,
-      baseRef: input.identity.baseRef,
-      baseSha: input.identity.baseSha,
-      headSha: input.identity.headSha,
-      remoteIdentity: input.identity.remoteIdentity,
       pullRequestNumber: null,
       agentSessions: {},
       fixAttempts: 0,
@@ -70,12 +56,41 @@ export class FileSystemRunStore implements RunStore {
       createdAt,
       updatedAt: createdAt,
     };
+    const state: RunState = input.command === "consult"
+      ? {
+          ...base,
+          command: "consult",
+          issueNumber: null,
+          branch: null,
+          worktreePath: input.consultation.worktreePath,
+          baseRef: null,
+          baseSha: null,
+          headSha: null,
+          remoteIdentity: input.consultation.remoteIdentity,
+        }
+      : {
+          ...base,
+          command: input.command,
+          issueNumber: input.issueNumber,
+          branch: input.identity.branch,
+          worktreePath: input.identity.worktreePath,
+          baseRef: input.identity.baseRef,
+          baseSha: input.identity.baseSha,
+          headSha: input.identity.headSha,
+          remoteIdentity: input.identity.remoteIdentity,
+        };
 
     const validated = v.parse(RunStateSchema, state);
-    const runDir = this.runDir(validated.repository, validated.issueNumber, validated.runId);
+    const runDir = validated.command === "consult"
+      ? this.consultationRunDir(validated.repository, validated.runId)
+      : this.runDir(validated.repository, validated.issueNumber, validated.runId);
     await fs.mkdir(runDir, { recursive: true });
     await this.writeState(runDir, validated);
-    await this.writeRunIndex(validated.runId, validated.repository, validated.issueNumber);
+    await this.writeRunIndex(
+      validated.runId,
+      validated.repository,
+      validated.command === "consult" ? null : validated.issueNumber,
+    );
     return validated;
   }
 
@@ -138,7 +153,7 @@ export class FileSystemRunStore implements RunStore {
     return states.slice(0, normalizedLimit);
   }
 
-  async update(runId: string, patch: Partial<RunState>): Promise<RunState> {
+  async update(runId: string, patch: RunStatePatch): Promise<RunState> {
     const runDir = await this.resolveRunDirById(runId);
     if (!runDir) {
       throw new Error(`Run not found: ${runId}`);
@@ -261,6 +276,19 @@ export class FileSystemRunStore implements RunStore {
     return runDir;
   }
 
+  private consultationsDir(repository: string): string {
+    const { owner, repo } = splitRepository(repository);
+    const dir = path.resolve(this.runsRoot(), owner, repo, "consultations");
+    assertPathInside(this.runsRoot(), dir);
+    return dir;
+  }
+
+  private consultationRunDir(repository: string, runId: string): string {
+    const runDir = path.resolve(this.consultationsDir(repository), sanitizeRunId(runId));
+    assertPathInside(this.runsRoot(), runDir);
+    return runDir;
+  }
+
   private lockPath(repository: string, issueNumber: number): string {
     return path.join(this.issueDir(repository, issueNumber), "lock");
   }
@@ -274,25 +302,39 @@ export class FileSystemRunStore implements RunStore {
   private async writeRunIndex(
     runId: string,
     repository: string,
-    issueNumber: number,
+    issueNumber: number | null,
   ): Promise<void> {
     const indexPath = this.indexPath(runId);
     await fs.mkdir(path.dirname(indexPath), { recursive: true });
-    await atomicWriteFile(
-      indexPath,
-      `${JSON.stringify({ repository, issueNumber, runId }, null, 2)}\n`,
-    );
+    const payload = issueNumber === null
+      ? { kind: "consultation", repository, runId }
+      : { repository, issueNumber, runId };
+    await atomicWriteFile(indexPath, `${JSON.stringify(payload, null, 2)}\n`);
   }
 
   private async resolveRunDirById(runId: string): Promise<string | null> {
     try {
       const raw = await fs.readFile(this.indexPath(runId), "utf8");
       const parsed = JSON.parse(raw) as {
-        repository: string;
-        issueNumber: number;
-        runId: string;
+        kind?: unknown;
+        repository?: unknown;
+        issueNumber?: unknown;
+        runId?: unknown;
       };
-      return this.runDir(parsed.repository, parsed.issueNumber, parsed.runId);
+      if (typeof parsed.repository !== "string" || typeof parsed.runId !== "string") {
+        throw new Error(`Invalid run index for ${runId}`);
+      }
+      if (parsed.kind === "consultation") {
+        return this.consultationRunDir(parsed.repository, parsed.runId);
+      }
+      if (
+        typeof parsed.issueNumber === "number" &&
+        Number.isInteger(parsed.issueNumber) &&
+        parsed.issueNumber >= 1
+      ) {
+        return this.runDir(parsed.repository, parsed.issueNumber, parsed.runId);
+      }
+      throw new Error(`Invalid run index for ${runId}`);
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
       if (err.code !== "ENOENT") {

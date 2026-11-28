@@ -1,11 +1,24 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { loadRepositoryWorkflows, parseWorkflowDefinition } from "@meguribi/config";
+import { homedir } from "node:os";
 import {
   createDeliveryWorkflow,
   createDiscussionWorkflow,
+  createDiscussToPrWorkflow,
+  runDiscussToPr,
   validateWorkflowDefinition,
+  type RunDiscussToPrInput,
 } from "@meguribi/core";
+import { parseIssueTarget } from "../target.js";
+import {
+  parseParticipantOverride,
+  saveParticipantOverride,
+} from "./discuss.js";
+import {
+  createDiscussToPrDependencies,
+  type CreateDiscussToPrDepsOptions,
+} from "../wiring/create-delivery-deps.js";
 
 export interface WorkflowValidateCommandDependencies {
   stdout?: (text: string) => void;
@@ -77,9 +90,11 @@ export async function runWorkflowListCommand(
   const loadWorkflows = deps.loadWorkflows ?? loadRepositoryWorkflows;
   const delivery = createDeliveryWorkflow(2);
   const discussion = createDiscussionWorkflow();
+  const discussToPr = createDiscussToPrWorkflow(3);
   const lines = [
     formatWorkflowLine(delivery.name, "built-in", delivery.steps),
     formatWorkflowLine(discussion.name, "built-in", discussion.steps),
+    formatWorkflowLine(discussToPr.name, "built-in", discussToPr.steps),
   ];
 
   for (const workflow of await loadWorkflows(repositoryPath)) {
@@ -93,4 +108,195 @@ export async function runWorkflowListCommand(
 
   stdout(lines.join(""));
   return { exitCode: 0 };
+}
+
+const DEFAULT_PROTECTED_PATHS = [".env", ".env.*", ".github/workflows/**", "**/*secret*"] as const;
+
+function workflowLocalDataRoot(): string {
+  if (process.env.XDG_DATA_HOME) return path.join(process.env.XDG_DATA_HOME, "meguribi");
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA ?? path.join(homedir(), "AppData", "Local"), "meguribi");
+  }
+  return path.join(homedir(), ".local", "share", "meguribi");
+}
+
+function workflowPathSegment(repository: string): string {
+  return repository.replace("/", "-");
+}
+
+export interface WorkflowRunCommandOptions {
+  repoPath?: string;
+  local?: boolean;
+  request?: string;
+  nonInteractive?: boolean;
+  implementer?: string;
+  allowInheritedMcp?: boolean;
+  maxFixAttempts?: number;
+  json?: boolean;
+  /** Run ごとの参加者上書き（カンマ区切り）。永続設定は変更しない。 */
+  discussants?: string;
+  summarizer?: string;
+}
+
+export interface WorkflowRunCommandDependencies {
+  stdout?: (text: string) => void;
+  stderr?: (text: string) => void;
+  cwd?: string;
+  abortSignal?: AbortSignal;
+  createDependencies?: (
+    options: CreateDiscussToPrDepsOptions,
+  ) => ReturnType<typeof createDiscussToPrDependencies>;
+  runWorkflow?: typeof runDiscussToPr;
+}
+
+/**
+ * `meguribi workflow run <name> <target>`。
+ * 現在実行可能な組み込みワークフローは `discuss-to-pr` のみ。
+ * 議論が合意に達すると `awaiting_human` で停止し、承認（`meguribi approve`）で継続する。
+ * 自動承認のオプションは設けない（設計書 §6.3 A1）。
+ */
+export async function runWorkflowRunCommand(
+  name: string,
+  target: string,
+  options: WorkflowRunCommandOptions = {},
+  deps: WorkflowRunCommandDependencies = {},
+): Promise<{ exitCode: number }> {
+  const stdout = deps.stdout ?? ((text: string) => process.stdout.write(text));
+  const stderr = deps.stderr ?? ((text: string) => process.stderr.write(text));
+
+  if (name !== "discuss-to-pr") {
+    stderr(
+      `ワークフロー "${name}" は実行できません。実行可能な組み込みワークフロー: discuss-to-pr\n` +
+        "（議論だけ行う場合は `meguribi discuss <target>`、従来の delivery は `meguribi run <target>` を使ってください）\n",
+    );
+    return { exitCode: 1 };
+  }
+
+  let parsed: ReturnType<typeof parseIssueTarget>;
+  try {
+    parsed = parseIssueTarget(target);
+  } catch (error) {
+    stderr(`${errorMessage(error)}\n`);
+    return { exitCode: 1 };
+  }
+
+  const cwd = deps.cwd ?? process.cwd();
+  const repositoryPath = options.repoPath ?? cwd;
+  const nonInteractive = options.nonInteractive ?? false;
+  const maxFixAttempts = options.maxFixAttempts ?? 2;
+
+  const participantOverride = parseParticipantOverride(options);
+  const create = deps.createDependencies ?? createDiscussToPrDependencies;
+  const wiring = await create({
+    cwd,
+    repositoryPath,
+    repository: parsed.repository,
+    nonInteractive,
+    localOnly: options.local,
+    ...(options.implementer !== undefined ? { implementer: options.implementer } : {}),
+    ...(options.allowInheritedMcp !== undefined ? { allowInheritedMcp: options.allowInheritedMcp } : {}),
+    ...(participantOverride.discussants !== undefined
+      ? { discussants: participantOverride.discussants }
+      : {}),
+    ...(participantOverride.summarizer !== undefined
+      ? { summarizer: participantOverride.summarizer }
+      : {}),
+  });
+
+  const worktreePath = path.join(
+    workflowLocalDataRoot(),
+    "worktrees",
+    workflowPathSegment(parsed.repository),
+    `issue-${String(parsed.issueNumber)}`,
+  );
+  const artifactRoot = path.join(
+    workflowLocalDataRoot(),
+    "runs",
+    workflowPathSegment(parsed.repository),
+    `issue-${String(parsed.issueNumber)}`,
+    `${String(Date.now())}-${String(process.pid)}`,
+  );
+
+  const input: RunDiscussToPrInput = {
+    repository: parsed.repository,
+    issueNumber: parsed.issueNumber,
+    repositoryPath,
+    worktreePath,
+    branch: `meguribi/issue-${String(parsed.issueNumber)}`,
+    baseRef: options.local ? "HEAD" : "origin/main",
+    requiredLabels: ["agent:ready"],
+    repositoryRules: "Follow AGENTS.md",
+    ...(options.request !== undefined ? { userRequest: options.request } : {}),
+    limits: { maxTurns: 20, maxDurationMs: 30 * 60 * 1000, turnTimeoutMs: 5 * 60 * 1000 },
+    nonInteractive,
+    artifactRoot,
+    outOfScope: [],
+    protectedPaths: [...DEFAULT_PROTECTED_PATHS],
+    verifyCommands: [
+      { name: "lint", run: "pnpm lint" },
+      { name: "typecheck", run: "pnpm typecheck" },
+      { name: "test", run: "pnpm test" },
+      { name: "build", run: "pnpm build" },
+    ],
+    inheritedMcpPolicy: wiring.inheritedMcpPolicy,
+    allowInheritedMcp: options.allowInheritedMcp ?? false,
+    maxFixAttempts,
+    artifactRootForDevin: artifactRoot,
+    ...(deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {}),
+  };
+
+  let reportedRunId: string | undefined;
+  const originalOnStateChange = wiring.deps.discussion.onStateChange;
+  const workflowDeps: typeof wiring.deps = {
+    ...wiring.deps,
+    discussion: {
+      ...wiring.deps.discussion,
+      onStateChange: async (state) => {
+        if (reportedRunId === undefined && options.json !== true) {
+          reportedRunId = state.runId;
+          stdout(`Run ID: ${state.runId}\n`);
+        }
+        await originalOnStateChange?.(state);
+      },
+    },
+  };
+
+  const run = deps.runWorkflow ?? runDiscussToPr;
+  const result = await run(input, workflowDeps);
+  // redo で同じ参加者を復元できるよう Run に保存する。
+  await saveParticipantOverride(
+    wiring.deps.discussion.runStore,
+    result.runId,
+    participantOverride,
+  ).catch(() => undefined);
+
+  if (options.json === true) {
+    stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return {
+      exitCode: result.status === "awaiting_human" || result.status === "completed" ? 0 : 1,
+    };
+  }
+
+  if (result.status === "awaiting_human") {
+    if (reportedRunId !== result.runId) {
+      stdout(`Run ID: ${result.runId}\n`);
+    }
+    if (result.conclusion !== undefined) {
+      stdout(`結論: ${result.conclusion.conclusion}\n`);
+    }
+    stdout(
+      `\n承認すると specify 以降（plan → implement → verify → review → publish）へ進みます。\n` +
+        `Next: meguribi approve ${result.runId}  /  meguribi reject ${result.runId} --reason "..." [--redo]\n`,
+    );
+    return { exitCode: 0 };
+  }
+  if (result.status === "completed") {
+    stdout(`議論は完了しました: ${result.runId}\n`);
+    return { exitCode: 0 };
+  }
+  stderr(`discuss-to-pr は ${result.status} で終了しました: ${result.runId}\n`);
+  for (const reason of result.reasons) {
+    stderr(`- ${reason}\n`);
+  }
+  return { exitCode: 1 };
 }

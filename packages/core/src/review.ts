@@ -7,10 +7,11 @@ import type {
   GitAdapter,
   GitHubAdapter,
   ImplementationResult,
-  RunState,
+  IssueRunState,
   RunStore,
   VerificationResult,
 } from "./delivery.js";
+import { isIssueRunState } from "./delivery.js";
 
 export interface ReviewDependencies {
   github: Pick<GitHubAdapter, "getIssue" | "upsertMarkerComment">;
@@ -110,7 +111,7 @@ export async function reviewIssue(
 async function loadReviewRun(
   input: ReviewInput,
   deps: ReviewDependencies,
-): Promise<RunState> {
+): Promise<IssueRunState> {
   const state = input.runId
     ? await deps.runStore.load(input.runId)
     : await deps.runStore.loadLatest(input.repository, input.issueNumber);
@@ -118,6 +119,9 @@ async function loadReviewRun(
     throw new Error(
       `No delivery Run found for ${input.repository}#${String(input.issueNumber)}; run an implementation first or pass --run-id`,
     );
+  }
+  if (!isIssueRunState(state)) {
+    throw new Error(`Run ${state.runId} is an issue-less consultation run; review requires a delivery Run`);
   }
   if (state.repository !== input.repository || state.issueNumber !== input.issueNumber) {
     throw new Error(
@@ -133,7 +137,7 @@ async function loadReviewRun(
 }
 
 async function assertReviewIdentity(
-  state: RunState,
+  state: IssueRunState,
   deps: ReviewDependencies,
 ): Promise<void> {
   const identity = await deps.git.getIdentity(state.worktreePath);

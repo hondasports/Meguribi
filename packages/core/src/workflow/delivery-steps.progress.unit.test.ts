@@ -18,6 +18,9 @@ function iso(): string {
 }
 
 function createRunState(input: Parameters<RunStore["create"]>[0]): RunState {
+  if (input.command === "consult") {
+    throw new Error("delivery progress fixtures require an issue run");
+  }
   return {
     schemaVersion: 1,
     runId: "run-progress",
@@ -53,7 +56,7 @@ function createMemoryRunStore(): RunStore {
     loadLatest: async () => (state ? structuredClone(state) : null),
     update: async (runId, patch) => {
       if (state?.runId !== runId) throw new Error(`Run not found: ${runId}`);
-      state = { ...state, ...patch, runId, updatedAt: patch.updatedAt ?? iso() };
+      state = { ...state, ...patch, runId, updatedAt: patch.updatedAt ?? iso() } as RunState;
       return structuredClone(state);
     },
     saveArtifact: async (runId, name, value) => {

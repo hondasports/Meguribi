@@ -45,6 +45,7 @@ import {
   runWorkflowValidateCommand,
   type WorkflowListCommandDependencies,
   type WorkflowValidateCommandDependencies,
+  runWorkflowRunCommand,
 } from "./commands/workflow.js";
 
 export interface DoctorCommandOptions {
@@ -428,6 +429,47 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     });
 
   workflow
+    .command("run")
+    .description("Run a built-in workflow (discuss-to-pr)")
+    .argument("<name>", "Workflow name (discuss-to-pr)")
+    .argument("<target>", "Issue target (owner/repo#123)")
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .option("--local", "Use local HEAD as base instead of origin/main")
+    .option("--request <text>", "Additional user request for the discussion")
+    .option("--discussants <ids>", "Comma-separated participant profile ids for this run only")
+    .option("--summarizer <id>", "Summarizer profile id for this run only")
+    .option("--implementer <profile>", "Implementer profile id")
+    .option("--allow-inherited-mcp", "Allow inherited MCP servers")
+    .option("--non-interactive", "Do not prompt for confirmations")
+    .action(async (workflowName: string, target: string, cliOptions: {
+      repoPath?: string;
+      local?: boolean;
+      request?: string;
+      discussants?: string;
+      summarizer?: string;
+      implementer?: string;
+      allowInheritedMcp?: boolean;
+      nonInteractive?: boolean;
+    }) => {
+      try {
+        const result = await runWorkflowRunCommand(workflowName, target, {
+          repoPath: cliOptions.repoPath,
+          local: cliOptions.local,
+          request: cliOptions.request,
+          discussants: cliOptions.discussants,
+          summarizer: cliOptions.summarizer,
+          implementer: cliOptions.implementer,
+          allowInheritedMcp: cliOptions.allowInheritedMcp,
+          nonInteractive: cliOptions.nonInteractive,
+        }, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      }
+    });
+
+  workflow
     .command("validate")
     .description("Validate a YAML workflow definition")
     .argument("<file>", "Workflow YAML file")
@@ -471,16 +513,19 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
 
   program
     .command("discuss")
-    .description("Start a read-only multi-agent discussion for a GitHub Issue")
-    .argument("<target>", "Issue target (issue number, URL, or owner/repo#number)")
+    .description("Start a read-only multi-agent discussion for a GitHub Issue or a prompt-only topic")
+    .argument("[target]", "Issue target (issue number, URL, or owner/repo#number); omit for prompt-only consultation")
     .option("--repo-path <path>", "Path to the target Git repository")
     .option("--local", "Use local-only adapters (no GitHub access)", false)
+    .option("--prompt <text>", "Consultation topic for an issue-free read-only discussion")
     .option("--request <text>", "Additional user request for the discussion")
+    .option("--discussants <ids>", "Comma-separated participant profile ids for this run only")
+    .option("--summarizer <id>", "Summarizer profile id for this run only")
     .option("--max-turns <n>", "Maximum discussion turns")
     .option("--log <mode>", "Live log mode: stream, compact, or none")
     .option("--json", "Emit the result as JSON on stdout", false)
     .option("--non-interactive", "Fail closed instead of prompting", false)
-    .action(async (target: string, cliOptions: DiscussCommandOptions) => {
+    .action(async (target: string | undefined, cliOptions: DiscussCommandOptions) => {
       const controller = new AbortController();
       const onSigInt = () => {
         controller.abort();

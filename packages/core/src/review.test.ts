@@ -1,4 +1,4 @@
-import type { IssueRecord, PlanArtifact, ReviewArtifact, RunState } from "./index.js";
+import type { IssueRecord, IssueRunState, PlanArtifact, ReviewArtifact, RunStatePatch } from "./index.js";
 import { describe, expect, it } from "vitest";
 import { CODE_REVIEW_MARKER, reviewIssue } from "./review.js";
 
@@ -11,7 +11,7 @@ const issue: IssueRecord = {
   updatedAt: "2026-07-30T00:00:00.000Z",
 };
 
-const state: RunState = {
+const state: IssueRunState = {
   schemaVersion: 1,
   runId: "20260730T000000Z-review1",
   repository: "owner/repo",
@@ -85,7 +85,7 @@ const review: ReviewArtifact = {
 
 function dependencies(overrides: { identity?: Partial<typeof state>; review?: ReviewArtifact } = {}) {
   const saved: Record<string, unknown> = {};
-  let updated: RunState | undefined;
+  let updated: IssueRunState | undefined;
   let requestedBaseSha: string | undefined;
   const identity = {
     branch: overrides.identity?.branch ?? state.branch,
@@ -119,8 +119,8 @@ function dependencies(overrides: { identity?: Partial<typeof state>; review?: Re
       runStore: {
         load: async () => state,
         loadLatest: async () => state,
-        update: async (_runId: string, patch: Partial<RunState>) => {
-          updated = { ...state, ...patch };
+        update: async (_runId: string, patch: RunStatePatch) => {
+          updated = { ...state, ...patch } as IssueRunState;
           return updated;
         },
         saveArtifact: async (_runId: string, name: string, value: unknown) => {

@@ -43,21 +43,13 @@ export const DeliveryStepSchema = v.picklist([
   "awaiting_human",
 ]) satisfies v.GenericSchema<unknown, CoreDeliveryStep>;
 
-export const RunStateSchema = v.strictObject({
+const runStateBaseEntries = {
   schemaVersion: v.literal(1),
   runId: v.string(),
   repository: v.string(),
-  issueNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
-  command: v.picklist(["run", "resume", "discuss"]),
   status: RunStatusSchema,
   currentStep: v.optional(DeliveryStepSchema),
   completedSteps: v.array(DeliveryStepSchema),
-  branch: v.string(),
-  worktreePath: v.string(),
-  baseRef: v.string(),
-  baseSha: v.string(),
-  headSha: v.string(),
-  remoteIdentity: v.string(),
   pullRequestNumber: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1))),
   agentSessions: v.strictObject({
     codexPlan: v.optional(v.string()),
@@ -74,7 +66,36 @@ export const RunStateSchema = v.strictObject({
       message: v.string(),
     }),
   ),
-}) satisfies v.GenericSchema<unknown, CoreRunState>;
+};
+
+const IssueRunStateSchema = v.strictObject({
+  ...runStateBaseEntries,
+  issueNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  command: v.picklist(["run", "resume", "discuss"]),
+  branch: v.string(),
+  worktreePath: v.string(),
+  baseRef: v.string(),
+  baseSha: v.string(),
+  headSha: v.string(),
+  remoteIdentity: v.string(),
+});
+
+const ConsultationRunStateSchema = v.strictObject({
+  ...runStateBaseEntries,
+  issueNumber: v.null(),
+  command: v.literal("consult"),
+  branch: v.null(),
+  worktreePath: v.pipe(v.string(), v.minLength(1)),
+  baseRef: v.null(),
+  baseSha: v.null(),
+  headSha: v.null(),
+  remoteIdentity: v.pipe(v.string(), v.minLength(1)),
+});
+
+export const RunStateSchema = v.union([
+  IssueRunStateSchema,
+  ConsultationRunStateSchema,
+]) satisfies v.GenericSchema<unknown, CoreRunState>;
 
 export const VerificationResultSchema = v.strictObject({
   schemaVersion: v.literal(1),

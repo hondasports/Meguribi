@@ -4,18 +4,26 @@ import {
   createLiveLogRenderer,
   deriveAgentActivity,
   type AgentActivity,
+  type ApprovalRecord,
+  type DiscussionConclusion,
+  type DiscussionTurn,
   type LiveLogRenderer,
   type RunState,
   type StepKind,
   type WorkflowEvent,
   type WorkflowEventLog,
 } from "@meguribi/core";
-import { redactDiagnosticText, type FileSystemRunStore } from "@meguribi/adapters";
+import {
+  FileSystemDiscussionStore,
+  redactDiagnosticText,
+  redactJsonValue,
+  type FileSystemRunStore,
+} from "@meguribi/adapters";
 
 export interface RunSummary {
   runId: string;
   repository: string;
-  issueNumber: number;
+  issueNumber: number | null;
   command: string;
   status: string;
   currentStep?: string;
@@ -36,6 +44,14 @@ export interface RunDetail {
   state: RunState;
   pipeline: PipelineStep[];
   activities: AgentActivity[];
+}
+
+export interface DiscussionDetail {
+  turns: DiscussionTurn[];
+  conclusion: DiscussionConclusion | null;
+  approval: ApprovalRecord | null;
+  canInterject: boolean;
+  canDecide: boolean;
 }
 
 export interface RunStoreApiOptions {
@@ -63,6 +79,7 @@ const TERMINAL_STATUSES = new Set<string>([
 type RunStoreRoute =
   | { kind: "list"; searchParams: URLSearchParams }
   | { kind: "detail"; runId: string }
+  | { kind: "discussion"; runId: string }
   | { kind: "stream"; runId: string };
 
 function writeJson(res: http.ServerResponse, status: number, value: unknown): void {
@@ -89,19 +106,26 @@ function parseRoute(rawUrl: string | undefined): RunStoreRoute | null {
   if (!rawPath.startsWith(prefix)) return null;
   const remainder = rawPath.slice(prefix.length);
   const segments = remainder.split("/");
-  if (segments.length !== 1 && !(segments.length === 2 && segments[1] === "stream")) {
+  const suffix = segments.length === 2 ? segments[1] : undefined;
+  if (segments.length !== 1 && suffix !== "stream" && suffix !== "discussion") {
     return null;
   }
   let runId: string;
   try {
     runId = decodeURIComponent(segments[0] ?? "");
   } catch {
-    return { kind: segments.length === 2 ? "stream" : "detail", runId: "" };
+    return {
+      kind: suffix === "stream" ? "stream" : suffix === "discussion" ? "discussion" : "detail",
+      runId: "",
+    };
   }
-  return { kind: segments.length === 2 ? "stream" : "detail", runId };
+  return {
+    kind: suffix === "stream" ? "stream" : suffix === "discussion" ? "discussion" : "detail",
+    runId,
+  };
 }
 
-function isValidRunId(runId: string): boolean {
+export function isValidRunId(runId: string): boolean {
   return RUN_ID_PATTERN.test(runId) && !runId.includes("..");
 }
 
@@ -174,11 +198,8 @@ function buildPipeline(state: RunState, events: readonly WorkflowEvent[]): Pipel
 }
 
 function redactRunState(state: RunState): RunState {
-  return {
-    ...state,
-    branch: redactDiagnosticText(state.branch),
+  const common = {
     worktreePath: redactDiagnosticText(state.worktreePath),
-    baseRef: redactDiagnosticText(state.baseRef),
     remoteIdentity: redactDiagnosticText(state.remoteIdentity),
     ...(state.lastError !== undefined
       ? {
@@ -189,6 +210,20 @@ function redactRunState(state: RunState): RunState {
         }
       : {}),
   };
+  if (state.command === "consult") {
+    return {
+      ...state,
+      ...common,
+      branch: null,
+      baseRef: null,
+    };
+  }
+  return {
+    ...state,
+    ...common,
+    branch: redactDiagnosticText(state.branch),
+    baseRef: redactDiagnosticText(state.baseRef),
+  };
 }
 
 function redactActivity(activity: AgentActivity): AgentActivity {
@@ -197,6 +232,55 @@ function redactActivity(activity: AgentActivity): AgentActivity {
     agentLabel: redactDiagnosticText(activity.agentLabel),
     ...(activity.detail !== undefined ? { detail: redactDiagnosticText(activity.detail) } : {}),
     changedFiles: activity.changedFiles.map((file) => redactDiagnosticText(file)),
+  };
+}
+
+const INTERJECT_CLOSED_STATUSES = new Set<string>([
+  "awaiting_human",
+  "completed",
+  "blocked",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "interrupted",
+]);
+
+function isApprovalRecord(value: unknown): value is ApprovalRecord {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<ApprovalRecord>;
+  return (
+    (record.decision === "approved" || record.decision === "rejected") &&
+    typeof record.approver === "string" &&
+    typeof record.at === "string" &&
+    typeof record.conclusionHash === "string" &&
+    (record.comment === undefined || typeof record.comment === "string") &&
+    (record.redo === undefined || typeof record.redo === "boolean")
+  );
+}
+
+function redacted<T>(value: T): T {
+  return redactJsonValue(value) as T;
+}
+
+export async function readDiscussionDetail(
+  runStore: FileSystemRunStore,
+  runId: string,
+): Promise<DiscussionDetail | null> {
+  const state = await runStore.load(runId);
+  if (state === null || (state.command !== "discuss" && state.command !== "consult")) return null;
+  const store = new FileSystemDiscussionStore({ runStore, runId });
+  const [turns, conclusion, approvalValue] = await Promise.all([
+    store.readTurns(),
+    store.readConclusion(),
+    runStore.readArtifact<unknown>(runId, "approval.json"),
+  ]);
+  const approval = isApprovalRecord(approvalValue) ? approvalValue : null;
+  return {
+    turns: redacted(turns),
+    conclusion: conclusion === null ? null : redacted(conclusion),
+    approval: approval === null ? null : redacted(approval),
+    canInterject: !INTERJECT_CLOSED_STATUSES.has(state.status),
+    canDecide: state.command === "discuss" && state.status === "awaiting_human" && conclusion !== null,
   };
 }
 
@@ -239,6 +323,15 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
     const detail = await loadDetail(runId);
     if (detail === null) {
       writeJson(res, 404, { error: "Run not found" });
+      return;
+    }
+    writeJson(res, 200, detail);
+  }
+
+  async function handleDiscussion(runId: string, res: http.ServerResponse): Promise<void> {
+    const detail = await readDiscussionDetail(options.runStore, runId);
+    if (detail === null) {
+      writeJson(res, 404, { error: "Discussion run not found" });
       return;
     }
     writeJson(res, 200, detail);
@@ -303,6 +396,14 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
       writeSse(res, "detail", buildRunDetail(state, events, now()));
     }
 
+    async function writeDiscussionDetail(): Promise<void> {
+      if (closed || res.writableEnded) return;
+      const detail = await readDiscussionDetail(options.runStore, runId);
+      if (detail !== null && !closed && !res.writableEnded) {
+        writeSse(res, "discussion", detail);
+      }
+    }
+
     function cleanup(): void {
       if (closed) return;
       closed = true;
@@ -338,14 +439,24 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
           drainAgain = false;
           const result = await options.eventLog.read(runId, nextLine);
           nextLine = result.nextLine;
+          let sawDiscussionEvent = false;
           for (const record of result.records) {
             events.push(record.event);
+            if (
+              record.event.type === "discussion.turn" ||
+              record.event.type === "discussion.ended"
+            ) {
+              sawDiscussionEvent = true;
+            }
             writeRenderedEvent(record.event);
           }
           pollCount += 1;
           if (!sentInitialDetail || result.records.length > 0 || pollCount % 5 === 0) {
             await writeDetail();
             sentInitialDetail = true;
+          }
+          if (sawDiscussionEvent) {
+            await writeDiscussionDetail();
           }
           const state = await options.runStore.load(runId);
           if (closed) return;
@@ -398,6 +509,8 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
       }
       if (route.kind === "detail") {
         await handleDetail(route.runId, res);
+      } else if (route.kind === "discussion") {
+        await handleDiscussion(route.runId, res);
       } else {
         await handleStream(req, res, route.runId);
       }
