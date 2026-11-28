@@ -224,3 +224,13 @@ export type {
 } from "./workflow-engine/engine.js";
 export type { WorkflowEvent } from "./workflow-engine/events.js";
 export { createRunStoreStepStateStore } from "./workflow-engine/run-store-step-state.js";
+export { deriveAgentActivity } from "./agent-activity.js";
+export type {
+  AgentActivity,
+  AgentActivityState,
+  DeriveAgentActivityOptions,
+} from "./agent-activity.js";
+export type {
+  WorkflowEventLog,
+  WorkflowEventRecord,
+} from "./workflow-engine/event-log.js";

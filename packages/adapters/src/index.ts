@@ -178,3 +178,4 @@ export {
   RolePlanningError,
 } from "./role-planning/index.js";
 export type { CreateRoleAgentPlanningBridgeOptions } from "./role-planning/index.js";
+export { FileSystemWorkflowEventLog } from "./run-store/index.js";

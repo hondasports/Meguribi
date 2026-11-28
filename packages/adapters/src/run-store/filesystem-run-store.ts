@@ -87,6 +87,10 @@ export class FileSystemRunStore implements RunStore {
     return this.readState(located);
   }
 
+  async runDirectory(runId: string): Promise<string | null> {
+    return this.resolveRunDirById(runId);
+  }
+
   async loadLatest(repository: string, issueNumber: number): Promise<RunState | null> {
     const issueDir = this.issueDir(repository, issueNumber);
     let entries: string[];

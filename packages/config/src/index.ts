@@ -46,3 +46,8 @@ export type {
   DevinConfigSources,
   InheritedMcpPolicy as DevinInheritedMcpPolicy,
 } from "./devin-config.js";
+export {
+  loadRepositoryWorkflows,
+  parseWorkflowDefinition,
+  WorkflowDefinitionParseError,
+} from "./workflow-definition.js";
