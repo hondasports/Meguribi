@@ -21,6 +21,7 @@ export interface CreateAcpRoleAgentOptions {
   profile: AgentProfile;
   executable: string;
   executableArgs?: string[];
+  acpArgs?: string[];
   diagnosis: AgentDiagnosis;
   mode: "interactive" | "non-interactive";
   transport?: AcpTransport;
@@ -147,7 +148,8 @@ class AcpRoleSession implements RoleSession {
 }
 
 /**
- * 単体 ACP サーバー（claude-agent-acp / codex-acp 等）を役割セッションとして開く。
+ * ACP サーバーとして起動できるエージェント（claude-agent-acp / codex-acp 等の
+ * 単体サーバー、または devin / cursor の acp サブコマンド）を役割セッションとして開く。
  * 診断が runnable でない場合はここで失敗させる。
  */
 export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgent {
@@ -171,7 +173,7 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
       const session = await startAcpSession({
         executable: options.executable,
         executableArgs: options.executableArgs,
-        acpArgs: [],
+        acpArgs: options.acpArgs ?? [],
         cwd: input.cwd,
         env: options.env,
         startupTimeoutMs: profile.startupTimeoutMs,

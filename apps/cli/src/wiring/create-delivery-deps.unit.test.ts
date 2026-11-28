@@ -10,7 +10,15 @@ import type {
   VerificationResult,
 } from "@meguribi/core";
 import { RoleAssignmentError } from "@meguribi/core";
-import { BUILTIN_AGENT_PROFILES } from "@meguribi/config";
+import {
+  BUILTIN_AGENT_PROFILES,
+  type CursorConfigResult,
+  type DevinConfigResult,
+} from "@meguribi/config";
+import {
+  MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+  MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+} from "@meguribi/adapters";
 import { describe, expect, it } from "vitest";
 import { createDeliveryDeps, createPlanDependencies } from "./create-delivery-deps.js";
 
@@ -24,6 +32,44 @@ const healthyAcpDiagnosis: AgentDiagnosis = {
   warnings: [],
   errors: [],
 };
+
+function devinConfigResult(
+  overrides: Partial<DevinConfigResult["config"]> = {},
+): DevinConfigResult {
+  return {
+    config: {
+      executable: "devin-custom",
+      transport: "acp",
+      gracefulShutdownMs: 2_000,
+      terminateTimeoutMs: 3_000,
+      forceKillTimeoutMs: 1_000,
+      startupTimeoutMs: 6_000,
+      turnTimeoutMinutes: 30,
+      inheritedMcpPolicy: "allow",
+      ...overrides,
+    },
+    snapshot: {},
+  };
+}
+
+function cursorConfigResult(
+  overrides: Partial<CursorConfigResult["config"]> = {},
+): CursorConfigResult {
+  return {
+    config: {
+      executable: "cursor-custom",
+      transport: "acp",
+      gracefulShutdownMs: 2_000,
+      terminateTimeoutMs: 3_000,
+      forceKillTimeoutMs: 1_000,
+      startupTimeoutMs: 5_000,
+      turnTimeoutMinutes: 20,
+      inheritedMcpPolicy: "deny",
+      ...overrides,
+    },
+    snapshot: {},
+  };
+}
 
 function agentsResult(planner: string, reviewer: string) {
   return {
@@ -395,7 +441,7 @@ describe("createDeliveryDeps ACP wiring", () => {
   });
 });
 
-describe("Devin/Cursor planning role rejection", () => {
+describe("Devin/Cursor planning role wiring", () => {
   const acpBridge = {
     createPlan: async () => planArtifact("unused acp plan"),
     review: async () => reviewArtifact("unused acp review"),
@@ -405,122 +451,226 @@ describe("Devin/Cursor planning role rejection", () => {
     review: async () => reviewArtifact("unused sdk review"),
   };
 
-  function acpServerImplementerConfig() {
-    const profile = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
-    if (profile === undefined) throw new Error("claude-code profile missing");
-    return { kind: "acp-server" as const, profile, snapshot: {} };
-  }
+  it("wires a devin planner through diagnoseDevin with the acp subcommand", async () => {
+    let diagnoseDevinOptions: unknown;
+    let diagnoseCursorCalls = 0;
+    let diagnoseAcpServerCalls = 0;
+    let sawRoleAgentOptions: unknown;
 
-  it("rejects a devin planner in createPlanDependencies before any ACP diagnosis", async () => {
-    let diagnoseCalls = 0;
-
-    await expect(
-      createPlanDependencies({
-        cwd: "C:/fixture/repository",
-        repositoryPath: "C:/fixture/repository",
-        repository: "owner/repo",
-        localOnly: true,
-        loadAgentsConfig: async () => agentsResult("devin", "codex"),
-        diagnoseAcpServer: async () => {
-          diagnoseCalls += 1;
-          return healthyAcpDiagnosis;
-        },
-        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
-        createRoleAgentPlanningBridge: () => acpBridge,
-        createCodexBridge: () => sdkBridge,
-      }),
-    ).rejects.toMatchObject({
-      name: "RoleAssignmentError",
-      code: "transport_unsupported",
-      message: "planner profile devin (kind devin) cannot be used as planner yet",
-      nextAction:
-        "roles.planner には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    await createPlanDependencies({
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      loadAgentsConfig: async () => agentsResult("devin", "codex"),
+      loadDevinConfig: async () => devinConfigResult(),
+      diagnoseDevin: async (options) => {
+        diagnoseDevinOptions = options;
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok", path: "devin-custom" },
+          inheritedMcpPolicy: "allow",
+        };
+      },
+      diagnoseCursor: async () => {
+        diagnoseCursorCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      diagnoseAcpServer: async () => {
+        diagnoseAcpServerCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      createAcpRoleAgent: (options) => {
+        sawRoleAgentOptions = options;
+        return unusedRoleAgent(options.profile.id);
+      },
+      createRoleAgentPlanningBridge: () => acpBridge,
+      createCodexBridge: () => sdkBridge,
     });
-    expect(diagnoseCalls).toBe(0);
+
+    expect(diagnoseDevinOptions).toMatchObject({
+      executable: "devin-custom",
+      inheritedMcpPolicy: "allow",
+      nonInteractive: false,
+      cwd: "C:/fixture/repository",
+      probeTimeoutMs: 6_000,
+      minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+    });
+    expect(sawRoleAgentOptions).toMatchObject({
+      profile: { id: "devin", kind: "devin" },
+      executable: "devin-custom",
+      acpArgs: ["acp"],
+      diagnosis: {
+        executable: { status: "ok", path: "devin-custom" },
+        inheritedMcpPolicy: "allow",
+      },
+      mode: "interactive",
+    });
+    expect(diagnoseCursorCalls).toBe(0);
+    expect(diagnoseAcpServerCalls).toBe(0);
   });
 
-  it("rejects a cursor reviewer in createPlanDependencies before any ACP diagnosis", async () => {
-    let diagnoseCalls = 0;
+  it("wires a cursor reviewer through diagnoseCursor with the resolved executable and acp subcommand", async () => {
+    let diagnoseCursorOptions: unknown;
+    let diagnoseDevinCalls = 0;
+    let diagnoseAcpServerCalls = 0;
+    let sawRoleAgentOptions: unknown;
 
-    await expect(
-      createPlanDependencies({
-        cwd: "C:/fixture/repository",
-        repositoryPath: "C:/fixture/repository",
-        repository: "owner/repo",
-        localOnly: true,
-        loadAgentsConfig: async () => agentsResult("codex", "cursor"),
-        diagnoseAcpServer: async () => {
-          diagnoseCalls += 1;
-          return healthyAcpDiagnosis;
-        },
-        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
-        createRoleAgentPlanningBridge: () => acpBridge,
-        createCodexBridge: () => sdkBridge,
-      }),
-    ).rejects.toMatchObject({
-      name: "RoleAssignmentError",
-      code: "transport_unsupported",
-      message: "reviewer profile cursor (kind cursor) cannot be used as reviewer yet",
-      nextAction:
-        "roles.reviewer には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    await createPlanDependencies({
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      loadAgentsConfig: async () => agentsResult("codex", "cursor"),
+      loadCursorConfig: async () => cursorConfigResult(),
+      diagnoseDevin: async () => {
+        diagnoseDevinCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      diagnoseCursor: async (options) => {
+        diagnoseCursorOptions = options;
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok", path: "/resolved/cursor-agent" },
+          inheritedMcpPolicy: "deny",
+        };
+      },
+      diagnoseAcpServer: async () => {
+        diagnoseAcpServerCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      createAcpRoleAgent: (options) => {
+        sawRoleAgentOptions = options;
+        return unusedRoleAgent(options.profile.id);
+      },
+      createRoleAgentPlanningBridge: () => acpBridge,
+      createCodexBridge: () => sdkBridge,
     });
-    expect(diagnoseCalls).toBe(0);
+
+    expect(diagnoseCursorOptions).toMatchObject({
+      executable: "cursor-custom",
+      inheritedMcpPolicy: "deny",
+      nonInteractive: false,
+      cwd: "C:/fixture/repository",
+      probeTimeoutMs: 5_000,
+      minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+    });
+    expect(sawRoleAgentOptions).toMatchObject({
+      profile: { id: "cursor", kind: "cursor" },
+      executable: "/resolved/cursor-agent",
+      acpArgs: ["acp"],
+      diagnosis: {
+        executable: { status: "ok", path: "/resolved/cursor-agent" },
+        inheritedMcpPolicy: "deny",
+      },
+      mode: "interactive",
+    });
+    expect(diagnoseDevinCalls).toBe(0);
+    expect(diagnoseAcpServerCalls).toBe(0);
   });
 
-  it("rejects a devin planner in createDeliveryDeps before any ACP diagnosis", async () => {
-    let diagnoseCalls = 0;
+  it("wires a devin planner in createDeliveryDeps with non-interactive diagnostics", async () => {
+    let diagnoseDevinOptions: unknown;
+    let diagnoseAcpServerCalls = 0;
+    let sawRoleAgentOptions: unknown;
 
-    await expect(
-      createDeliveryDeps({
-        cwd: "C:/fixture/repository",
-        repositoryPath: "C:/fixture/repository",
-        repository: "owner/repo",
-        loadImplementerConfig: async () => acpServerImplementerConfig(),
-        loadAgentsConfig: async () => agentsResult("devin", "codex"),
-        diagnoseAcpServer: async () => {
-          diagnoseCalls += 1;
-          return healthyAcpDiagnosis;
-        },
-        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
-        createRoleAgentPlanningBridge: () => acpBridge,
-        createCodexBridge: () => sdkBridge,
-      }),
-    ).rejects.toMatchObject({
-      name: "RoleAssignmentError",
-      code: "transport_unsupported",
-      message: "planner profile devin (kind devin) cannot be used as planner yet",
-      nextAction:
-        "roles.planner には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    await createDeliveryDeps({
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      nonInteractive: true,
+      loadImplementerConfig: async () => ({ kind: "cursor", ...cursorConfigResult() }),
+      loadAgentsConfig: async () => agentsResult("devin", "codex"),
+      loadDevinConfig: async () => devinConfigResult(),
+      diagnoseDevin: async (options) => {
+        diagnoseDevinOptions = options;
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok", path: "devin-custom" },
+          inheritedMcpPolicy: "allow",
+        };
+      },
+      diagnoseCursor: async () => healthyAcpDiagnosis,
+      diagnoseAcpServer: async () => {
+        diagnoseAcpServerCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      createAcpRoleAgent: (options) => {
+        sawRoleAgentOptions = options;
+        return unusedRoleAgent(options.profile.id);
+      },
+      createRoleAgentPlanningBridge: () => acpBridge,
+      createCodexBridge: () => sdkBridge,
     });
-    expect(diagnoseCalls).toBe(0);
+
+    expect(diagnoseDevinOptions).toMatchObject({
+      executable: "devin-custom",
+      inheritedMcpPolicy: "allow",
+      nonInteractive: true,
+      cwd: "C:/fixture/repository",
+      probeTimeoutMs: 6_000,
+      minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+    });
+    expect(sawRoleAgentOptions).toMatchObject({
+      profile: { id: "devin", kind: "devin" },
+      executable: "devin-custom",
+      acpArgs: ["acp"],
+      mode: "non-interactive",
+    });
+    expect(diagnoseAcpServerCalls).toBe(0);
   });
 
-  it("rejects a cursor reviewer in createDeliveryDeps before any ACP diagnosis", async () => {
-    let diagnoseCalls = 0;
+  it("wires a cursor reviewer in createDeliveryDeps with non-interactive diagnostics", async () => {
+    let diagnoseCursorOptions: unknown;
+    let diagnoseAcpServerCalls = 0;
+    let sawRoleAgentOptions: unknown;
 
-    await expect(
-      createDeliveryDeps({
-        cwd: "C:/fixture/repository",
-        repositoryPath: "C:/fixture/repository",
-        repository: "owner/repo",
-        loadImplementerConfig: async () => acpServerImplementerConfig(),
-        loadAgentsConfig: async () => agentsResult("codex", "cursor"),
-        diagnoseAcpServer: async () => {
-          diagnoseCalls += 1;
-          return healthyAcpDiagnosis;
-        },
-        createAcpRoleAgent: (options) => unusedRoleAgent(options.profile.id),
-        createRoleAgentPlanningBridge: () => acpBridge,
-        createCodexBridge: () => sdkBridge,
-      }),
-    ).rejects.toMatchObject({
-      name: "RoleAssignmentError",
-      code: "transport_unsupported",
-      message: "reviewer profile cursor (kind cursor) cannot be used as reviewer yet",
-      nextAction:
-        "roles.reviewer には claude-code、codex（sdk）、codex-acp などの単体 ACP サーバーのプロファイルを指定してください。Devin / Cursor は現在 implementer にだけ割り当てられます",
+    await createDeliveryDeps({
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      nonInteractive: true,
+      loadImplementerConfig: async () => ({ kind: "devin", ...devinConfigResult() }),
+      loadAgentsConfig: async () => agentsResult("codex", "cursor"),
+      loadCursorConfig: async () => cursorConfigResult(),
+      diagnoseDevin: async () => healthyAcpDiagnosis,
+      diagnoseCursor: async (options) => {
+        diagnoseCursorOptions = options;
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok", path: "/resolved/cursor-agent" },
+          inheritedMcpPolicy: "deny",
+        };
+      },
+      diagnoseAcpServer: async () => {
+        diagnoseAcpServerCalls += 1;
+        return healthyAcpDiagnosis;
+      },
+      createAcpRoleAgent: (options) => {
+        sawRoleAgentOptions = options;
+        return unusedRoleAgent(options.profile.id);
+      },
+      createRoleAgentPlanningBridge: () => acpBridge,
+      createCodexBridge: () => sdkBridge,
     });
-    expect(diagnoseCalls).toBe(0);
+
+    expect(diagnoseCursorOptions).toMatchObject({
+      executable: "cursor-custom",
+      inheritedMcpPolicy: "deny",
+      nonInteractive: true,
+      cwd: "C:/fixture/repository",
+      probeTimeoutMs: 5_000,
+      minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+    });
+    expect(sawRoleAgentOptions).toMatchObject({
+      profile: { id: "cursor", kind: "cursor" },
+      executable: "/resolved/cursor-agent",
+      acpArgs: ["acp"],
+      mode: "non-interactive",
+    });
+    expect(diagnoseAcpServerCalls).toBe(0);
   });
 });
 
