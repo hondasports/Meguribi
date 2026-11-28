@@ -99,7 +99,9 @@ apps/cli
 
 ### Workflows
 
-In P2, Meguribi is planned to have an engine that sequentially executes declarative YAML workflows with a closed set of step kinds. The existing `runDelivery` will be migrated into the built-in `delivery` workflow (`plan → implement → verify → review ⇄ fix → publish`) without changing its externally visible behavior, artifacts, or exit codes.
+In P2a, Meguribi core has an engine that sequentially executes declarative workflows with a closed set of step kinds. The existing `runDelivery` / `resumeDelivery` are implemented as the built-in `delivery` workflow without changing their externally visible behavior, artifacts, or exit codes. YAML loading and the user-facing `workflow` command will be added in P2b.
+
+The built-in `delivery` step IDs are, in definition order, `plan`, `implement`, `verify`, `review`, `fix-after-verify`, `fix-after-review`, and `publish`.
 
 The step kinds are the closed set `discuss`, `approve`, `specify`, `plan`, `implement`, `fix`, `verify`, `review`, and `publish`. Control is limited to sequential execution, bounded loops through `onChangesRequired: { goto, max }`, `then` for the next step after completion, and `of` for the approval target. There are no condition expressions, variables, or arbitrary commands.
 
