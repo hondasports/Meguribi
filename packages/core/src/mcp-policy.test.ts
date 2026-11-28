@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideInheritedMcpPolicy } from "./mcp-policy.js";
+import { decideInheritedMcpPolicy, resolveDiscussionMcpPolicy } from "./mcp-policy.js";
 
 describe("decideInheritedMcpPolicy", () => {
   it("requires confirmation for warn in interactive mode", () => {
@@ -25,4 +25,20 @@ describe("decideInheritedMcpPolicy", () => {
       detection: { detected: true, transport: "stdio" },
     }).outcome).toBe("block");
   });
+});
+
+describe("resolveDiscussionMcpPolicy", () => {
+  it.each([
+    { configured: ["warn"], discussionMcpPolicy: "allow", expected: "allow" },
+    { configured: ["warn"], discussionMcpPolicy: "deny", expected: "deny" },
+    { configured: ["allow"], discussionMcpPolicy: "deny", expected: "deny" },
+    { configured: ["deny"], discussionMcpPolicy: "allow", expected: "deny" },
+    { configured: ["allow", "warn"], discussionMcpPolicy: "allow", expected: "allow" },
+    { configured: ["allow", "deny"], discussionMcpPolicy: "allow", expected: "deny" },
+  ] as const)(
+    "keeps explicit deny dominant and resolves only warn/allow ambiguity ($configured + $discussionMcpPolicy)",
+    ({ configured, discussionMcpPolicy, expected }) => {
+      expect(resolveDiscussionMcpPolicy({ configured, discussionMcpPolicy })).toBe(expected);
+    },
+  );
 });

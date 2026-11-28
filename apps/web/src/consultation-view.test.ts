@@ -18,7 +18,6 @@ describe("consultationTitle", () => {
   });
 });
 
-
 describe("consultationPromptForDisplay", () => {
   it("prefers the persisted discussion prompt without altering its contents", () => {
     expect(
@@ -33,10 +32,12 @@ describe("consultationPromptForDisplay", () => {
     expect(
       consultationPromptForDisplay({ persistedPrompt: undefined, localPrompt: "local prompt" }),
     ).toBe("local prompt");
-    expect(consultationPromptForDisplay({ persistedPrompt: "   ", localPrompt: "local prompt" })).toBe(
-      "local prompt",
-    );
-    expect(consultationPromptForDisplay({ persistedPrompt: undefined, localPrompt: undefined })).toBeNull();
+    expect(
+      consultationPromptForDisplay({ persistedPrompt: "   ", localPrompt: "local prompt" }),
+    ).toBe("local prompt");
+    expect(
+      consultationPromptForDisplay({ persistedPrompt: undefined, localPrompt: undefined }),
+    ).toBeNull();
   });
 });
 

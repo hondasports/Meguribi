@@ -521,6 +521,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
     .option("--request <text>", "Additional user request for the discussion")
     .option("--discussants <ids>", "Comma-separated participant profile ids for this run only")
     .option("--summarizer <id>", "Summarizer profile id for this run only")
+    .option("--discussion-mcp-policy <policy>", "Explicit MCP inheritance policy for this discussion run: deny or allow")
     .option("--max-turns <n>", "Maximum discussion turns")
     .option("--log <mode>", "Live log mode: stream, compact, or none")
     .option("--json", "Emit the result as JSON on stdout", false)

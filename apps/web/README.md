@@ -18,9 +18,10 @@ meguribi desk --port 4199
 1. 大きな複数行入力に相談内容を書く
 2. 参加エージェントを 2〜4 件選ぶ
 3. 必要なら `Issue（任意）` に Issue target を入力する
-4. `相談を開始` を押す
+4. MCP は既定の `使わない（deny）` か、この相談だけの `今回だけ許可（allow）` を選ぶ
+5. `相談を開始` を押す
 
-参加エージェント候補と既定選択は `GET /api/discussion/profiles` が返す実設定由来の値です。開始は `POST /api/discussions` へ `{ prompt, profileIds, target? }` を送り、成功時は永続 RunStore ID を受け取ります。Issue target を付けた通常開始でも、実装・push・Draft PR 作成へ自動では進みません。実装まで進める `discuss-to-pr` は、明示的に選択した workflow だけです。
+参加エージェント候補と既定選択は `GET /api/discussion/profiles` が返す実設定由来の値です。開始は `POST /api/discussions` へ `{ prompt, profileIds, target?, discussionMcpPolicy }` を送り、成功時は永続 RunStore ID を受け取ります。`discussionMcpPolicy` は `deny` または `allow` で、送信後に画面の選択は安全側の `deny` へ戻ります。`deny` は検出した MCP 接続を停止し、`allow` はその相談 Run だけ継承を許可します。固定 `deny` の設定は UI の `allow` では弱めず、この選択は `discuss-to-pr` や delivery の implementer 許可へは波及しません。Issue target を付けた通常開始でも、実装・push・Draft PR 作成へ自動では進みません。実装まで進める `discuss-to-pr` は、明示的に選択した workflow だけです。
 
 開始後はスレッドワークスペースへ移り、左側に相談・議論の一覧、中央に相談内容と話者名付きの会話、下部に追加入力が表示されます。一覧はタイトル・識別子で検索でき、矢印キーでも移動できます。状態は一覧と会話ヘッダーのラベルで確認できます。大きな新規入力フォームは畳まれ、`新規相談` / `新しい相談` から入力画面へ戻れます。`相談へ戻る` で進行中の会話へ復帰できます。長い会話は中央の会話領域をスクロールして読み、追加入力は下部に固定されたままです。
 

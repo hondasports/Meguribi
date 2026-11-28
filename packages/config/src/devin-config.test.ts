@@ -231,6 +231,24 @@ describe("Devin ACP configuration", () => {
     ).toMatchObject({ inheritedMcpPolicy: "allow" });
   });
 
+  it.each([
+    { configured: "warn", run: "allow", expected: "allow" },
+    { configured: "warn", run: "deny", expected: "deny" },
+    { configured: "allow", run: "deny", expected: "deny" },
+    { configured: "deny", run: "allow", expected: "deny" },
+  ] as const)(
+    "resolves run-scoped discussion MCP policy before non-interactive validation ($configured + $run)",
+    ({ configured, run, expected }) => {
+      const sources = {
+        nonInteractive: true,
+        repository: { inheritedMcpPolicy: configured },
+        discussionMcpPolicy: run,
+      };
+
+      expect(resolveDevinConfig(sources)).toMatchObject({ inheritedMcpPolicy: expected });
+    },
+  );
+
   it("redacts secret-like values from the resolved snapshot", () => {
     expect(
       toRedactedDevinConfigSnapshot({

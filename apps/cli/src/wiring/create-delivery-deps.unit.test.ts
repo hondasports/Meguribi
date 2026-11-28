@@ -790,6 +790,239 @@ describe("createDiscussionDependencies", () => {
     expect((error as RoleAssignmentError).nextAction).toContain("roles.discussants");
   });
 
+  function mcpDiscussionAgentsResult(input: {
+    devinProfilePolicy?: "warn" | "allow" | "deny";
+    cursorProfilePolicy?: "warn" | "allow" | "deny";
+  } = {}) {
+    const alpha = { ...discussionProfile("alpha"), inheritedMcpPolicy: "warn" as const };
+    const beta = { ...discussionProfile("beta"), inheritedMcpPolicy: "allow" as const };
+    const devin = {
+      id: "devin",
+      kind: "devin" as const,
+      transport: "acp" as const,
+      executable: "devin",
+      startupTimeoutMs: 1_000,
+      turnTimeoutMinutes: 5,
+      inheritedMcpPolicy: input.devinProfilePolicy ?? ("warn" as const),
+    };
+    const cursor = {
+      id: "cursor",
+      kind: "cursor" as const,
+      transport: "acp" as const,
+      executable: "cursor",
+      startupTimeoutMs: 1_000,
+      turnTimeoutMinutes: 5,
+      inheritedMcpPolicy: input.cursorProfilePolicy ?? ("allow" as const),
+    };
+    return {
+      profiles: [alpha, beta, devin, cursor],
+      roles: {
+        discussants: ["alpha", "beta", "devin"],
+        summarizer: "cursor",
+        planner: "codex",
+        reviewer: "codex",
+        allowSameImplementerReviewer: false,
+      },
+      snapshot: {},
+    };
+  }
+
+  function mcpWiringHarness(input: {
+    discussionMcpPolicy?: "allow" | "deny";
+    devinConfigPolicy?: "warn" | "allow" | "deny";
+    cursorConfigPolicy?: "warn" | "allow" | "deny";
+    devinProfilePolicy?: "warn" | "allow" | "deny";
+    cursorProfilePolicy?: "warn" | "allow" | "deny";
+  }) {
+    const loadDevinOptions: unknown[] = [];
+    const loadCursorOptions: unknown[] = [];
+    const acpDiagnosisProfiles: unknown[] = [];
+    const devinDiagnosisOptions: unknown[] = [];
+    const cursorDiagnosisOptions: unknown[] = [];
+    const roleAgentOptions: unknown[] = [];
+
+    const options = {
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      nonInteractive: true,
+      ...(input.discussionMcpPolicy === undefined
+        ? {}
+        : { discussionMcpPolicy: input.discussionMcpPolicy }),
+      loadAgentsConfig: async () => mcpDiscussionAgentsResult({
+        ...(input.devinProfilePolicy === undefined ? {} : { devinProfilePolicy: input.devinProfilePolicy }),
+        ...(input.cursorProfilePolicy === undefined ? {} : { cursorProfilePolicy: input.cursorProfilePolicy }),
+      }) as never,
+      loadDevinConfig: async (loadOptions: unknown) => {
+        loadDevinOptions.push(loadOptions);
+        return devinConfigResult({ inheritedMcpPolicy: input.devinConfigPolicy ?? "warn" });
+      },
+      loadCursorConfig: async (loadOptions: unknown) => {
+        loadCursorOptions.push(loadOptions);
+        return cursorConfigResult({ inheritedMcpPolicy: input.cursorConfigPolicy ?? "allow" });
+      },
+      diagnoseAcpServer: async (diagnoseOptions: { profile: AgentProfile }) => {
+        acpDiagnosisProfiles.push(diagnoseOptions.profile);
+        return healthyAcpDiagnosis;
+      },
+      diagnoseDevin: async (diagnoseOptions: { inheritedMcpPolicy: "warn" | "allow" | "deny" }) => {
+        devinDiagnosisOptions.push(diagnoseOptions);
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok" as const, path: "devin-custom" },
+          inheritedMcpPolicy: diagnoseOptions.inheritedMcpPolicy,
+        };
+      },
+      diagnoseCursor: async (diagnoseOptions: { inheritedMcpPolicy: "warn" | "allow" | "deny" }) => {
+        cursorDiagnosisOptions.push(diagnoseOptions);
+        return {
+          ...healthyAcpDiagnosis,
+          executable: { status: "ok" as const, path: "cursor-custom" },
+          inheritedMcpPolicy: diagnoseOptions.inheritedMcpPolicy,
+        };
+      },
+      createAcpRoleAgent: (roleOptions: { profile: AgentProfile }) => {
+        roleAgentOptions.push(roleOptions);
+        return unusedRoleAgent(roleOptions.profile.id);
+      },
+    };
+
+    return {
+      options,
+      loadDevinOptions,
+      loadCursorOptions,
+      acpDiagnosisProfiles,
+      devinDiagnosisOptions,
+      cursorDiagnosisOptions,
+      roleAgentOptions,
+    };
+  }
+
+  it("propagates an explicit allow to config loading, diagnosis, and every discussant plus the summarizer", async () => {
+    const harness = mcpWiringHarness({ discussionMcpPolicy: "allow" });
+
+    await createDiscussionDependencies(harness.options as never);
+
+    expect(harness.loadDevinOptions[0]).toMatchObject({
+      nonInteractive: true,
+      discussionMcpPolicy: "allow",
+    });
+    expect(harness.loadCursorOptions[0]).toMatchObject({
+      nonInteractive: true,
+      discussionMcpPolicy: "allow",
+    });
+    expect(harness.devinDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "allow" });
+    expect(harness.cursorDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "allow" });
+    expect(harness.acpDiagnosisProfiles).toHaveLength(2);
+    for (const profile of harness.acpDiagnosisProfiles) {
+      expect(profile).toMatchObject({ inheritedMcpPolicy: "allow" });
+    }
+    expect(harness.roleAgentOptions.map((options) => (options as { profile: AgentProfile }).profile.id)).toEqual([
+      "alpha",
+      "beta",
+      "devin",
+      "cursor",
+    ]);
+    for (const options of harness.roleAgentOptions) {
+      expect(options).toMatchObject({
+        discussionMcpPolicy: "allow",
+        profile: { inheritedMcpPolicy: "allow" },
+      });
+    }
+  });
+
+  it("makes an explicit run-scoped deny win over allow configuration for every discussion role", async () => {
+    const harness = mcpWiringHarness({
+      discussionMcpPolicy: "deny",
+      devinConfigPolicy: "allow",
+      cursorConfigPolicy: "allow",
+    });
+
+    await createDiscussionDependencies(harness.options as never);
+
+    expect(harness.devinDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "deny" });
+    expect(harness.cursorDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "deny" });
+    for (const profile of harness.acpDiagnosisProfiles) {
+      expect(profile).toMatchObject({ inheritedMcpPolicy: "deny" });
+    }
+    for (const options of harness.roleAgentOptions) {
+      expect(options).toMatchObject({
+        discussionMcpPolicy: "deny",
+        profile: { inheritedMcpPolicy: "deny" },
+      });
+    }
+  });
+
+  it("keeps an explicitly configured deny dominant when the run selects allow", async () => {
+    const harness = mcpWiringHarness({
+      discussionMcpPolicy: "allow",
+      devinConfigPolicy: "deny",
+      cursorConfigPolicy: "allow",
+    });
+
+    await createDiscussionDependencies(harness.options as never);
+
+    expect(harness.devinDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "deny" });
+    expect(harness.cursorDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "allow" });
+    const byProfile = new Map(
+      harness.roleAgentOptions.map((options) => [
+        (options as { profile: AgentProfile }).profile.id,
+        options,
+      ]),
+    );
+    expect(byProfile.get("devin")).toMatchObject({ profile: { inheritedMcpPolicy: "deny" } });
+    expect(byProfile.get("alpha")).toMatchObject({ profile: { inheritedMcpPolicy: "allow" } });
+    expect(byProfile.get("cursor")).toMatchObject({ profile: { inheritedMcpPolicy: "allow" } });
+  });
+
+  it("keeps a profile-level deny dominant for Devin even when config and the run select allow", async () => {
+    const harness = mcpWiringHarness({
+      discussionMcpPolicy: "allow",
+      devinConfigPolicy: "allow",
+      devinProfilePolicy: "deny",
+    });
+
+    await createDiscussionDependencies(harness.options as never);
+
+    expect(harness.devinDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "deny" });
+    const byProfile = new Map(
+      harness.roleAgentOptions.map((options) => [
+        (options as { profile: AgentProfile }).profile.id,
+        options,
+      ]),
+    );
+    expect(byProfile.get("devin")).toMatchObject({
+      discussionMcpPolicy: "allow",
+      profile: { inheritedMcpPolicy: "deny" },
+    });
+    expect(byProfile.get("cursor")).toMatchObject({ profile: { inheritedMcpPolicy: "allow" } });
+  });
+
+  it("leaves the legacy profile and Devin/Cursor config contract unchanged when no run policy is selected", async () => {
+    const harness = mcpWiringHarness({ devinConfigPolicy: "allow", cursorConfigPolicy: "deny" });
+
+    await createDiscussionDependencies(harness.options as never);
+
+    expect(harness.loadDevinOptions[0]).not.toHaveProperty("discussionMcpPolicy");
+    expect(harness.loadCursorOptions[0]).not.toHaveProperty("discussionMcpPolicy");
+    expect(harness.devinDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "allow" });
+    expect(harness.cursorDiagnosisOptions[0]).toMatchObject({ inheritedMcpPolicy: "deny" });
+    expect(harness.acpDiagnosisProfiles[0]).toMatchObject({ inheritedMcpPolicy: "warn" });
+    for (const options of harness.roleAgentOptions) {
+      expect(options).not.toHaveProperty("discussionMcpPolicy");
+    }
+    const byProfile = new Map(
+      harness.roleAgentOptions.map((options) => [
+        (options as { profile: AgentProfile }).profile.id,
+        options,
+      ]),
+    );
+    expect(byProfile.get("alpha")).toMatchObject({ profile: { inheritedMcpPolicy: "warn" } });
+    expect(byProfile.get("devin")).toMatchObject({ profile: { inheritedMcpPolicy: "warn" } });
+    expect(byProfile.get("cursor")).toMatchObject({ profile: { inheritedMcpPolicy: "allow" } });
+  });
+
   it("throws transport_unsupported for an sdk discussant", async () => {
     const error = await createDiscussionDependencies(
       baseOptions(discussionAgentsResult(["alpha", "codex-sdk"])) as never,
