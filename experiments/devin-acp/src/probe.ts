@@ -10,7 +10,7 @@ import { CONFIG_SOURCE_ORDER } from "./isolation.js";
 import { assessMcpPolicy, classifyMcpDiagnostics } from "./mcp.js";
 import { normalizeSessionUpdate, pathsFromToolCall } from "./normalize.js";
 import { redactText } from "./redaction.js";
-import { assertSafeFilePath, assertSafeReadPath, isForbiddenTool } from "./safety.js";
+import { assertSafeFilePath, assertSafeReadPath, canonicalizePath, isForbiddenTool } from "./safety.js";
 import { spawnProcess, terminateProcess, waitForExit } from "./process.js";
 import type { AgentEvent, ProbeOptions, ProbeResult } from "./types.js";
 import { diffSnapshots, snapshotDirectory } from "./workspace.js";
@@ -39,9 +39,10 @@ function permissionDecision(params: acp.RequestPermissionRequest, cwd: string, a
   if (params.toolCall.kind !== "edit" || locations.length === 0) {
     return "deny";
   }
+  const canonicalCwd = canonicalizePath(path.resolve(cwd));
   const safe = locations.every((location) => {
     try {
-      const relative = path.relative(path.resolve(cwd), path.resolve(location.path)).split(path.sep).join("/");
+      const relative = path.relative(canonicalCwd, canonicalizePath(path.resolve(location.path))).split(path.sep).join("/");
       return allowedWritePaths.includes(relative);
     } catch {
       return false;
