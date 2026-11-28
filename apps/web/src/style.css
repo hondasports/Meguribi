@@ -1750,11 +1750,21 @@ body {
     min-height: 0;
     max-height: none;
     transform: translateX(-102%);
-    transition: transform 160ms ease;
+    /* transform だけでは不可視でも Tab が中へ入ってしまう。
+       閉じている間は visibility でフォーカス経路ごと遮断し、
+       閉じるアニメーションが終わるまで visibility の切り替えを遅らせる。 */
+    visibility: hidden;
+    transition:
+      transform 160ms ease,
+      visibility 0s linear 160ms;
     box-shadow: 20px 0 50px rgba(0, 0, 0, 0.45);
   }
   .consult-sidebar.open {
     transform: translateX(0);
+    visibility: visible;
+    transition:
+      transform 160ms ease,
+      visibility 0s;
   }
   .sidebar-scrim {
     display: block;

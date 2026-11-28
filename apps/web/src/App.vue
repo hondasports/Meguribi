@@ -283,6 +283,18 @@ const consultationStartError = ref<string | null>(null);
 const consultationStarting = ref(false);
 const consultationComposerVisible = ref(true);
 const consultationSidebarOpen = ref(false);
+const drawerToggleRef = ref<HTMLButtonElement | null>(null);
+
+/**
+ * モバイル drawer を Esc で閉じ、開閉ボタンへフォーカスを戻す。
+ * フォーカスが drawer 内に残ったまま不可視になるとキーボード操作の行方が分からなくなるため、
+ * 閉じる操作では必ずフォーカスの受け皿を明示する。
+ */
+function onDrawerKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Escape" || !consultationSidebarOpen.value) return;
+  consultationSidebarOpen.value = false;
+  drawerToggleRef.value?.focus();
+}
 const consultationPrompts = ref<Record<string, string>>({});
 const discussionDetail = ref<DiscussionDetail | null>(null);
 const discussionLoading = ref(false);
@@ -658,6 +670,7 @@ async function loadRuns(): Promise<void> {
 }
 
 onMounted(async () => {
+  window.addEventListener("keydown", onDrawerKeydown);
   void loadRuns();
   void loadConsultationProfiles();
   runListTimer = setInterval(() => void loadRuns(), 5000);
@@ -670,6 +683,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onDrawerKeydown);
   if (runListTimer !== undefined) clearInterval(runListTimer);
   closeRunEvents();
 });
@@ -696,6 +710,7 @@ onBeforeUnmount(() => {
       </nav>
       <button
         v-if="canUseConsultationDrawer(activeView)"
+        ref="drawerToggleRef"
         class="drawer-toggle"
         type="button"
         aria-label="相談ナビゲーションを開く"
