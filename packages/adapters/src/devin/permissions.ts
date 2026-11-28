@@ -10,6 +10,7 @@ import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
+import fs from "node:fs";
 import path from "node:path";
 import { redactDiagnosticText } from "./redact.js";
 
@@ -22,6 +23,22 @@ export interface NormalizePermissionOptions {
 function within(root: string, target: string): boolean {
   const relative = path.relative(root, target);
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function tryRealpath(target: string): string | undefined {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return undefined;
+  }
+}
+
+function canonicalizePath(target: string): string {
+  const resolved = tryRealpath(target);
+  if (resolved !== undefined) return resolved;
+  const parent = path.dirname(target);
+  if (parent === target) return target;
+  return path.join(canonicalizePath(parent), path.basename(target));
 }
 
 function protectedMatch(relativePath: string, patterns: readonly string[]): boolean {
@@ -58,9 +75,9 @@ export function normalizeAcpPermissionRequest(
 ): PermissionRequest {
   const operation = inferOperation(params);
   const rawLocations = params.toolCall.locations ?? [];
-  const root = path.resolve(options.cwd);
+  const root = canonicalizePath(path.resolve(options.cwd));
   const paths = rawLocations.flatMap((location) => typeof location.path === "string" ? [location.path] : []);
-  const absolutePaths = paths.map((candidate) => path.resolve(root, candidate));
+  const absolutePaths = paths.map((candidate) => canonicalizePath(path.resolve(root, candidate)));
   const targetWithinWorktree = absolutePaths.length === 0
     ? operation === "command"
     : absolutePaths.every((candidate) => within(root, candidate));

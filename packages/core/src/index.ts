@@ -273,3 +273,9 @@ export {
   type EnvelopeParseResult,
   type RunDiscussionInput,
 } from "./discussion/room.js";
+
+// discussion adapters
+export type {
+  DiscussionStorePort,
+  SummarizeDiscussionInput,
+} from "./discussion/ports.js";

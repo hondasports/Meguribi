@@ -4,7 +4,7 @@
  * フェンス抽出を行う役割セッションではこちらを使う。
  */
 export function buildRoleRepairPrompt(
-  role: "planner" | "reviewer",
+  role: "planner" | "reviewer" | "summarizer",
   validationError: string,
   keys: readonly string[],
 ): string {

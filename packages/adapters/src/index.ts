@@ -179,3 +179,5 @@ export {
 } from "./role-planning/index.js";
 export type { CreateRoleAgentPlanningBridgeOptions } from "./role-planning/index.js";
 export { FileSystemWorkflowEventLog } from "./run-store/index.js";
+// discussion adapters
+export * from "./discussion/index.js";
