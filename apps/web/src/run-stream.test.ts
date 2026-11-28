@@ -5,7 +5,9 @@ import {
   clearPaneTextForReplay,
   parseTerminalSnapshot,
   MAX_RUN_STREAM_RECONNECT_ATTEMPTS,
+  reconnectAttemptAfterStableConnection,
   reconnectDelayMs,
+  RUN_STREAM_STABLE_MS,
   shouldReconnectRunStream,
   streamErrorMessage,
 } from "./run-stream.js";
@@ -84,5 +86,37 @@ describe("run stream reconnect", () => {
     expect(reset.panes.map((pane) => pane.text)).toEqual(["", ""]);
     expect(reset.panes.map((pane) => pane.id)).toEqual(["all", "devin"]);
     expect(reset.detail).toBe(detail);
+  });
+  it("does not reset attempts for immediate replay bursts and keeps the five retry cap", () => {
+    let attempt = 0;
+    const delays: number[] = [];
+    for (let failure = 0; failure < 5; failure += 1) {
+      delays.push(reconnectDelayMs(attempt));
+      attempt += 1;
+      for (const replayAt of [100, 500, 1500]) {
+        attempt = reconnectAttemptAfterStableConnection({
+          attempt,
+          connectedAt: 0,
+          eventAt: replayAt,
+        });
+      }
+    }
+    expect(delays).toEqual([1000, 2000, 4000, 5000, 5000]);
+    expect(attempt).toBe(5);
+    expect(shouldReconnectRunStream({ ended: false, current: true, attempt })).toBe(false);
+    expect(
+      reconnectAttemptAfterStableConnection({
+        attempt,
+        connectedAt: 0,
+        eventAt: RUN_STREAM_STABLE_MS,
+      }),
+    ).toBe(0);
+    expect(
+      reconnectAttemptAfterStableConnection({
+        attempt,
+        connectedAt: null,
+        eventAt: RUN_STREAM_STABLE_MS * 2,
+      }),
+    ).toBe(attempt);
   });
 });

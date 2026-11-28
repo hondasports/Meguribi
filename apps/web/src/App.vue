@@ -25,6 +25,7 @@ import { createDiscussionApi, type DiscussionDetail } from "./discussion-api.js"
 import { buildConclusionView } from "./discussion-view.js";
 import { isCurrentRunSelection, type RunSelectionToken } from "./run-selection.js";
 import {
+  reconnectAttemptAfterStableConnection,
   applyTerminalSnapshot,
   clearPaneTextForReplay,
   parseTerminalSnapshot,
@@ -601,8 +602,12 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
   let streamEnded = false;
   let reconnectAttempt = 0;
 
-  function markStreamAlive(): void {
-    reconnectAttempt = 0;
+  function markStreamAlive(connectedAt: number | null): void {
+    reconnectAttempt = reconnectAttemptAfterStableConnection({
+      attempt: reconnectAttempt,
+      connectedAt,
+      eventAt: Date.now(),
+    });
     runStreamError.value = null;
   }
 
@@ -636,17 +641,33 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
     if (streamEnded || !isCurrentSelection(token)) return;
     let expectingLogReplay = true;
     let failureHandled = false;
+    let connectionStartedAt: number | null = null;
     const events = new EventSource(`/api/run-store/runs/${encodeURIComponent(runId)}/stream`);
     runEvents = events;
+
+    function noteStreamActivity(): void {
+      if (connectionStartedAt === null) connectionStartedAt = Date.now();
+      markStreamAlive(connectionStartedAt);
+    }
 
     function failStream(reason: string): void {
       if (!isLiveEvents(events) || failureHandled) return;
       failureHandled = true;
       events.close();
       if (runEvents === events) runEvents = undefined;
+      reconnectAttempt = reconnectAttemptAfterStableConnection({
+        attempt: reconnectAttempt,
+        connectedAt: connectionStartedAt,
+        eventAt: Date.now(),
+      });
       scheduleReconnect(reason);
     }
 
+    events.onopen = () => {
+      if (!isLiveEvents(events)) return;
+      if (connectionStartedAt === null) connectionStartedAt = Date.now();
+      runStreamError.value = null;
+    };
     events.addEventListener("log", (event) => {
       if (!isLiveEvents(events)) return;
       if (expectingLogReplay) {
@@ -655,7 +676,7 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
       }
       const chunk = JSON.parse((event as MessageEvent).data) as { pane: string; text: string };
       runView.value = applyLog(runView.value, chunk);
-      markStreamAlive();
+      noteStreamActivity();
     });
     events.addEventListener("detail", (event) => {
       if (!isLiveEvents(events)) return;
@@ -663,7 +684,7 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
         typeof runDetail.value
       >;
       runView.value = applyDetail(runView.value, detail);
-      markStreamAlive();
+      noteStreamActivity();
       if (
         isConsultationCommand(detail.state.command) &&
         discussionDetail.value === null &&
@@ -676,14 +697,14 @@ function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): 
       if (!isLiveEvents(events)) return;
       discussionDetail.value = JSON.parse((event as MessageEvent).data) as DiscussionDetail;
       discussionError.value = null;
-      markStreamAlive();
+      noteStreamActivity();
     });
     events.addEventListener(TERMINAL_SSE_EVENT, (event) => {
       if (!isLiveEvents(events)) return;
       const snapshot = parseTerminalSnapshot((event as MessageEvent).data);
       if (snapshot === null) return;
       terminalRows.value = applyTerminalSnapshot(snapshot);
-      markStreamAlive();
+      noteStreamActivity();
     });
     events.addEventListener("end", () => {
       if (!isLiveEvents(events)) return;

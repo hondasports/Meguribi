@@ -45,6 +45,17 @@ export function applyTerminalSnapshot(snapshot: TerminalSnapshot): TerminalRow[]
 
 export const MAX_RUN_STREAM_RECONNECT_ATTEMPTS = 5;
 
+export const RUN_STREAM_STABLE_MS = 10_000;
+
+export function reconnectAttemptAfterStableConnection(input: {
+  attempt: number;
+  connectedAt: number | null;
+  eventAt: number;
+}): number {
+  if (input.connectedAt === null) return input.attempt;
+  return input.eventAt - input.connectedAt >= RUN_STREAM_STABLE_MS ? 0 : input.attempt;
+}
+
 export function shouldReconnectRunStream(input: {
   ended: boolean;
   current: boolean;
