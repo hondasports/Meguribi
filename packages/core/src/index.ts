@@ -265,3 +265,11 @@ export {
   DISCUSSION_PROMPT_VERSION,
   type DiscussionBrief,
 } from "./discussion/prompt.js";
+// discussion room
+export {
+  runDiscussion,
+  type DiscussionPorts,
+  type DiscussionResult,
+  type EnvelopeParseResult,
+  type RunDiscussionInput,
+} from "./discussion/room.js";
