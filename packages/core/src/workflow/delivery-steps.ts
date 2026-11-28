@@ -702,9 +702,9 @@ async function fixStep(context: DeliveryRunContext, of: string | undefined) {
     if (isCancelledError(error) || delivery.abortSignal?.aborted) {
       return stopWith(
         await cancelledResult(deps, context.state, "cancelled during fix", {
-          implementation: context.implementation ?? implementationBeforeFix,
-          verification: context.verification ?? verificationBeforeFix,
-          ...(of === "review" ? { review: context.review ?? reviewBeforeFix } : {}),
+          implementation: implementationBeforeFix,
+          verification: verificationBeforeFix,
+          ...(of === "review" ? { review: reviewBeforeFix } : {}),
         }),
       );
     }

@@ -17,13 +17,8 @@ import { createRunStoreStepStateStore } from "../workflow-engine/run-store-step-
 import { createDeliveryWorkflow } from "./delivery-definition.js";
 import {
   appendStep,
-  cancelledResult,
   createDeliveryStepHandlers,
-  createVerificationLogWriter,
-  evaluatePublishGate,
-  isCancelledError,
   mark,
-  runDeliveryFixAttempt,
   type DeliveryRunContext,
 } from "./delivery-steps.js";
 
@@ -64,349 +59,6 @@ async function assertIdentity(deps: DeliveryDependencies, state: RunState): Prom
       } satisfies AgentError,
     );
   }
-}
-
-async function runVerifyReviewPublish(input: {
-  deps: DeliveryDependencies;
-  state: RunState;
-  delivery: RunDeliveryInput | ResumeDeliveryInput;
-  implementation: ImplementationResult;
-  plan: PlanArtifact;
-  issue: Awaited<ReturnType<DeliveryDependencies["github"]["getIssue"]>>;
-  startFrom: "verifying" | "reviewing" | "publishing";
-}): Promise<DeliveryResult> {
-  const { deps, delivery } = input;
-  let state = input.state;
-  let implementation = input.implementation;
-  let verification: VerificationResult | undefined =
-    (await deps.runStore.readArtifact<VerificationResult>(state.runId, "verification.json")) ??
-    undefined;
-  let review: ReviewArtifact | undefined =
-    (await deps.runStore.readArtifact<ReviewArtifact>(state.runId, "review.json")) ?? undefined;
-
-  if (input.startFrom === "verifying" || !verification) {
-    if (delivery.abortSignal?.aborted) {
-      return cancelledResult(deps, state, "cancelled during verification", {
-        implementation: input.implementation,
-      });
-    }
-    state = await mark(deps, state.runId, {
-      status: "verifying",
-      currentStep: "verifying",
-    });
-    try {
-      verification = await deps.verifier.verify({
-        worktreePath: state.worktreePath,
-        commands: delivery.verifyCommands,
-        abortSignal: delivery.abortSignal,
-        timeoutMs: delivery.verifyTimeoutMs,
-        logWriter: createVerificationLogWriter(deps, state.runId, "verify"),
-      });
-    } catch (error) {
-      if (isCancelledError(error) || delivery.abortSignal?.aborted) {
-        return cancelledResult(deps, state, "cancelled during verification", {
-          implementation: input.implementation,
-        });
-      }
-      throw error;
-    }
-    await deps.runStore.saveArtifact(state.runId, "verification.json", verification);
-    state = await mark(deps, state.runId, {
-      completedSteps: appendStep(state, "verifying"),
-    });
-  }
-
-  if (delivery.abortSignal?.aborted) {
-    return cancelledResult(deps, state, "cancelled before review", {
-      implementation,
-      verification,
-    });
-  }
-
-  if (input.startFrom !== "publishing") {
-    if (!verification) {
-      throw new Error("verification artifact is required before review");
-    }
-    const needsFixFromVerify = !verification.success;
-    if (needsFixFromVerify) {
-      try {
-        const fixResult = await maybeFix({
-          deps,
-          state,
-          delivery,
-          plan: input.plan,
-          issue: input.issue,
-          verification,
-          review: undefined,
-          previousImplementation: implementation,
-        });
-        state = fixResult.state;
-        implementation = fixResult.implementation;
-        verification = fixResult.verification;
-      } catch (error) {
-        if (isCancelledError(error) || delivery.abortSignal?.aborted) {
-          return cancelledResult(deps, state, "cancelled during fix", {
-            implementation,
-            verification,
-          });
-        }
-        throw error;
-      }
-      if (!verification.success) {
-        state = await mark(deps, state.runId, {
-          status: "blocked",
-          currentStep: "implementation_blocked",
-          completedSteps: appendStep(state, "implementation_blocked"),
-          lastError: {
-            code: "policy_blocked",
-            message: "verification failed after fix attempts",
-          },
-        });
-        return {
-          runId: state.runId,
-          status: state.status,
-          implementation,
-          verification,
-          published: false,
-          reasons: ["verification failed after fix attempts"],
-        };
-      }
-    }
-
-    state = await mark(deps, state.runId, {
-      status: "reviewing",
-      currentStep: "reviewing",
-    });
-    const diff = await deps.git.getDiff(state.worktreePath);
-    review = await deps.codex.review({
-      repositoryPath: state.worktreePath,
-      issue: input.issue,
-      plan: {
-        summary: input.plan.summary,
-        requirements: input.plan.requirements,
-        acceptanceCriteria: input.plan.acceptanceCriteria,
-        outOfScope: input.plan.outOfScope,
-        proposedFiles: input.plan.proposedFiles,
-        steps: input.plan.steps,
-        risks: input.plan.risks,
-        tests: input.plan.tests,
-        humanDecisions: input.plan.humanDecisions,
-        unresolvedItems: input.plan.unresolvedItems,
-      },
-      diff: diff.patch,
-      changedFiles: [...implementation.changedFiles],
-      verification,
-      repositoryRules: delivery.repositoryRules,
-    });
-    await deps.runStore.saveArtifact(state.runId, "review.json", review);
-    state = await mark(deps, state.runId, {
-      completedSteps: appendStep(state, "reviewing"),
-      agentSessions: {
-        ...state.agentSessions,
-        codexReview: review.metadata.producer.threadId,
-      },
-    });
-
-    while (review.status === "changes_required") {
-      try {
-        const fixResult = await maybeFix({
-          deps,
-          state,
-          delivery,
-          plan: input.plan,
-          issue: input.issue,
-          verification,
-          review,
-          previousImplementation: implementation,
-        });
-        state = fixResult.state;
-        implementation = fixResult.implementation;
-        verification = fixResult.verification;
-        review = fixResult.review ?? review;
-      } catch (error) {
-        if (isCancelledError(error) || delivery.abortSignal?.aborted) {
-          return cancelledResult(deps, state, "cancelled during fix", {
-            implementation,
-            verification,
-            review,
-          });
-        }
-        throw error;
-      }
-      if (review.status === "changes_required" && state.fixAttempts < state.maxFixAttempts) {
-        continue;
-      }
-      if (review.status === "changes_required" || !verification.success) {
-        state = await mark(deps, state.runId, {
-          status: "blocked",
-          currentStep: "implementation_blocked",
-          lastError: {
-            code: "policy_blocked",
-            message: "review still requires changes after fix attempts",
-          },
-        });
-        return {
-          runId: state.runId,
-          status: state.status,
-          implementation,
-          verification,
-          review,
-          published: false,
-          reasons: ["review still requires changes after fix attempts"],
-        };
-      }
-    }
-  }
-
-  if (!verification || !review) {
-    throw new Error("verification and review artifacts are required before publish");
-  }
-
-  if (delivery.abortSignal?.aborted) {
-    return cancelledResult(deps, state, "cancelled before publish", {
-      implementation,
-      verification,
-      review,
-    });
-  }
-
-  const gate = evaluatePublishGate({
-    implementation,
-    verification,
-    review,
-    protectedPaths: delivery.protectedPaths,
-    cleanupFailed: implementation.error?.code === "cleanup_failed",
-  });
-  const policyGate = await deps.policy.evaluatePublish({
-    implementation,
-    verification,
-    reviewStatus: review.status,
-    protectedPaths: delivery.protectedPaths,
-  });
-  const reasons = [...gate.reasons, ...policyGate.reasons];
-  if (!gate.allowed || !policyGate.allowed) {
-    state = await mark(deps, state.runId, {
-      status: "blocked",
-      currentStep: "implementation_blocked",
-      lastError: {
-        code: "policy_blocked",
-        message: reasons.join("; ") || "publish gate blocked",
-      },
-    });
-    return {
-      runId: state.runId,
-      status: state.status,
-      implementation,
-      verification,
-      review,
-      published: false,
-      reasons,
-    };
-  }
-
-  state = await mark(deps, state.runId, {
-    status: "publishing",
-    currentStep: "publishing",
-  });
-
-  if (!delivery.noCommit) {
-    const committed = await deps.git.commit({
-      worktreePath: state.worktreePath,
-      paths: implementation.changedFiles,
-      message: `feat: implement issue #${state.issueNumber}`,
-    });
-    state = await mark(deps, state.runId, { headSha: committed.headSha });
-  }
-  if (!delivery.noPush) {
-    await deps.git.push({
-      worktreePath: state.worktreePath,
-      branch: state.branch,
-    });
-  }
-
-  let pullRequestNumber = state.pullRequestNumber;
-  if (!delivery.noPr) {
-    const existing = await deps.github.findDraftPullRequest({
-      repository: state.repository,
-      head: state.branch,
-    });
-    if (existing) {
-      pullRequestNumber = existing.number;
-    } else {
-      const created = await deps.github.createDraftPullRequest({
-        repository: state.repository,
-        title: input.issue.title,
-        body: `Closes #${state.issueNumber}\n\nImplemented by Meguribi delivery workflow.`,
-        head: state.branch,
-        base: state.baseRef.replace(/^origin\//, ""),
-      });
-      pullRequestNumber = created.number;
-    }
-  }
-
-  state = await mark(deps, state.runId, {
-    status: "awaiting_human",
-    currentStep: "awaiting_human",
-    completedSteps: appendStep(state, "publishing"),
-    pullRequestNumber,
-  });
-
-  await deps.github.upsertMarkerComment({
-    repository: state.repository,
-    issueNumber: state.issueNumber,
-    marker: "<!-- meguribi:delivery-summary -->",
-    body: [
-      "<!-- meguribi:delivery-summary -->",
-      `Run \`${state.runId}\` finished.`,
-      pullRequestNumber ? `Draft PR: #${pullRequestNumber}` : "Draft PR skipped.",
-    ].join("\n"),
-  });
-
-  return {
-    runId: state.runId,
-    status: state.status,
-    implementation,
-    verification,
-    review,
-    pullRequestNumber,
-    published: true,
-    reasons: [],
-  };
-}
-
-async function maybeFix(input: {
-  deps: DeliveryDependencies;
-  state: RunState;
-  delivery: RunDeliveryInput | ResumeDeliveryInput;
-  plan: PlanArtifact;
-  issue: Awaited<ReturnType<DeliveryDependencies["github"]["getIssue"]>>;
-  verification: VerificationResult;
-  review?: ReviewArtifact;
-  previousImplementation: ImplementationResult;
-}): Promise<{
-  state: RunState;
-  implementation: ImplementationResult;
-  verification: VerificationResult;
-  review?: ReviewArtifact;
-}> {
-  const context: DeliveryRunContext = {
-    deps: input.deps,
-    delivery: input.delivery,
-    state: input.state,
-    issue: input.issue,
-    plan: input.plan,
-    implementation: input.previousImplementation,
-    verification: input.verification,
-    review: input.review,
-    reuseVerification: false,
-  };
-  await runDeliveryFixAttempt(context);
-  return {
-    state: context.state,
-    implementation: context.implementation ?? input.previousImplementation,
-    verification: context.verification ?? input.verification,
-    review: context.review,
-  };
 }
 
 export async function runDelivery(
@@ -603,6 +255,20 @@ export async function resumeDelivery(
     runId: state.runId,
   });
 
+  let lockReleased = false;
+  const releaseLock = async (): Promise<void> => {
+    if (lockReleased) {
+      return;
+    }
+    lockReleased = true;
+    await deps.runStore
+      .releaseLock({
+        repository: state.repository,
+        issueNumber: state.issueNumber,
+      })
+      .catch(() => undefined);
+  };
+
   try {
     await assertIdentity(deps, state);
 
@@ -694,22 +360,31 @@ export async function resumeDelivery(
       startFrom = "reviewing";
     }
 
-    return runVerifyReviewPublish({
+    const context: DeliveryRunContext = {
       deps,
-      state,
       delivery: input,
-      implementation,
-      plan: validatedPlan,
+      state,
       issue,
-      startFrom,
+      plan: validatedPlan,
+      implementation,
+      reuseVerification: startFrom === "reviewing",
+    };
+    const workflowResult = await runWorkflow<DeliveryRunContext, DeliveryResult>({
+      runId: state.runId,
+      definition: createDeliveryWorkflow(state.maxFixAttempts),
+      handlers: createDeliveryStepHandlers({ releaseLock }),
+      context,
+      startAt: startFrom === "publishing" ? "publish" : "verify",
+      stepStore: createRunStoreStepStateStore(deps.runStore, state.runId),
+      onEvent: deps.onWorkflowEvent,
+      now: deps.now,
     });
+    if (workflowResult.type === "stopped") {
+      return workflowResult.result;
+    }
+    throw new Error(`delivery workflow ended without a result: ${workflowResult.type}`);
   } finally {
-    await deps.runStore
-      .releaseLock({
-        repository: state.repository,
-        issueNumber: state.issueNumber,
-      })
-      .catch(() => undefined);
+    await releaseLock();
   }
 }
 

@@ -18,6 +18,7 @@ export function createDeliveryWorkflow(maxFixAttempts: number): WorkflowDefiniti
       {
         id: "review",
         kind: "review",
+        // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
         then: "publish",
         onChangesRequired: { goto: "fix-after-review", max: 1 },
       },
