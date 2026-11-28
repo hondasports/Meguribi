@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assertApprovedConclusion,
   approveDiscussion,
@@ -280,6 +280,30 @@ describe("discussion workflow fixtures", () => {
     expect(await fixture.runStore.readArtifact(result.runId, "approval.json")).toBeNull();
   });
 
+  it("notifies the created run id before the first turn so follow output can persist it", async () => {
+    const fixture = createDiscussionFixture();
+    const notifiedRunIds: string[] = [];
+    const visibleEventTypes: string[] = [];
+    const deps: DiscussionDependencies = {
+      ...fixture.deps,
+      onStateChange: (state) => {
+        notifiedRunIds.push(state.runId);
+      },
+      onWorkflowEvent: (event) => {
+        if (notifiedRunIds.at(-1) !== undefined) {
+          visibleEventTypes.push(event.type);
+        }
+      },
+    };
+
+    const result = await runDiscussionWorkflow(baseInput(), deps);
+
+    expect(result.status).toBe("awaiting_human");
+    expect(notifiedRunIds[0]).toBe(result.runId);
+    expect(visibleEventTypes[0]).toBe("workflow.started");
+    expect(visibleEventTypes).toContain("discussion.turn");
+  });
+
   it("approves the current conclusion and detects later conclusion rewriting", async () => {
     const fixture = createDiscussionFixture();
     const initial = await runDiscussionWorkflow(baseInput(), fixture.deps);
@@ -497,6 +521,41 @@ describe("discussion workflow fixtures", () => {
     expect(history).toHaveLength(1);
     const state = await fixture.runStore.load(initial.runId);
     expect(state?.status).toBe("completed");
+  });
+
+  it("cancels during summarization without saving a conclusion and marks the run cancelled", async () => {
+    const fixture = createDiscussionFixture();
+    const controller = new AbortController();
+    let finishSummary: (() => void) | undefined;
+    fixture.deps.summarize = async (input) => {
+      fixture.summarizeCalls.push(input);
+      await new Promise<void>((resolve) => {
+        finishSummary = resolve;
+      });
+      if (input.abortSignal?.aborted) {
+        throw Object.assign(new Error("summarizer cancelled"), { code: "cancelled" });
+      }
+      return conclusionFor(input);
+    };
+
+    const running = runDiscussionWorkflow(
+      baseInput({ abortSignal: controller.signal }),
+      fixture.deps,
+    );
+    await vi.waitFor(() => {
+      expect(fixture.summarizeCalls).toHaveLength(1);
+    });
+    controller.abort();
+    finishSummary?.();
+    const result = await running;
+
+    expect(result.status).toBe("cancelled");
+    expect(fixture.summarizeCalls[0]?.abortSignal).toBe(controller.signal);
+    const store = fixture.storeFactory.stores.get(result.runId);
+    expect(store?.data.conclusion).toBeNull();
+    const state = await fixture.runStore.load(result.runId);
+    expect(state?.status).toBe("cancelled");
+    expect(state?.lastError?.code).toBe("cancelled");
   });
 
   it("fails before creating a run when required labels are missing", async () => {

@@ -179,6 +179,7 @@ async function discussStep(context: DiscussionWorkflowContext) {
     brief: context.brief,
     turns: adjustedTurns,
     endedBy: discussion.endedBy,
+    ...(input.abortSignal === undefined ? {} : { abortSignal: input.abortSignal }),
     onEvent: forwardLiveLogEvent(deps),
   });
   await context.store.saveConclusion(conclusion);

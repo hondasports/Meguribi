@@ -210,6 +210,39 @@ async function approverForRun(
   return { approver };
 }
 
+/**
+ * `discuss` 実行時に T7 が保存する `discussion-input.json` のうち、
+ * redo の配線に必要な項目。全体の復元は T7（requireRedoInput）が行う。
+ */
+interface PersistedDiscussionInput {
+  repositoryPath: string;
+  baseRef: string;
+  nonInteractive: boolean;
+}
+
+async function readPersistedDiscussionInput(
+  runStore: RunStore,
+  runId: string,
+): Promise<PersistedDiscussionInput | null> {
+  const value = await runStore.readArtifact<unknown>(runId, "discussion-input.json");
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
+  const input = value as Partial<PersistedDiscussionInput>;
+  if (
+    typeof input.repositoryPath !== "string" ||
+    typeof input.baseRef !== "string" ||
+    typeof input.nonInteractive !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    repositoryPath: input.repositoryPath,
+    baseRef: input.baseRef,
+    nonInteractive: input.nonInteractive,
+  };
+}
+
 function createRenderer(
   stderr: (text: string) => void,
   options: { mode: LiveLogMode; color: boolean },
@@ -554,25 +587,46 @@ export async function runRejectCommand(
 
   let workflowDeps: DiscussionDependencies;
   let redoInput: Partial<RunDiscussionWorkflowInput> = {};
+  let renderer: ReturnType<typeof createRenderer> | undefined;
+  let pipeline: ReturnType<typeof createEventPipeline> | undefined;
   if (redo) {
-    // redo では議論をやり直すため、エージェントを含む完全な依存と再開入力が必要。
+    // redo では議論をやり直すため、エージェントを含む完全な依存が必要。
+    // 依存の生成には cwd ではなく、元の discuss が保存した discussion-input.json を
+    // wiring 前に読んで使う（別の cwd から実行しても同じ依存ができる）。
     const cwd = deps.cwd ?? process.cwd();
+    const persisted = await readPersistedDiscussionInput(runStore, runId);
+    const repositoryPath = options.repoPath ?? persisted?.repositoryPath ?? cwd;
     const wiring = await resolveWiring(deps, {
       cwd,
-      repositoryPath: options.repoPath ?? cwd,
-      nonInteractive: false,
+      repositoryPath,
+      // baseRef が HEAD になるのは --local で開始された議論だけ。
+      localOnly: persisted === null ? undefined : persisted.baseRef === "HEAD",
+      nonInteractive: persisted?.nonInteractive ?? false,
     });
-    workflowDeps = { ...wiring, ...baseDeps };
-    const state = await runStore.load(runId);
-    redoInput = {
-      repositoryPath: options.repoPath ?? cwd,
-      repositoryRules: "Follow AGENTS.md",
-      limits: { ...DEFAULT_DISCUSSION_LIMITS },
-      artifactRoot: state === null
-        ? invocationArtifactRoot("unknown", 0)
-        : invocationArtifactRoot(state.repository, state.issueNumber),
-      ...(deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {}),
+    renderer = createRenderer((text) => err(deps, text), {
+      mode: "stream",
+      color: liveLogColor(),
+    });
+    const redoPipeline = createEventPipeline({
+      runStore,
+      stderr: (text) => err(deps, text),
+      renderer,
+    });
+    pipeline = redoPipeline;
+    redoPipeline.captureRunId(runId);
+    workflowDeps = {
+      ...wiring,
+      ...baseDeps,
+      onWorkflowEvent: redoPipeline.onWorkflowEvent,
+      onStateChange: (state) => {
+        redoPipeline.captureRunId(state.runId);
+      },
     };
+    // 入力の復元は T7（requireRedoInput）が discussion-input.json から行う。
+    // CLI から値を渡すと保存済みの正しい値を上書きしてしまうため、
+    // 永続化されない abortSignal だけを渡す。
+    redoInput =
+      deps.abortSignal !== undefined ? { abortSignal: deps.abortSignal } : {};
   } else {
     workflowDeps = baseDeps as DiscussionDependencies;
   }
@@ -581,6 +635,11 @@ export async function runRejectCommand(
     { runId, approver: resolved.approver, reason, redo, ...redoInput },
     workflowDeps,
   );
+  if (pipeline !== undefined) {
+    pipeline.captureRunId(result.runId);
+  }
+  renderer?.flush();
+  await pipeline?.flush();
   if (result.status === "completed" || result.status === "awaiting_human" || result.status === "created") {
     out(
       deps,
@@ -588,6 +647,12 @@ export async function runRejectCommand(
         ? `Run ${runId} を却下し、議論をやり直します\n`
         : `Run ${runId} を却下しました\n`,
     );
+    if (redo && result.status === "awaiting_human") {
+      if (result.conclusion !== undefined) {
+        out(deps, formatConclusion(result.conclusion));
+      }
+      out(deps, formatNext(result.runId));
+    }
     return { exitCode: 0 };
   }
   err(deps, `却下できませんでした (status: ${result.status})\n`);

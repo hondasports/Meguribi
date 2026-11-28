@@ -52,6 +52,17 @@ function nowIso(deps: Pick<DiscussionDependencies, "now">): string {
   return (deps.now?.() ?? new Date()).toISOString();
 }
 
+async function notifyStateChange(
+  deps: Pick<DiscussionDependencies, "onStateChange">,
+  state: RunState,
+): Promise<void> {
+  try {
+    await deps.onStateChange?.(state);
+  } catch {
+    return;
+  }
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -268,6 +279,7 @@ export async function runDiscussionWorkflow(
   });
 
   try {
+    await notifyStateChange(deps, state);
     await deps.runStore.saveArtifact(state.runId, "discussion-input.json", discussionInputArtifact(input));
     const store = deps.createStore(state.runId);
     const brief = createBrief(state.runId, input, issue, deps, []);

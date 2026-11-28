@@ -37,6 +37,7 @@ export interface SummarizeDiscussionInput {
   brief: DiscussionBrief;
   turns: readonly DiscussionTurn[];
   endedBy: DiscussionEndReason;
+  abortSignal?: AbortSignal;
   onEvent?: (event: LiveLogEvent) => void;
 }
 

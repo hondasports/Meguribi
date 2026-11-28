@@ -52,6 +52,46 @@ function validationSummary(issues: readonly v.BaseIssue<unknown>[]): string {
     .join(", ");
 }
 
+function summarizerCancelledError(): Error & { code: "cancelled" } {
+  const error = new Error("summarizer cancelled") as Error & { code: "cancelled" };
+  error.code = "cancelled";
+  return error;
+}
+
+async function withAbort<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (!signal) {
+    return await operation();
+  }
+  let rejectAborted!: (error: Error & { code: "cancelled" }) => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAborted = reject;
+  });
+  const onAbort = () => {
+    rejectAborted(summarizerCancelledError());
+  };
+  signal.addEventListener("abort", onAbort, { once: true });
+  if (signal.aborted) {
+    onAbort();
+  }
+  try {
+    const result = await Promise.race([operation(), aborted]);
+    if (signal.aborted) {
+      throw summarizerCancelledError();
+    }
+    return result;
+  } catch (error) {
+    if (signal.aborted) {
+      throw summarizerCancelledError();
+    }
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
+}
+
 function unknownTurnIds(
   content: DiscussionConclusionContent,
   turns: readonly DiscussionTurn[],
@@ -117,6 +157,7 @@ export async function summarizeDiscussion(
     mode: "read-only",
     role: "summarizer",
     artifactRoot: input.artifactRoot,
+    ...(input.abortSignal === undefined ? {} : { abortSignal: input.abortSignal }),
     onEvent: input.onEvent
       ? (event) => {
           input.onEvent?.({
@@ -136,9 +177,12 @@ export async function summarizeDiscussion(
     let lastMessage = "response did not match the required schema";
     while (attempts < 3) {
       attempts += 1;
-      const result = await sendWithConversion(session, prompt, attempts);
+      const result = await sendWithConversion(session, prompt, attempts, input.abortSignal);
       const validated = validateConclusionContent(result.text, input.turns);
       if (validated.ok) {
+        if (input.abortSignal?.aborted) {
+          throw summarizerCancelledError();
+        }
         return {
           ...validated.content,
           endedBy: input.endedBy,
@@ -164,10 +208,14 @@ async function sendWithConversion(
   session: RoleSession,
   content: string,
   attempts: number,
+  abortSignal: AbortSignal | undefined,
 ): Promise<{ text: string }> {
   try {
-    return await session.send({ content });
+    return await withAbort(() => session.send({ content }), abortSignal);
   } catch (error) {
+    if (abortSignal?.aborted) {
+      throw summarizerCancelledError();
+    }
     throw convertRoleSessionError(error, attempts);
   }
 }

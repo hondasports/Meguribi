@@ -6,7 +6,7 @@ import type {
   RoleSession,
   SummarizeDiscussionInput,
 } from "@meguribi/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RolePlanningError } from "../role-planning/index.js";
 import { hashConclusion, hashTranscript, summarizeDiscussion } from "./summarize.js";
 
@@ -182,5 +182,49 @@ describe("summarizeDiscussion", () => {
     expect((error as RolePlanningError).attempts).toBe(3);
     expect(sessions[0]?.prompts).toHaveLength(3);
     expect(sessions[0]?.closed).toBe(true);
+  });
+
+  it("cancels an in-flight send, closes the session, and propagates cancelled", async () => {
+    const turns = [makeTurn("t-1", "夜間はまとめるべきです")];
+    const controller = new AbortController();
+    const openInputs: { abortSignal?: AbortSignal }[] = [];
+    let resolveSend: ((result: { sessionId: string; text: string; events: [] }) => void) | undefined;
+    const close = vi.fn(async () => undefined);
+    const session: RoleSession = {
+      sessionId: "summary-cancelled",
+      async send() {
+        return await new Promise((resolve) => {
+          resolveSend = resolve;
+        });
+      },
+      close,
+    };
+    const agent: RoleAgent = {
+      profileId: "summarizer",
+      kind: "codex",
+      async openSession(input) {
+        openInputs.push(input);
+        return session;
+      },
+    };
+
+    const running = summarizeDiscussion(
+      { ...summarizeInput(agent, turns), abortSignal: controller.signal },
+      () => "prompt",
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolveSend).toBeDefined();
+    controller.abort();
+    resolveSend?.({
+      sessionId: session.sessionId,
+      text: jsonFenced(conclusionContent("t-1")),
+      events: [],
+    });
+    const error = await running.catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "cancelled" });
+    expect(openInputs[0]?.abortSignal).toBe(controller.signal);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

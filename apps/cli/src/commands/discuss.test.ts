@@ -420,15 +420,28 @@ describe("runRejectCommand", () => {
     expect(stdout.join("")).toContain("却下しました");
   });
 
-  it("builds full wiring and redo input when --redo is set", async () => {
+  it("restores repositoryPath and settings from discussion-input.json when redoing from a different cwd", async () => {
     const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    // 元の discuss が保存した入力（別マシン・別 cwd からの redo を再現）。
+    await runStore.saveArtifact(state.runId, "discussion-input.json", {
+      repositoryPath: "/original/repo",
+      worktreePath: "/tmp/worktree",
+      branch: "meguribi/issue-83",
+      baseRef: "HEAD",
+      requiredLabels: ["agent:ready"],
+      repositoryRules: "Follow AGENTS.md",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+      nonInteractive: true,
+      artifactRoot: "/original/artifact-root",
+    });
+    let wiringOptions: { repositoryPath?: string; localOnly?: boolean; nonInteractive?: boolean } = {};
     let receivedInput: Partial<RunDiscussionWorkflowInput> | undefined;
-    let wiringRequested = false;
-    const { deps, stdout } = discussDeps({
+    const { deps } = discussDeps({
       runStore,
       createStore: inboxStoreFake().createStore,
-      createDependencies: async () => {
-        wiringRequested = true;
+      cwd: "/different/cwd",
+      createDependencies: async (options) => {
+        wiringOptions = options;
         return wiringFixture();
       },
       resolveApprover: async () => "Test Rejecter",
@@ -441,11 +454,40 @@ describe("runRejectCommand", () => {
     const result = await runRejectCommand(state.runId, { reason: "やり直し", redo: true }, deps);
 
     expect(result.exitCode).toBe(0);
-    expect(wiringRequested).toBe(true);
-    expect(receivedInput?.repositoryPath).toBeDefined();
-    expect(receivedInput?.repositoryRules).toBe("Follow AGENTS.md");
-    expect(receivedInput?.limits).toBeDefined();
-    expect(receivedInput?.artifactRoot).toBeDefined();
-    expect(stdout.join("")).toContain("やり直します");
+    // wiring は cwd ではなく保存済みの repositoryPath / local / nonInteractive を使う。
+    // baseRef が HEAD なのは --local で実行された議論だけ。
+    expect(wiringOptions.repositoryPath).toBe("/original/repo");
+    expect(wiringOptions.localOnly).toBe(true);
+    expect(wiringOptions.nonInteractive).toBe(true);
+    // redo input は保存済みの値を T7 の fallback に委ね、CLI からは上書きしない。
+    expect(receivedInput?.repositoryPath).toBeUndefined();
+    expect(receivedInput?.repositoryRules).toBeUndefined();
+    expect(receivedInput?.limits).toBeUndefined();
+    expect(receivedInput?.artifactRoot).toBeUndefined();
+  });
+
+  it("falls back to cwd-based wiring when discussion-input.json is missing", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    let wiringOptions: { repositoryPath?: string } = {};
+    const { deps } = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      cwd: "/fallback/cwd",
+      createDependencies: async (options) => {
+        wiringOptions = options;
+        return wiringFixture();
+      },
+      resolveApprover: async () => "Test Rejecter",
+      rejectWorkflow: async (input) => ({
+        runId: input.runId,
+        status: "awaiting_human",
+        reasons: [],
+      }),
+    });
+
+    const result = await runRejectCommand(state.runId, { reason: "やり直し", redo: true }, deps);
+
+    expect(result.exitCode).toBe(0);
+    expect(wiringOptions.repositoryPath).toBe("/fallback/cwd");
   });
 });

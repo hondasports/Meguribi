@@ -55,21 +55,26 @@ function createFixtureRepo(): string {
 
 const SYNTHETIC_APPROVER = "Integration Test Approver";
 
-function createTestProgram(output: { stdout: string[]; stderr: string[] }) {
+function createTestProgram(
+  output: { stdout: string[]; stderr: string[] },
+  extra: { cwd?: string } = {},
+) {
   return createProgram({
     stdout: (text) => output.stdout.push(text),
     stderr: (text) => output.stderr.push(text),
     // 実名を出さないため、git user.name の解決は合成名で差し替える。
     resolveApprover: async () => SYNTHETIC_APPROVER,
+    ...(extra.cwd === undefined ? {} : { cwd: extra.cwd }),
   });
 }
 
 async function runCli(
   args: string[],
   output: { stdout: string[]; stderr: string[] },
+  extra: { cwd?: string } = {},
 ): Promise<void> {
   process.exitCode = 0;
-  const program = createTestProgram(output);
+  const program = createTestProgram(output, extra);
   await program.parseAsync(["node", "meguribi", ...args]);
 }
 
@@ -211,6 +216,39 @@ describe("discussion commands through the real CLI entry", () => {
     expect(approval?.decision).toBe("rejected");
     expect(approval?.comment).toBe("方向性が違う");
     expect(approval?.approver).toBe(SYNTHETIC_APPROVER);
+  });
+
+  it("redoes the discussion with the original repository settings even from a different cwd", async () => {
+    const discussOut = { stdout: [] as string[], stderr: [] as string[] };
+    await runCli(
+      [
+        "discuss",
+        "owner/repo#22",
+        "--repo-path",
+        repoDir,
+        "--log",
+        "none",
+        "--non-interactive",
+      ],
+      discussOut,
+    );
+    expect(process.exitCode, discussOut.stderr.join("")).toBe(0);
+    const runId = extractRunId(discussOut.stdout);
+
+    // .meguribi.yml のない別 cwd から redo する。保存済み discussion-input.json が
+    // 配線に使われなければ、設定を解決できず invalid_discussants で失敗するはず。
+    const emptyCwd = mkdtempSync(path.join(tmpdir(), "meguribi-discuss-empty-"));
+    const rejectOut = { stdout: [] as string[], stderr: [] as string[] };
+    await runCli(
+      ["reject", runId, "--reason", "やり直し", "--redo"],
+      rejectOut,
+      { cwd: emptyCwd },
+    );
+
+    expect(process.exitCode, rejectOut.stderr.join("")).toBe(0);
+    expect(rejectOut.stdout.join("")).toContain("やり直します");
+    const state = await runStoreFor(dataRoot).load(runId);
+    expect(state?.status).toBe("awaiting_human");
   });
 
   it("rejects say for a completed discussion run", async () => {
