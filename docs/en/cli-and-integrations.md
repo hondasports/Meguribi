@@ -40,7 +40,7 @@ Diagnose whether a repository can be managed by Meguribi and generate a configur
 meguribi init --implementer devin ./path/to/repository
 ```
 
-Pass `--implementer devin` or `--implementer cursor` to select the implementation agent to diagnose. Existing `.meguribi.yml` files are never overwritten; a template is created only when the file is absent. `--json` emits diagnostics only on stdout and exits non-zero when the repository is not runnable.
+Pass `--implementer <profile>` to select the implementation agent to diagnose. Use `devin`, `cursor`, `claude-code`, `codex-acp`, or a profile ID defined under `agents` in `.meguribi.yml`. Existing `.meguribi.yml` files are never overwritten; a template is created only when the file is absent. `--json` emits diagnostics only on stdout and exits non-zero when the repository is not runnable.
 
 Checks include:
 
@@ -60,7 +60,7 @@ It does not write to GitHub. Automatic required-label creation (`--apply-labels`
 
 ### `meguribi doctor`
 
-Diagnose whether the local implementer agent CLI (Devin or Cursor) is runnable for Meguribi. The same diagnosis API (`diagnoseCursor` / `diagnoseDevin`) is used by `meguribi run` preflight.
+Diagnose whether the local implementer agent CLI (Devin / Cursor / Claude Code ACP / Codex ACP) is runnable for Meguribi. The same diagnosis API (`diagnoseCursor` / `diagnoseDevin` / `diagnoseAcpServer`) is used by `meguribi run` preflight.
 
 ```bash
 meguribi doctor
@@ -71,7 +71,7 @@ meguribi doctor --implementer cursor
 
 Checks include:
 
-- resolve the configured implementer executable (Devin / Cursor / cursor-agent / agent)
+- resolve the configured implementer executable (Devin / Cursor / cursor-agent / agent / claude-agent-acp / codex-acp)
 - capture and parse `<executable> --version` (do not unconditionally accept unknown versions)
 - authentication via `<executable> auth status` or `<executable> status` (do not read credential material)
 - ACP capability probe via `<executable> acp --help` (do not start sessions or network work)
@@ -155,7 +155,7 @@ Use `--request <text>` to provide an additional user request separately from the
 
 ### `meguribi run`
 
-Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `AgentAdapter` port (production: `createDevinAcpAdapter` or `createCursorAcpAdapter`).
+Implement an approved Issue, run independent verification, perform a Codex review, and create a Draft PR. The CLI calls the `runDelivery` use case and delegates implementation to the `AgentAdapter` port (production: `createDevinAcpAdapter`, `createCursorAcpAdapter`, or `createAcpServerImplementer`).
 
 ```bash
 meguribi run owner/repo#125
@@ -165,7 +165,8 @@ meguribi run owner/repo#125 --non-interactive --allow-inherited-mcp --json
 Main options:
 
 - `--repo-path <path>`
-- `--implementer <devin|cursor>`
+- `--implementer <profile>` (`devin`, `cursor`, `claude-code`, `codex-acp`, or a profile ID from `.meguribi.yml`)
+- `--log <stream|compact|none>`
 - `--base <branch>`
 - `--no-commit`
 - `--no-push`
@@ -180,7 +181,7 @@ Main options:
 
 With `--json`, only the final result goes to stdout; progress logs go to stderr. Ctrl+C propagates through `AbortSignal` into the selected agent session cancel / shutdown.
 
-Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) uses real `gh` / `git` / Codex SDK / Verifier and selects `createDevinAcpAdapter` or `createCursorAcpAdapter` from the explicit implementer setting, together with `FileSystemRunStore` and `createDefaultPolicyEngine`. Only an explicit `MEGURIBI_DELIVERY_FAKES=1` enables GitHub/Git/Codex/Verifier fakes for fixtures. Without that flag, adapter construction fails closed rather than silently falling back to an auto-approve fake. Fixture tests use fakes and do not call real `gh` or real agent CLIs.
+Production GitHub / Git / Verifier adapters are injected via ports. The default CLI wiring (`createDeliveryDeps`) uses real `gh` / `git` / Verifier, planner / reviewer bridges selected from the role assignments, and `createDevinAcpAdapter` / `createCursorAcpAdapter` / `createAcpServerImplementer` selected from the explicit implementer setting, together with `FileSystemRunStore` and `createDefaultPolicyEngine`. Only an explicit `MEGURIBI_DELIVERY_FAKES=1` enables GitHub/Git/Codex/Verifier fakes for fixtures. Without that flag, adapter construction fails closed rather than silently falling back to an auto-approve fake. Fixture tests use fakes and do not call real `gh` or real agent CLIs.
 
 ### `meguribi review`
 
@@ -236,9 +237,24 @@ meguribi cleanup owner/repo#125 --delete-branch
 --dry-run
 --run-id <id>
 --delete-branch
+--log <stream|compact|none>
 ```
 
-With `--json`, stdout contains only the final JSON result and progress logs go to stderr.
+With `--json`, stdout contains only the final JSON result and progress logs go to stderr. For `run` / `resume`, `--log stream` (the default) writes ACP agent messages, tool calls, and permission decisions for the implement, plan, and review steps to stderr as they happen. `compact` prints only step transitions and summaries; `none` disables live logs. `--json` is treated as `none`.
+
+```text
+── plan · Claude Code (planner) ────────────────────────────────
+● Claude Code  I will inspect the target code and existing tests.
+● Read  src/feature.ts
+  └ completed
+── implement · Devin (implementer) ─────────────────────────────
+● Edit  src/feature.ts
+  └ completed · src/feature.ts
+── review · Codex (reviewer) ───────────────────────────────────
+● Codex  I will compare the diff with the completion criteria.
+```
+
+The Codex SDK path keeps the traditional step-progress output without streaming agent events.
 
 ## 4. Exit codes
 
@@ -263,6 +279,21 @@ Place `.meguribi.yml` in the repository root.
 version: 1
 
 implementer: devin
+
+agents:
+  review-claude:
+    kind: claude-code
+    transport: acp
+    executable: claude-agent-acp
+    startupTimeoutMs: 10000
+    turnTimeoutMinutes: 45
+    inheritedMcpPolicy: warn
+
+roles:
+  planner: codex
+  implementer: devin
+  reviewer: review-claude
+  allowSameImplementerReviewer: false
 
 repository:
   baseBranch: main
@@ -324,6 +355,15 @@ cursor:
 ```
 
 `transport: acp` is the MVP default. Never store secrets or tokens in this file.
+
+The five built-in profiles are `claude-code`, `codex` (Codex SDK), `codex-acp`, `devin`, and `cursor`. Use `agents` to define additional profiles with their own `kind` / `transport` / timeout / `inheritedMcpPolicy`. Use `roles` to assign profile IDs to roles such as `planner`, `implementer`, and `reviewer`. `roles.implementer` accepts only a `transport: acp` profile, and the same profile cannot be assigned to both `implementer` and `reviewer` unless `allowSameImplementerReviewer: true` is explicit. `codex` (`transport: sdk`) remains available as the compatibility path for planning and review, but cannot be the implementer.
+
+To use Claude Code / Codex ACP, the user must explicitly install the corresponding package and complete authentication:
+
+```bash
+npm i -g @agentclientprotocol/claude-agent-acp
+npm i -g @agentclientprotocol/codex-acp
+```
 
 `inheritedMcpPolicy` controls how Meguribi handles the possibility that the implementer agent CLI inherits the user's saved MCP configuration.
 

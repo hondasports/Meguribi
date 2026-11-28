@@ -7,6 +7,7 @@ import {
   type DeliveryDependencies,
   type DeliveryResult,
   type InheritedMcpPolicy,
+  type LiveLogEvent,
   type LiveLogMode,
   type ResumeDeliveryInput,
   type RunState,
@@ -132,26 +133,21 @@ function withProgress(
   };
 }
 
-function withLiveLog(
-  delivery: DeliveryDependencies,
+function createLiveLogObserver(
   stderr: (text: string) => void,
   options: { mode: LiveLogMode; color: boolean },
-): { delivery: DeliveryDependencies; flush: () => void } {
+): { observe: (event: LiveLogEvent) => void; flush: () => void } {
   const renderer = createLiveLogRenderer({
     mode: options.mode,
     color: options.color,
     redact: redactDiagnosticText,
   });
   return {
-    delivery: {
-      ...delivery,
-      onAgentEvent: (event) => {
-        const out = renderer.render(event);
-        if (out.length > 0) {
-          stderr(out);
-        }
-        delivery.onAgentEvent?.(event);
-      },
+    observe: (event) => {
+      const out = renderer.render(event);
+      if (out.length > 0) {
+        stderr(out);
+      }
     },
     flush: () => {
       const out = renderer.flush();
@@ -284,6 +280,7 @@ async function resolveDeliveryWiring(
   target: string,
   options: DeliveryCommandOptions,
   deps: DeliveryCommandDependencies,
+  onAgentEvent?: (event: LiveLogEvent) => void,
 ): Promise<{ delivery: DeliveryDependencies; inheritedMcpPolicy: InheritedMcpPolicy }> {
   if (deps.delivery) {
     return {
@@ -302,6 +299,7 @@ async function resolveDeliveryWiring(
     implementer: options.implementer,
     allowInheritedMcp: options.allowInheritedMcp,
     localOnly: options.local,
+    ...(onAgentEvent ? { onAgentEvent } : {}),
   });
   return {
     delivery: wiring.deps,
@@ -317,7 +315,11 @@ export async function runRunCommand(
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const writeErr = deps.stderr ?? ((text: string) => process.stderr.write(text));
   const logMode = parseLogMode(options.log);
-  const wiring = await resolveDeliveryWiring(target, options, deps);
+  const liveLog =
+    logMode !== "none" && options.json !== true
+      ? createLiveLogObserver(writeErr, { mode: logMode, color: liveLogColor() })
+      : undefined;
+  const wiring = await resolveDeliveryWiring(target, options, deps, liveLog?.observe);
   const run = deps.runDelivery ?? runDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
   const uninstall =
@@ -325,13 +327,19 @@ export async function runRunCommand(
 
   try {
     progress(writeErr, `Starting delivery for ${target}…`);
-    let delivery = withProgress(wiring.delivery, writeErr);
-    let flushLiveLog: () => void = () => undefined;
-    if (logMode !== "none" && options.json !== true) {
-      const live = withLiveLog(delivery, writeErr, { mode: logMode, color: liveLogColor() });
-      delivery = live.delivery;
-      flushLiveLog = live.flush;
+    let observableDelivery = wiring.delivery;
+    if (liveLog && observableDelivery.onAgentEvent !== liveLog.observe) {
+      const downstream = observableDelivery.onAgentEvent;
+      observableDelivery = {
+        ...observableDelivery,
+        onAgentEvent: (event) => {
+          liveLog.observe(event);
+          downstream?.(event);
+        },
+      };
     }
+    const delivery = withProgress(observableDelivery, writeErr);
+    const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await run(
         buildRunInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),
@@ -356,7 +364,11 @@ export async function runResumeCommand(
   const writeOut = deps.stdout ?? ((text: string) => process.stdout.write(text));
   const writeErr = deps.stderr ?? ((text: string) => process.stderr.write(text));
   const logMode = parseLogMode(options.log);
-  const wiring = await resolveDeliveryWiring(target, options, deps);
+  const liveLog =
+    logMode !== "none" && options.json !== true
+      ? createLiveLogObserver(writeErr, { mode: logMode, color: liveLogColor() })
+      : undefined;
+  const wiring = await resolveDeliveryWiring(target, options, deps, liveLog?.observe);
   const resume = deps.resumeDelivery ?? resumeDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
   const uninstall =
@@ -367,13 +379,19 @@ export async function runResumeCommand(
       writeErr,
       `Resuming delivery for ${target}${options.runId ? ` (run ${options.runId})` : ""}…`,
     );
-    let delivery = withProgress(wiring.delivery, writeErr);
-    let flushLiveLog: () => void = () => undefined;
-    if (logMode !== "none" && options.json !== true) {
-      const live = withLiveLog(delivery, writeErr, { mode: logMode, color: liveLogColor() });
-      delivery = live.delivery;
-      flushLiveLog = live.flush;
+    let observableDelivery = wiring.delivery;
+    if (liveLog && observableDelivery.onAgentEvent !== liveLog.observe) {
+      const downstream = observableDelivery.onAgentEvent;
+      observableDelivery = {
+        ...observableDelivery,
+        onAgentEvent: (event) => {
+          liveLog.observe(event);
+          downstream?.(event);
+        },
+      };
     }
+    const delivery = withProgress(observableDelivery, writeErr);
+    const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await resume(
         buildResumeInput(target, options, deps, controller.signal, wiring.inheritedMcpPolicy),

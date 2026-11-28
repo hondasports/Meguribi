@@ -1,7 +1,9 @@
 import { Command, Option } from "commander";
 import {
+  diagnoseAcpServer,
   diagnoseCursor,
   diagnoseDevin,
+  formatAcpServerDiagnosisHuman,
   formatCursorDiagnosisHuman,
   formatDevinDiagnosisHuman,
   MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
@@ -37,8 +39,10 @@ export interface DoctorCommandOptions {
 export interface DoctorDependencies {
   diagnoseDevin?: typeof diagnoseDevin;
   diagnoseCursor?: typeof diagnoseCursor;
+  diagnoseAcpServer?: typeof diagnoseAcpServer;
   formatDevinDiagnosisHuman?: typeof formatDevinDiagnosisHuman;
   formatCursorDiagnosisHuman?: typeof formatCursorDiagnosisHuman;
+  formatAcpServerDiagnosisHuman?: typeof formatAcpServerDiagnosisHuman;
   loadConfig?: typeof loadImplementerConfig;
   cwd?: string;
   stdout?: (text: string) => void;
@@ -69,14 +73,16 @@ export async function runDoctor(
     cli: options.implementer ? { implementer: options.implementer } : {},
   });
 
-  if (config.kind === "acp-server") {
-    throw new Error(
-      `Implementer profile ${config.profile.id} is an ACP server, but generic ACP server diagnosis is not available yet. Use devin or cursor, or complete the P1 wiring task first.`,
-    );
-  }
-
   let diagnosis: AgentDiagnosis;
-  if (config.kind === "cursor") {
+  if (config.kind === "acp-server") {
+    diagnosis = await (deps.diagnoseAcpServer ?? diagnoseAcpServer)({
+      profile: config.profile,
+      executable: config.profile.executable ?? config.profile.id,
+      nonInteractive: options.nonInteractive ?? false,
+      cwd,
+      probeTimeoutMs: Math.min(config.profile.startupTimeoutMs, 10_000),
+    });
+  } else if (config.kind === "cursor") {
     diagnosis = await (deps.diagnoseCursor ?? diagnoseCursor)({
       executable: config.config.executable,
       inheritedMcpPolicy: config.config.inheritedMcpPolicy,
@@ -101,11 +107,20 @@ export async function runDoctor(
   if (options.json) {
     writeOut(`${JSON.stringify(validated, null, 2)}\n`);
   } else {
-    const formatHuman =
-      config.kind === "cursor"
-        ? (deps.formatCursorDiagnosisHuman ?? formatCursorDiagnosisHuman)
-        : (deps.formatDevinDiagnosisHuman ?? formatDevinDiagnosisHuman);
-    writeOut(formatHuman(validated));
+    if (config.kind === "acp-server") {
+      writeOut(
+        (deps.formatAcpServerDiagnosisHuman ?? formatAcpServerDiagnosisHuman)(
+          validated,
+          config.profile.kind,
+        ),
+      );
+    } else {
+      const formatHuman =
+        config.kind === "cursor"
+          ? (deps.formatCursorDiagnosisHuman ?? formatCursorDiagnosisHuman)
+          : (deps.formatDevinDiagnosisHuman ?? formatDevinDiagnosisHuman);
+      writeOut(formatHuman(validated));
+    }
   }
 
   return {
@@ -161,6 +176,24 @@ function normalizeDeliveryOptions(
   };
 }
 
+function commandErrorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const nextAction =
+    typeof error === "object" && error !== null && "nextAction" in error
+      ? (error as { nextAction?: unknown }).nextAction
+      : undefined;
+  return typeof nextAction === "string" && nextAction.length > 0
+    ? `${message}\nNext: ${nextAction}\n`
+    : `${message}\n`;
+}
+
+function writeCommandError(
+  error: unknown,
+  stderr: ((text: string) => void) | undefined,
+): void {
+  (stderr ?? ((text: string) => process.stderr.write(text)))(commandErrorText(error));
+}
+
 export function createProgram(deps: ProgramDependencies = {}): Command {
   const program = new Command();
   program.name("meguribi").description("Meguribi local CLI").version("0.0.0");
@@ -180,8 +213,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runInit(targetPath, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -206,8 +238,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runDiscoverCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -225,8 +256,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runPlanCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -243,8 +273,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runHypothesisCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -262,8 +291,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runPromoteCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -280,8 +308,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runExploreCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -303,8 +330,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runRequireCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -322,8 +348,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runMeasureCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -341,8 +366,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runReviewCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -362,8 +386,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runCleanupCommand(target, cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -382,8 +405,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         const result = await runDoctor(cliOptions, deps);
         process.exitCode = result.exitCode;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+        writeCommandError(error, deps.stderr);
         process.exitCode = 1;
       }
     });
@@ -398,8 +420,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
       const result = await runRunCommand(target, normalizeDeliveryOptions(cliOptions), deps);
       process.exitCode = result.exitCode;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+      writeCommandError(error, deps.stderr);
       process.exitCode = 1;
     }
   });
@@ -415,8 +436,7 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
       const result = await runResumeCommand(target, normalizeDeliveryOptions(cliOptions), deps);
       process.exitCode = result.exitCode;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      (deps.stderr ?? ((text: string) => process.stderr.write(text)))(`${message}\n`);
+      writeCommandError(error, deps.stderr);
       process.exitCode = 1;
     }
   });

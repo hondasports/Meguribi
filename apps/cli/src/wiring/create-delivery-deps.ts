@@ -4,6 +4,9 @@ import {
   createCodexAdapter,
   captureGitWorktreeSnapshot,
   createCommandVerifier,
+  assertAcpServerRunnable,
+  createAcpRoleAgent,
+  createAcpServerImplementer,
   createCursorAcpAdapter,
   createDefaultPolicyEngine,
   createDevinAcpAdapter,
@@ -16,6 +19,7 @@ import {
   createLocalGitHubAdapter,
   CodexSdkClient,
   digestSource,
+  diagnoseAcpServer,
   diagnoseCursor,
   diagnoseDevin,
   FileSystemRunStore,
@@ -30,8 +34,10 @@ import {
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   preflightCursor,
   preflightDevin,
+  createRoleAgentPlanningBridge,
 } from "@meguribi/adapters";
-import { loadImplementerConfig } from "@meguribi/config";
+import { loadAgentsConfig, loadImplementerConfig } from "@meguribi/config";
+import { RoleAssignmentError } from "@meguribi/core";
 import type {
   CleanupDependencies,
   DiscoverDependencies,
@@ -42,12 +48,27 @@ import type {
   MeasureDependencies,
   DeliveryDependencies,
   InheritedMcpPolicy,
+  LiveLogEvent,
   PlanDependencies,
   ReviewDependencies,
+  RoleAgent,
+  AgentProfile,
 } from "@meguribi/core";
 import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
-export interface CreateDeliveryDepsOptions {
+export interface AgentWiringOverrides {
+  userConfigPath?: string;
+  environment?: NodeJS.ProcessEnv;
+  loadAgentsConfig?: typeof loadAgentsConfig;
+  loadImplementerConfig?: typeof loadImplementerConfig;
+  diagnoseAcpServer?: typeof diagnoseAcpServer;
+  createAcpRoleAgent?: typeof createAcpRoleAgent;
+  createRoleAgentPlanningBridge?: typeof createRoleAgentPlanningBridge;
+  createCodexBridge?: typeof createCodexBridge;
+  createAcpServerImplementer?: typeof createAcpServerImplementer;
+}
+
+export interface CreateDeliveryDepsOptions extends AgentWiringOverrides {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -55,6 +76,7 @@ export interface CreateDeliveryDepsOptions {
   nonInteractive?: boolean;
   implementer?: string;
   allowInheritedMcp?: boolean;
+  onAgentEvent?: (event: LiveLogEvent) => void;
   /**
    * Prefer local fakes for GitHub/Git/Codex/Verifier.
    * Devin ACP facade and FileSystemRunStore stay real so ACP implement works.
@@ -64,7 +86,7 @@ export interface CreateDeliveryDepsOptions {
   runsRoot?: string;
 }
 
-export interface CreatePlanDepsOptions {
+export interface CreatePlanDepsOptions extends AgentWiringOverrides {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -73,7 +95,7 @@ export interface CreatePlanDepsOptions {
   runsRoot?: string;
 }
 
-export interface CreateReviewDepsOptions {
+export interface CreateReviewDepsOptions extends AgentWiringOverrides {
   cwd?: string;
   repositoryPath?: string;
   repository?: string;
@@ -118,9 +140,30 @@ export interface CreatePromoteDepsOptions {
   runsRoot?: string;
 }
 
-export interface CreateExploreDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
-export interface CreateRequireDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
-export interface CreateMeasureDepsOptions { cwd?: string; repositoryPath?: string; repository?: string; localOnly?: boolean; useLocalFakes?: boolean; runsRoot?: string }
+export interface CreateExploreDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+export interface CreateRequireDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
+export interface CreateMeasureDepsOptions {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  localOnly?: boolean;
+  useLocalFakes?: boolean;
+  runsRoot?: string;
+}
 
 function resolveRunsRoot(explicit?: string): string {
   if (explicit) {
@@ -165,9 +208,7 @@ async function createWorkspaceGuard(
   return { guard, sourceDigest: digestSource(before) };
 }
 
-export function createCodexBridge(
-  options: CodexBridgeOptions = {},
-): DeliveryDependencies["codex"] {
+export function createCodexBridge(options: CodexBridgeOptions = {}): DeliveryDependencies["codex"] {
   const adapter = createCodexAdapter({ client: options.client ?? new CodexSdkClient() });
   const workspaceSnapshot = options.workspaceSnapshot ?? captureWorkspaceSnapshot;
   return {
@@ -222,6 +263,153 @@ export function createCodexBridge(
   };
 }
 
+function configSourceOptions(options: AgentWiringOverrides): {
+  userConfigPath?: string;
+  environment?: NodeJS.ProcessEnv;
+} {
+  return {
+    ...(options.userConfigPath !== undefined ? { userConfigPath: options.userConfigPath } : {}),
+    ...(options.environment !== undefined ? { environment: options.environment } : {}),
+  };
+}
+
+function profileExecutable(profile: AgentProfile): string {
+  return profile.executable ?? profile.id;
+}
+
+function isSdkCodex(profile: AgentProfile): boolean {
+  return profile.kind === "codex" && profile.transport === "sdk";
+}
+
+function assertSupportedPlanningTransport(
+  profile: AgentProfile,
+  role: "planner" | "reviewer",
+): void {
+  if (profile.transport === "sdk" && profile.kind !== "codex") {
+    throw new RoleAssignmentError(
+      "transport_unsupported",
+      `${role} profile ${profile.id} uses unsupported sdk transport for kind ${profile.kind}`,
+      "`kind: codex` の sdk プロファイル、または `transport: acp` のプロファイルを選んでください",
+    );
+  }
+}
+
+function requiredProfile(profiles: readonly AgentProfile[], id: string): AgentProfile {
+  const profile = profiles.find((candidate) => candidate.id === id);
+  if (profile === undefined) {
+    throw new Error(`Role profile is missing after validation: ${id}`);
+  }
+  return profile;
+}
+
+function unusedSdkRoleAgent(profile: AgentProfile): RoleAgent {
+  return {
+    profileId: profile.id,
+    kind: profile.kind,
+    async openSession() {
+      throw new Error(`SDK profile ${profile.id} must be handled by createCodexBridge`);
+    },
+  };
+}
+
+function roleAgentArtifactRoot(runsRoot?: string): string {
+  return path.join(resolveRunsRoot(runsRoot), "role-agent-artifacts");
+}
+
+async function createAcpPlanningAgent(
+  profile: AgentProfile,
+  options: AgentWiringOverrides & {
+    repositoryPath: string;
+    nonInteractive: boolean;
+  },
+): Promise<RoleAgent> {
+  const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
+  const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
+  const executable = profileExecutable(profile);
+  const diagnosis = await diagnose({
+    profile,
+    executable,
+    cwd: options.repositoryPath,
+    nonInteractive: options.nonInteractive,
+    probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
+  });
+  return createRoleAgent({
+    profile,
+    executable,
+    diagnosis,
+    mode: options.nonInteractive ? "non-interactive" : "interactive",
+  });
+}
+
+async function createConfiguredCodexBridge(
+  options: AgentWiringOverrides & {
+    repositoryPath: string;
+    runsRoot?: string;
+    nonInteractive: boolean;
+    onEvent?: (event: LiveLogEvent) => void;
+  },
+): Promise<DeliveryDependencies["codex"]> {
+  const loadAgents = options.loadAgentsConfig ?? loadAgentsConfig;
+  const createSdkBridge = options.createCodexBridge ?? createCodexBridge;
+  const createPlanningBridge =
+    options.createRoleAgentPlanningBridge ?? createRoleAgentPlanningBridge;
+  const agents = await loadAgents({
+    repositoryPath: options.repositoryPath,
+    cli: {},
+    nonInteractive: options.nonInteractive,
+    ...configSourceOptions(options),
+  });
+  const planner = requiredProfile(agents.profiles, agents.roles.planner);
+  const reviewer = requiredProfile(agents.profiles, agents.roles.reviewer);
+  assertSupportedPlanningTransport(planner, "planner");
+  assertSupportedPlanningTransport(reviewer, "reviewer");
+  const plannerIsSdk = isSdkCodex(planner);
+  const reviewerIsSdk = isSdkCodex(reviewer);
+
+  if (plannerIsSdk && reviewerIsSdk) {
+    return createSdkBridge();
+  }
+
+  const plannerAgent = plannerIsSdk
+    ? unusedSdkRoleAgent(planner)
+    : await createAcpPlanningAgent(planner, options);
+  const reviewerAgent = reviewerIsSdk
+    ? unusedSdkRoleAgent(reviewer)
+    : await createAcpPlanningAgent(reviewer, options);
+  const roleBridge = createPlanningBridge({
+    planner: plannerAgent,
+    reviewer: reviewerAgent,
+    artifactRoot: roleAgentArtifactRoot(options.runsRoot),
+    ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+  });
+  const sdkBridge = plannerIsSdk || reviewerIsSdk ? createSdkBridge() : undefined;
+
+  return {
+    createPlan: plannerIsSdk ? sdkBridge!.createPlan : roleBridge.createPlan,
+    review: reviewerIsSdk ? sdkBridge!.review : roleBridge.review,
+  };
+}
+
+async function preflightAcpServer(
+  options: AgentWiringOverrides & {
+    profile: AgentProfile;
+    executable: string;
+    cwd: string;
+    nonInteractive: boolean;
+  },
+) {
+  const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
+  const diagnosis = await diagnose({
+    profile: options.profile,
+    executable: options.executable,
+    cwd: options.cwd,
+    nonInteractive: options.nonInteractive,
+    probeTimeoutMs: Math.min(options.profile.startupTimeoutMs, 10_000),
+  });
+  assertAcpServerRunnable(diagnosis);
+  return diagnosis;
+}
+
 /**
  * Default delivery wiring for `meguribi run` / `resume`.
  * Real: GitHub/Git/Codex/Verifier, selected AgentAdapter, FileSystemRunStore, PolicyEngine.
@@ -236,9 +424,11 @@ export async function createDeliveryDeps(
   const useLocalFakes =
     options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
 
-  const config = await loadImplementerConfig({
+  const loadImplementer = options.loadImplementerConfig ?? loadImplementerConfig;
+  const config = await loadImplementer({
     repositoryPath: cwd,
     nonInteractive,
+    ...configSourceOptions(options),
     cli: {
       ...(options.implementer !== undefined ? { implementer: options.implementer } : {}),
       // The explicit run flag must win over repository config so that a
@@ -247,6 +437,18 @@ export async function createDeliveryDeps(
       ...(allowInheritedMcp ? { inheritedMcpPolicy: "allow" } : {}),
     },
   });
+
+  const codex = useLocalFakes
+    ? createFakeCodexForDelivery()
+    : await createConfiguredCodexBridge({
+        ...options,
+        repositoryPath: options.repositoryPath ?? cwd,
+        nonInteractive,
+        ...(options.onAgentEvent ? { onEvent: options.onAgentEvent } : {}),
+      });
+  const agentEventObserver = options.onAgentEvent
+    ? { onAgentEvent: options.onAgentEvent }
+    : {};
 
   if (config.kind === "cursor") {
     const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
@@ -272,50 +474,114 @@ export async function createDeliveryDeps(
       promptTimeoutMs: config.config.turnTimeoutMinutes * 60_000,
     });
 
-    return {
-      inheritedMcpPolicy,
-      deps: {
-        github: useLocalFakes
-          ? createFakeGitHubAdapter()
-          : options.localOnly
-            ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
-            : createGitHubAdapter({ cwd, executable: "gh" }),
-        git: useLocalFakes ? createFakeGitAdapter() : createGitAdapter({ expectedRepository: options.repository, allowMissingRemote: options.localOnly }),
-        codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
-        implementer,
-        implementerProfile: { id: "cursor", kind: "cursor" },
-        devin: implementer,
-        verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
-        policy: createDefaultPolicyEngine(),
-        runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
-        async assertImplementerReady() {
-          currentDiagnosis = await preflightCursor({
-            executable: resolvedExecutable,
-            inheritedMcpPolicy,
-            nonInteractive,
-            cwd,
-            probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
-            minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
-          });
-        },
-        async assertDevinReady() {
-          currentDiagnosis = await preflightCursor({
-            executable: resolvedExecutable,
-            inheritedMcpPolicy,
-            nonInteractive,
-            cwd,
-            probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
-            minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
-          });
-        },
+    const deps: DeliveryDependencies = {
+      github: useLocalFakes
+        ? createFakeGitHubAdapter()
+        : options.localOnly
+          ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
+          : createGitHubAdapter({ cwd, executable: "gh" }),
+      git: useLocalFakes
+        ? createFakeGitAdapter()
+        : createGitAdapter({
+            expectedRepository: options.repository,
+            allowMissingRemote: options.localOnly,
+          }),
+      codex,
+      implementer,
+      implementerProfile: { id: "cursor", kind: "cursor" },
+      devin: implementer,
+      verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
+      policy: createDefaultPolicyEngine(),
+      runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+      ...agentEventObserver,
+      async assertImplementerReady() {
+        currentDiagnosis = await preflightCursor({
+          executable: resolvedExecutable,
+          inheritedMcpPolicy,
+          nonInteractive,
+          cwd,
+          probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+          minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+        });
+      },
+      async assertDevinReady() {
+        currentDiagnosis = await preflightCursor({
+          executable: resolvedExecutable,
+          inheritedMcpPolicy,
+          nonInteractive,
+          cwd,
+          probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+          minimumSupportedVersion: MINIMUM_SUPPORTED_CURSOR_CLI_VERSION,
+        });
       },
     };
+    return { inheritedMcpPolicy, deps };
   }
 
   if (config.kind === "acp-server") {
-    throw new Error(
-      `Implementer profile ${config.profile.id} is an ACP server, but generic ACP server delivery wiring is not available yet. Use devin or cursor, or complete the P1 wiring task first.`,
-    );
+    const { profile } = config;
+    const inheritedMcpPolicy = profile.inheritedMcpPolicy;
+    const executable = profileExecutable(profile);
+    const diagnosis = await (options.diagnoseAcpServer ?? diagnoseAcpServer)({
+      profile,
+      executable,
+      nonInteractive,
+      cwd,
+      probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
+    });
+    let currentDiagnosis = diagnosis;
+    const implementer = (options.createAcpServerImplementer ?? createAcpServerImplementer)({
+      profile,
+      executable,
+      diagnosis,
+      getDiagnosis: () => currentDiagnosis,
+      inheritedMcpPolicy,
+      mode: nonInteractive ? "non-interactive" : "interactive",
+      explicitAllowInheritedMcp: allowInheritedMcp,
+      startupTimeoutMs: profile.startupTimeoutMs,
+      promptTimeoutMs: profile.turnTimeoutMinutes * 60_000,
+    });
+
+    const deps: DeliveryDependencies = {
+      github: useLocalFakes
+        ? createFakeGitHubAdapter()
+        : options.localOnly
+          ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
+          : createGitHubAdapter({ cwd, executable: "gh" }),
+      git: useLocalFakes
+        ? createFakeGitAdapter()
+        : createGitAdapter({
+            expectedRepository: options.repository,
+            allowMissingRemote: options.localOnly,
+          }),
+      codex,
+      implementer,
+      implementerProfile: { id: profile.id, kind: profile.kind },
+      devin: implementer,
+      verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
+      policy: createDefaultPolicyEngine(),
+      runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+      ...agentEventObserver,
+      async assertImplementerReady() {
+        currentDiagnosis = await preflightAcpServer({
+          ...options,
+          profile,
+          executable,
+          cwd,
+          nonInteractive,
+        });
+      },
+      async assertDevinReady() {
+        currentDiagnosis = await preflightAcpServer({
+          ...options,
+          profile,
+          executable,
+          cwd,
+          nonInteractive,
+        });
+      },
+    };
+    return { inheritedMcpPolicy, deps };
   }
 
   const inheritedMcpPolicy = config.config.inheritedMcpPolicy;
@@ -340,44 +606,48 @@ export async function createDeliveryDeps(
     promptTimeoutMs: config.config.turnTimeoutMinutes * 60_000,
   });
 
-  return {
-    inheritedMcpPolicy,
-    deps: {
-      github: useLocalFakes
-        ? createFakeGitHubAdapter()
-        : options.localOnly
-          ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
-          : createGitHubAdapter({ cwd, executable: "gh" }),
-      git: useLocalFakes ? createFakeGitAdapter() : createGitAdapter({ expectedRepository: options.repository, allowMissingRemote: options.localOnly }),
-      codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
-      implementer,
-      implementerProfile: { id: "devin", kind: "devin" },
-      devin: implementer,
-      verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
-      policy: createDefaultPolicyEngine(),
-      runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
-      async assertImplementerReady() {
-        currentDiagnosis = await preflightDevin({
-          executable: config.config.executable,
-          inheritedMcpPolicy,
-          nonInteractive,
-          cwd,
-          probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
-          minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
-        });
-      },
-      async assertDevinReady() {
-        currentDiagnosis = await preflightDevin({
-          executable: config.config.executable,
-          inheritedMcpPolicy,
-          nonInteractive,
-          cwd,
-          probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
-          minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
-        });
-      },
+  const deps: DeliveryDependencies = {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: options.repositoryPath ?? cwd })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    git: useLocalFakes
+      ? createFakeGitAdapter()
+      : createGitAdapter({
+          expectedRepository: options.repository,
+          allowMissingRemote: options.localOnly,
+        }),
+    codex,
+    implementer,
+    implementerProfile: { id: "devin", kind: "devin" },
+    devin: implementer,
+    verifier: useLocalFakes ? createFakeVerifier() : createCommandVerifier(),
+    policy: createDefaultPolicyEngine(),
+    runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+    ...agentEventObserver,
+    async assertImplementerReady() {
+      currentDiagnosis = await preflightDevin({
+        executable: config.config.executable,
+        inheritedMcpPolicy,
+        nonInteractive,
+        cwd,
+        probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+        minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+      });
+    },
+    async assertDevinReady() {
+      currentDiagnosis = await preflightDevin({
+        executable: config.config.executable,
+        inheritedMcpPolicy,
+        nonInteractive,
+        cwd,
+        probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
+        minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
+      });
     },
   };
+  return { inheritedMcpPolicy, deps };
 }
 
 /** Wiring for the read-only `plan` command; it does not diagnose an implementer. */
@@ -388,6 +658,13 @@ export async function createPlanDependencies(
   const repositoryPath = options.repositoryPath ?? cwd;
   const useLocalFakes =
     options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  const codex = useLocalFakes
+    ? createFakeCodexForDelivery()
+    : await createConfiguredCodexBridge({
+        ...options,
+        repositoryPath,
+        nonInteractive: false,
+      });
 
   return {
     github: useLocalFakes
@@ -395,7 +672,7 @@ export async function createPlanDependencies(
       : options.localOnly
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
-    codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+    codex,
     planStore: new FileSystemPlanArtifactStore({
       rootDir: resolveRunsRoot(options.runsRoot),
     }),
@@ -410,6 +687,13 @@ export async function createReviewDependencies(
   const repositoryPath = options.repositoryPath ?? cwd;
   const useLocalFakes =
     options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  const codex = useLocalFakes
+    ? createFakeCodexForDelivery()
+    : await createConfiguredCodexBridge({
+        ...options,
+        repositoryPath,
+        nonInteractive: false,
+      });
 
   return {
     github: useLocalFakes
@@ -423,7 +707,7 @@ export async function createReviewDependencies(
           expectedRepository: options.repository,
           allowMissingRemote: options.localOnly,
         }),
-    codex: useLocalFakes ? createFakeCodexForDelivery() : createCodexBridge(),
+    codex,
     runStore: new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
   };
 }
@@ -468,7 +752,9 @@ export async function createDiscoverDependencies(
       : options.localOnly
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
-    artifactStore: new FileSystemDiscoveryArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+    artifactStore: new FileSystemDiscoveryArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
   };
 }
 
@@ -478,14 +764,17 @@ export async function createHypothesisDependencies(
 ): Promise<HypothesisDependencies> {
   const cwd = options.cwd ?? process.cwd();
   const repositoryPath = options.repositoryPath ?? cwd;
-  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
   return {
     github: useLocalFakes
       ? createFakeGitHubAdapter()
       : options.localOnly
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
-    artifactStore: new FileSystemHypothesisArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+    artifactStore: new FileSystemHypothesisArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
   };
 }
 
@@ -495,37 +784,76 @@ export async function createPromoteDependencies(
 ): Promise<PromoteDependencies> {
   const cwd = options.cwd ?? process.cwd();
   const repositoryPath = options.repositoryPath ?? cwd;
-  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
   return {
     github: useLocalFakes
       ? createFakeGitHubAdapter()
       : options.localOnly
         ? createLocalGitHubAdapter({ cwd: repositoryPath })
         : createGitHubAdapter({ cwd, executable: "gh" }),
-    artifactStore: new FileSystemProblemArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+    artifactStore: new FileSystemProblemArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
   };
 }
 
 /** Wiring for evidence-preserving solution comparison. */
-export async function createExploreDependencies(options: CreateExploreDepsOptions = {}): Promise<ExploreDependencies> {
-  const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
-  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+export async function createExploreDependencies(
+  options: CreateExploreDepsOptions = {},
+): Promise<ExploreDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
   return {
-    github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }),
-    artifactStore: new FileSystemExploreArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }),
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemExploreArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
   };
 }
 
 /** Wiring for human-gated Requirement / Feature drafts. */
-export async function createRequireDependencies(options: CreateRequireDepsOptions = {}): Promise<RequireDependencies> {
-  const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
-  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
-  return { github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }), artifactStore: new FileSystemRequirementArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }) };
+export async function createRequireDependencies(
+  options: CreateRequireDepsOptions = {},
+): Promise<RequireDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemRequirementArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
+  };
 }
 
 /** Wiring for human-gated post-release Measurement drafts. */
-export async function createMeasureDependencies(options: CreateMeasureDepsOptions = {}): Promise<MeasureDependencies> {
-  const cwd = options.cwd ?? process.cwd(); const repositoryPath = options.repositoryPath ?? cwd;
-  const useLocalFakes = options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
-  return { github: useLocalFakes ? createFakeGitHubAdapter() : options.localOnly ? createLocalGitHubAdapter({ cwd: repositoryPath }) : createGitHubAdapter({ cwd, executable: "gh" }), artifactStore: new FileSystemMeasurementArtifactStore({ rootDir: resolveRunsRoot(options.runsRoot) }) };
+export async function createMeasureDependencies(
+  options: CreateMeasureDepsOptions = {},
+): Promise<MeasureDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    artifactStore: new FileSystemMeasurementArtifactStore({
+      rootDir: resolveRunsRoot(options.runsRoot),
+    }),
+  };
 }
