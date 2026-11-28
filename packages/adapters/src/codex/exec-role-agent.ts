@@ -149,6 +149,14 @@ class CodexExecRoleSession implements RoleSession {
   readonly sessionId: string;
   private closed = false;
   private active: ManagedProcess | undefined;
+  /**
+   * 成功したターンの user prompt と assistant 返答の履歴。
+   * native exec は毎回別プロセスで前の文脈を持たないため、room.ts が
+   * sinceTurnIndex 以降の増分だけを渡す議論では前の発言が見えなくなる。
+   * 成功した send だけを順序立てて保持し、次の exec 入力へ role 境界付きで前置する。
+   * エラーになったターンは含めず、close で破棄する。セッションをまたいで共有しない。
+   */
+  private readonly history: { role: "user" | "assistant"; content: string }[] = [];
 
   constructor(
     private readonly options: CreateCodexExecRoleAgentOptions,
@@ -164,12 +172,36 @@ class CodexExecRoleSession implements RoleSession {
     }
     const result = await this.runTurn(prompt);
     await this.assertUnmodified();
+    // ここまで例外なく完了したターンだけを履歴に残す。guard 失敗や exec 失敗は残さない。
+    this.history.push(
+      { role: "user", content: prompt.content },
+      { role: "assistant", content: result.text },
+    );
     return result;
+  }
+
+  /**
+   * 初回はプロンプトをそのまま渡す。2回目以降は成功済みの履歴を
+   * JSON.stringify した構造で前置し、本文中のマーカー文字列では role を偽装できないようにする。
+   */
+  private composeInput(promptContent: string): string {
+    if (this.history.length === 0) {
+      return promptContent;
+    }
+    return [
+      "[CONVERSATION HISTORY]",
+      "The past turns of this session as a JSON array of { role, content } in chronological order. Use them as context for your response.",
+      JSON.stringify(this.history),
+      "",
+      "[CURRENT INPUT]",
+      promptContent,
+    ].join("\n");
   }
 
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.history.length = 0;
     const active = this.active;
     if (active) {
       await active.terminateTree({ graceMs: TERMINATION_GRACE_MS }).catch(() => undefined);
@@ -329,7 +361,7 @@ class CodexExecRoleSession implements RoleSession {
     // プロンプトは stdin 経由で渡す。子が既に終了している場合の EPIPE は
     // waitForExit 側の本来のエラーで報告するため、ここでは握りつぶす。
     try {
-      await processHandle.writeStdin(prompt.content);
+      await processHandle.writeStdin(this.composeInput(prompt.content));
       await processHandle.closeStdin();
     } catch {
       // EPIPE 等は下の waitForExit の結果に委ねる。
