@@ -212,7 +212,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -232,7 +231,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -453,7 +453,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -472,7 +471,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -930,11 +930,11 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
-      "runStore.update"
+      "runStore.update",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "cancelled",
@@ -1193,7 +1193,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -1224,7 +1223,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -1416,7 +1416,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -1431,7 +1430,8 @@
       "verifier.verify",
       "runStore.saveArtifact:logs/verify-fix-1-01-test.log",
       "runStore.saveArtifact:verification.json",
-      "runStore.update"
+      "runStore.update",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "blocked",
@@ -1690,7 +1690,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -1721,7 +1720,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -2013,7 +2013,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -2055,7 +2054,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -2370,7 +2370,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -2386,6 +2385,7 @@
       "runStore.update",
       "runStore.update",
       "github.upsertMarkerComment",
+      "runStore.releaseLock",
       "runStore.load",
       "runStore.acquireLock",
       "git.getIdentity",
@@ -2393,7 +2393,6 @@
       "runStore.readArtifact:plan.json",
       "runStore.readArtifact:implementation-result.json",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -2413,7 +2412,8 @@
       "github.findDraftPullRequest",
       "github.createDraftPullRequest",
       "runStore.update",
-      "github.upsertMarkerComment"
+      "github.upsertMarkerComment",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "awaiting_human",
@@ -2673,7 +2673,6 @@
       "git.getIdentity",
       "runStore.update",
       "runStore.readArtifact:verification.json",
-      "runStore.releaseLock",
       "runStore.readArtifact:review.json",
       "runStore.update",
       "verifier.verify",
@@ -2686,7 +2685,8 @@
       "runStore.saveArtifact:review.json",
       "runStore.update",
       "policy.evaluatePublish",
-      "runStore.update"
+      "runStore.update",
+      "runStore.releaseLock"
     ],
     "result": {
       "status": "blocked",
