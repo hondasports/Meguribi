@@ -29,6 +29,7 @@ import { runPromoteCommand, type PromoteCommandDependencies, type PromoteCommand
 import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommandOptions } from "./commands/explore.js";
 import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
 import { runMeasureCommand, type MeasureCommandDependencies, type MeasureCommandOptions } from "./commands/measure.js";
+import { runStatusCommand, type StatusCommandDependencies, type StatusCommandOptions } from "./commands/status.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -50,7 +51,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -388,6 +389,34 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
       } catch (error) {
         writeCommandError(error, deps.stderr);
         process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("status")
+    .description("Show delivery run progress and agent activity")
+    .argument("<runId>", "Delivery run ID")
+    .option("--follow", "Follow events.jsonl and stream live logs", false)
+    .option("--agent <profileId>", "Show only one agent profile")
+    .option("--json", "Emit status JSON on stdout", false)
+    .option("--runs-root <path>", "Meguribi runs root")
+    .action(async (runId: string, cliOptions: StatusCommandOptions) => {
+      const controller = new AbortController();
+      const onSigInt = () => {
+        controller.abort();
+      };
+      process.once("SIGINT", onSigInt);
+      try {
+        const result = await runStatusCommand(runId, cliOptions, {
+          ...deps,
+          abortSignal: deps.abortSignal ?? controller.signal,
+        });
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      } finally {
+        process.off("SIGINT", onSigInt);
       }
     });
 
