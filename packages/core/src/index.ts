@@ -243,3 +243,10 @@ export {
   type DiscussionLimits,
   type DiscussionTurn,
 } from "./discussion/types.js";
+
+// discussion approval
+export {
+  ApprovalError,
+  assertApprovedConclusion,
+  type ApprovalRecord,
+} from "./discussion/approval.js";
