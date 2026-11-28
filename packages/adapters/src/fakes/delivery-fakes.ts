@@ -19,6 +19,9 @@ import type {
   RunStore,
   VerificationResult,
   Verifier,
+  AgentProfile,
+  RoleAgent,
+  RoleSession,
 } from "@meguribi/core";
 
 export interface CallCounter {
@@ -696,5 +699,66 @@ export function createFakeDeliveryDeps(options: FakeDeliveryBundleOptions = {}):
     codex,
     devin,
     runStore,
+  };
+}
+
+function fakeDiscussionEnvelope(profileId: string): string {
+  return [
+    "```json",
+    JSON.stringify({
+      message: `${profileId} の fake 発言: この方針で合意します`,
+      replyTo: [],
+      addressTo: [],
+      positions: [],
+      newIssues: [],
+      done: true,
+    }),
+    "```",
+  ].join("\n");
+}
+
+function fakeDiscussionConclusion(): string {
+  return [
+    "```json",
+    JSON.stringify({
+      topic: "fake discussion topic",
+      conclusion: "fake の結論: 提案どおりに進める",
+      issues: [],
+      rejectedOptions: [],
+      openQuestions: [],
+      acceptanceCriteriaSeeds: [],
+    }),
+    "```",
+  ].join("\n");
+}
+
+/**
+ * 議論用の test-only fake RoleAgent。openSession の role で振る舞いを分ける。
+ * - discussant: 常に `done: true` の封筒を返し、1ラウンドで合意に到達する
+ * - summarizer: スキーマ検証を通る最小の結論 JSON を返す
+ * 実エージェントを起動しない `--local` / MEGURIBI_DELIVERY_FAKES=1 の経路で使う。
+ */
+export function createFakeDiscussionRoleAgent(profile: AgentProfile): RoleAgent {
+  return {
+    profileId: profile.id,
+    kind: profile.kind,
+    async openSession(input): Promise<RoleSession> {
+      const sessionId = `fake-${profile.id}-${input.role}`;
+      return {
+        sessionId,
+        async send() {
+          return {
+            sessionId,
+            text: input.role === "summarizer"
+              ? fakeDiscussionConclusion()
+              : fakeDiscussionEnvelope(profile.id),
+            events: [],
+          };
+        },
+        async close() {
+          // fake には後処理がない
+        },
+      };
+    },
   };
 }

@@ -30,6 +30,15 @@ import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommand
 import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
 import { runMeasureCommand, type MeasureCommandDependencies, type MeasureCommandOptions } from "./commands/measure.js";
 import { runStatusCommand, type StatusCommandDependencies, type StatusCommandOptions } from "./commands/status.js";
+import {
+  runApproveCommand,
+  runDiscussCommand,
+  runRejectCommand,
+  runSayCommand,
+  type ApproveCommandOptions,
+  type DiscussCommandOptions,
+  type RejectCommandOptions,
+} from "./commands/discuss.js";
 import { runDeskCommand, type DeskCommandDependencies, type DeskCommandOptions } from "./commands/desk.js";
 import {
   runWorkflowListCommand,
@@ -60,6 +69,7 @@ export interface DoctorDependencies {
 export interface ProgramDependencies
   extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies, WorkflowValidateCommandDependencies, WorkflowListCommandDependencies, DeskCommandDependencies {
   delivery?: DeliveryDependencies;
+  resolveApprover?: (input: { worktreePath: string }) => Promise<string | undefined>;
 }
 
 export async function runDoctor(
@@ -456,6 +466,83 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
         process.exitCode = 1;
       } finally {
         process.off("SIGINT", onSigInt);
+      }
+    });
+
+  program
+    .command("discuss")
+    .description("Start a read-only multi-agent discussion for a GitHub Issue")
+    .argument("<target>", "Issue target (issue number, URL, or owner/repo#number)")
+    .option("--repo-path <path>", "Path to the target Git repository")
+    .option("--local", "Use local-only adapters (no GitHub access)", false)
+    .option("--request <text>", "Additional user request for the discussion")
+    .option("--max-turns <n>", "Maximum discussion turns")
+    .option("--log <mode>", "Live log mode: stream, compact, or none")
+    .option("--json", "Emit the result as JSON on stdout", false)
+    .option("--non-interactive", "Fail closed instead of prompting", false)
+    .action(async (target: string, cliOptions: DiscussCommandOptions) => {
+      const controller = new AbortController();
+      const onSigInt = () => {
+        controller.abort();
+      };
+      process.once("SIGINT", onSigInt);
+      try {
+        const result = await runDiscussCommand(target, cliOptions, {
+          ...deps,
+          abortSignal: deps.abortSignal ?? controller.signal,
+        });
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      } finally {
+        process.off("SIGINT", onSigInt);
+      }
+    });
+
+  program
+    .command("say")
+    .description("Write a human message into an in-progress discussion run")
+    .argument("<runId>", "Discussion run ID")
+    .argument("<message>", "Message to write into the discussion inbox")
+    .action(async (runId: string, message: string) => {
+      try {
+        const result = await runSayCommand(runId, message, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("approve")
+    .description("Approve the conclusion of a discussion run")
+    .argument("<runId>", "Discussion run ID")
+    .option("--comment <text>", "Approval comment")
+    .action(async (runId: string, cliOptions: ApproveCommandOptions) => {
+      try {
+        const result = await runApproveCommand(runId, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      }
+    });
+
+  program
+    .command("reject")
+    .description("Reject the conclusion of a discussion run")
+    .argument("<runId>", "Discussion run ID")
+    .option("--reason <text>", "Rejection reason")
+    .option("--redo", "Restart the discussion with the reason as feedback", false)
+    .action(async (runId: string, cliOptions: RejectCommandOptions) => {
+      try {
+        const result = await runRejectCommand(runId, cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
       }
     });
 

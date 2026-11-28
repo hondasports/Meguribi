@@ -279,3 +279,18 @@ export type {
   DiscussionStorePort,
   SummarizeDiscussionInput,
 } from "./discussion/ports.js";
+// discussion workflow
+export {
+  approveDiscussion,
+  createDiscussionWorkflow,
+  rejectDiscussion,
+  runDiscussionWorkflow,
+  type DiscussionDependencies,
+  type DiscussionWorkflowResult,
+  type RejectDiscussionInput,
+  type RunDiscussionWorkflowInput,
+} from "./workflow/discussion.js";
+export type {
+  DiscussionStoreFactory,
+  SummarizeDiscussion,
+} from "./discussion/ports.js";

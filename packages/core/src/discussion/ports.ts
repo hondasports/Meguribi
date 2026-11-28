@@ -1,22 +1,11 @@
 import type { LiveLogEvent } from "../live-log.js";
 import type { RoleAgent } from "../role-agent.js";
+import type { DiscussionBrief } from "./prompt.js";
 import type {
   DiscussionConclusion,
   DiscussionEndReason,
   DiscussionTurn,
 } from "./types.js";
-
-// Task 3 の DiscussionBrief と同じ形。統合時に置き換える
-interface DiscussionBrief {
-  runId: string;
-  topic: string;
-  issueBody: string;
-  comments: readonly string[];
-  userRequest?: string;
-  repositoryRules: string;
-  participants: readonly { id: string; label: string }[];
-  redoNotes: readonly string[];
-}
 
 /**
  * 議論の記録を扱うストアの port。
@@ -31,8 +20,15 @@ export interface DiscussionStorePort {
 }
 
 /**
+ * Run ID が確定してから、その Run 専用の store を作る factory。
+ * CLI / wiring は FileSystemDiscussionStore へ実際の runId を渡すこと。
+ */
+export type DiscussionStoreFactory = (runId: string) => DiscussionStorePort;
+
+/**
  * summarizer による議論要約の入力。
- * prompt builder は Task 3 統合時に adapters 側へ注入する。
+ * CLI / wiring は adapters の summarizeDiscussion に core の buildSummarizerPrompt を渡し、
+ * この1引数の port として workflow へ注入する。
  */
 export interface SummarizeDiscussionInput {
   summarizer: RoleAgent;
@@ -43,3 +39,7 @@ export interface SummarizeDiscussionInput {
   endedBy: DiscussionEndReason;
   onEvent?: (event: LiveLogEvent) => void;
 }
+
+export type SummarizeDiscussion = (
+  input: SummarizeDiscussionInput,
+) => Promise<DiscussionConclusion>;

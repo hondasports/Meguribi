@@ -87,7 +87,8 @@ export type RoleAssignmentErrorCode =
   | "unknown_profile"
   | "same_implementer_reviewer"
   | "transport_unsupported"
-  | "duplicate_discussant";
+  | "duplicate_discussant"
+  | "invalid_discussants";
 
 export class RoleAssignmentError extends Error {
   readonly code: RoleAssignmentErrorCode;

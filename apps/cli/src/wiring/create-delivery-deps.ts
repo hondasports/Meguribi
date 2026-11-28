@@ -13,6 +13,7 @@ import {
   createFakeCodexForDelivery,
   createFakeGitAdapter,
   createFakeGitHubAdapter,
+  createFakeDiscussionRoleAgent as createAdaptersFakeDiscussionRoleAgent,
   createFakeVerifier,
   createGitAdapter,
   createGitHubAdapter,
@@ -23,6 +24,10 @@ import {
   diagnoseCursor,
   diagnoseDevin,
   FileSystemRunStore,
+  FileSystemDiscussionStore,
+  parseDiscussionEnvelope,
+  summarizeDiscussion,
+  hashConclusion,
   FileSystemPlanArtifactStore,
   FileSystemDiscoveryArtifactStore,
   FileSystemHypothesisArtifactStore,
@@ -42,7 +47,7 @@ import {
   loadDevinConfig,
   loadImplementerConfig,
 } from "@meguribi/config";
-import { RoleAssignmentError } from "@meguribi/core";
+import { buildSummarizerPrompt, RoleAssignmentError } from "@meguribi/core";
 import type {
   CleanupDependencies,
   DiscoverDependencies,
@@ -58,6 +63,12 @@ import type {
   ReviewDependencies,
   RoleAgent,
   AgentProfile,
+  DiscussionConclusion,
+  DiscussionStorePort,
+  GitAdapter,
+  GitHubAdapter,
+  PolicyEngine,
+  SummarizeDiscussionInput,
 } from "@meguribi/core";
 import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 
@@ -938,5 +949,124 @@ export async function createMeasureDependencies(
     artifactStore: new FileSystemMeasurementArtifactStore({
       rootDir: resolveRunsRoot(options.runsRoot),
     }),
+  };
+}
+
+export interface CreateDiscussionDepsOptions extends AgentWiringOverrides {
+  cwd?: string;
+  repositoryPath?: string;
+  repository?: string;
+  runsRoot?: string;
+  useLocalFakes?: boolean;
+  localOnly?: boolean;
+  nonInteractive?: boolean;
+}
+
+/**
+ * `discuss` / `say` / `approve` / `reject` が使う本番依存。
+ * `store` は runId 確定後にしか作れないため `createStore(runId)` で遅延生成する。
+ * T7 の workflow 側が要求する `DiscussionDependencies` へは、CLI 側で
+ * `store` を束ねて渡す。
+ */
+export interface DiscussionWiringDependencies {
+  github: GitHubAdapter;
+  git: GitAdapter;
+  policy: PolicyEngine;
+  runStore: FileSystemRunStore;
+  discussants: readonly RoleAgent[];
+  summarizer: RoleAgent;
+  parseEnvelope: typeof parseDiscussionEnvelope;
+  summarize(input: SummarizeDiscussionInput): Promise<DiscussionConclusion>;
+  hashConclusion: typeof hashConclusion;
+  createStore(runId: string): DiscussionStorePort;
+  now(): Date;
+}
+
+function assertDiscussionTransport(profile: AgentProfile, role: string): void {
+  if (profile.transport === "sdk") {
+    throw new RoleAssignmentError(
+      "transport_unsupported",
+      `${role} profile ${profile.id} uses sdk transport, which cannot join multi-turn discussion`,
+      "議論に使うプロファイルは `transport: acp` にしてください",
+    );
+  }
+}
+
+/** Wiring for the discussion commands (`discuss` / `say` / `approve` / `reject`). */
+export async function createDiscussionDependencies(
+  options: CreateDiscussionDepsOptions = {},
+): Promise<DiscussionWiringDependencies> {
+  const cwd = options.cwd ?? process.cwd();
+  const repositoryPath = options.repositoryPath ?? cwd;
+  const nonInteractive = options.nonInteractive ?? false;
+  const useLocalFakes =
+    options.useLocalFakes === true || process.env.MEGURIBI_DELIVERY_FAKES === "1";
+  const loadAgents = options.loadAgentsConfig ?? loadAgentsConfig;
+  const agents = await loadAgents({
+    repositoryPath,
+    cli: {},
+    nonInteractive,
+    ...configSourceOptions(options),
+  });
+
+  const discussantIds = agents.roles.discussants;
+  if (discussantIds.length < 2 || discussantIds.length > 4) {
+    throw new RoleAssignmentError(
+      "invalid_discussants",
+      `roles.discussants must list 2 to 4 profiles, but got ${String(discussantIds.length)}`,
+      "`.meguribi.yml` の `roles.discussants` に 2〜4 件のプロファイル ID を指定してください",
+    );
+  }
+
+  const roleAgents = new Map<string, RoleAgent>();
+  const buildAgent = async (profile: AgentProfile, role: string): Promise<RoleAgent> => {
+    assertDiscussionTransport(profile, role);
+    const cached = roleAgents.get(profile.id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const agent = useLocalFakes
+      ? createAdaptersFakeDiscussionRoleAgent(profile)
+      : await createAcpPlanningAgent(profile, {
+          ...options,
+          repositoryPath,
+          nonInteractive,
+        });
+    roleAgents.set(profile.id, agent);
+    return agent;
+  };
+
+  const discussants: RoleAgent[] = [];
+  for (const id of discussantIds) {
+    discussants.push(await buildAgent(requiredProfile(agents.profiles, id), "discussant"));
+  }
+  const summarizerId = agents.roles.summarizer ?? discussantIds[0];
+  const summarizer = await buildAgent(
+    requiredProfile(agents.profiles, summarizerId as string),
+    "summarizer",
+  );
+
+  const runStore = new FileSystemRunStore({ rootDir: resolveRunsRoot(options.runsRoot) });
+  return {
+    github: useLocalFakes
+      ? createFakeGitHubAdapter()
+      : options.localOnly
+        ? createLocalGitHubAdapter({ cwd: repositoryPath })
+        : createGitHubAdapter({ cwd, executable: "gh" }),
+    git: useLocalFakes
+      ? createFakeGitAdapter()
+      : createGitAdapter({
+          expectedRepository: options.repository,
+          allowMissingRemote: options.localOnly,
+        }),
+    policy: createDefaultPolicyEngine(),
+    runStore,
+    discussants,
+    summarizer,
+    parseEnvelope: parseDiscussionEnvelope,
+    summarize: (input) => summarizeDiscussion(input, buildSummarizerPrompt),
+    hashConclusion,
+    createStore: (runId) => new FileSystemDiscussionStore({ runStore, runId }),
+    now: () => new Date(),
   };
 }

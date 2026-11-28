@@ -23,13 +23,14 @@ This provides responsibility separation, schema validation, reproducibility, hum
 
 ### 1.1 Discussion, approval, and step-event artifacts
 
-In P2/P3, the Run directory gains the following artifacts. `events.jsonl` is implemented in P2b; discussion, approval, and `steps/` remain planned.
+In P2/P3, the Run directory gains the following artifacts. `events.jsonl` and `steps/` are implemented in P2; discussion, approval, and `inbox/` are implemented in P3.
 
-- `discussion/transcript.jsonl`: every discussion turn. Each message has a speaker, turn ID, and envelope format (P3, planned).
-- `discussion/conclusion.json`: the `DiscussionConclusion`, including the selected direction, positions by issue, rejected options, open questions, acceptance-criterion seeds, ending reason, and transcript hash (P3, planned).
-- `approval.json`: the approver, timestamp, hash of the approved `conclusion.json`, and optional comment (P3, planned).
-- `steps/<stepId>.json`: per-step state (`pending | running | completed | failed | awaiting_human | skipped`) (P2, planned).
-- `events.jsonl`: events for every step, including `workflow.*`, `step.progress`, `step.started`, and `agent.event` (P2b, implemented).
+- `discussion/transcript.jsonl`: every discussion turn. Each message has a speaker, turn ID, and envelope format (P3, implemented).
+- `discussion/conclusion.json`: the `DiscussionConclusion`, including the selected direction, positions by issue, rejected options, open questions, acceptance-criterion seeds, ending reason, and transcript hash (P3, implemented).
+- `approval.json`: the approver, timestamp, hash of the approved `discussion/conclusion.json`, and optional comment (P3, implemented).
+- `inbox/`: human messages written by `meguribi say`; consumed messages move to `inbox/processed/` (P3, implemented).
+- `steps/<stepId>.json`: per-step execution state saved by the workflow engine (P2, implemented).
+- `events.jsonl`: events for every step, including `workflow.*`, `step.progress`, `step.started`, `agent.event`, `discussion.turn`, and `discussion.ended` (P2b/P3, implemented).
 
 The message envelope is defined as follows. `message` is forwarded to other participants without modification, with the speaker name and turn ID attached.
 
@@ -44,7 +45,7 @@ The message envelope is defined as follows. `message` is forwarded to other part
 }
 ```
 
-`DiscussionConclusion` is defined as follows. `turnIds` make it possible to trace which participant and message contributed to each part of the conclusion.
+`DiscussionConclusion` is defined as follows. `turnIds` make it possible to trace which participant and message contributed to each part of the conclusion. `transcriptHash` is calculated only over the sequence of turns summarized in the discussion round that produced this conclusion, including after a redo. Because `discussion/transcript.jsonl` can retain earlier rejected rounds, it is not necessarily a hash of the whole file.
 
 ```ts
 interface DiscussionConclusion {
@@ -74,13 +75,15 @@ interface DiscussionConclusion {
               +-- resolved-config.json
               +-- issue.json
               +-- context-manifest.json
-              +-- discussion/              # planned (P3)
+              +-- discussion/              # implemented (P3)
               |   +-- transcript.jsonl
               |   +-- conclusion.json
-              +-- approval.json            # planned (P3)
-              +-- steps/                   # planned (P2)
+              +-- approval.json            # implemented (P3)
+              +-- inbox/                   # human messages (P3)
+              |   `-- processed/
+              +-- steps/                   # implemented (P2)
               |   `-- <stepId>.json
-              +-- events.jsonl             # workflow / agent events (P2b)
+              +-- events.jsonl             # workflow / agent / discussion events (P2b/P3)
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
@@ -99,7 +102,7 @@ interface DiscussionConclusion {
 
 The Run ID contains a timestamp and random suffix so repeated execution of the same Issue is distinguishable.
 
-`events.jsonl` is JSON Lines with one record per line: `{ "at": <recorded-at ISO8601>, "event": <WorkflowEvent> }`. The event is a workflow lifecycle event (`workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`), an in-step `step.started` / `agent.event`, or `step.progress` (`runId`, `stepId`, `label`, `current`, optional `max`, `at`). Payloads are redacted before append, and malformed lines are skipped with a warning when read.
+`events.jsonl` is JSON Lines with one record per line: `{ "at": <recorded-at ISO8601>, "event": <WorkflowEvent> }`. The event is a workflow lifecycle event (`workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`), an in-step `step.started` / `agent.event`, `step.progress` (`runId`, `stepId`, `label`, `current`, optional `max`, `at`), or a discussion event (`discussion.turn` / `discussion.ended`). Payloads are redacted before append, and malformed lines are skipped with a warning when read.
 
 `meguribi plan` does not create a branch, worktree, or Run state. It stores the latest plan at
 `~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json` and atomically replaces that file

@@ -312,9 +312,11 @@ Normal completion, cancellation, timeout, and protocol failure use `session/canc
 
 The `experiments/devin-acp` compatibility smoke only allows connecting to the real Devin CLI with an explicit `MEGURIBI_RUN_REAL_DEVIN_SMOKE=1` opt-in. Without opt-in it returns `blocked` and does not perform external MCP connections, writes to real repositories, commit/push/PR/Issue operations, or copying/saving credentials. Before a real run it prints a warning and prompts for confirmation on a TTY; for non-interactive execution pass `--yes`. To preserve authentication it inherits the current user environment without isolating `HOME`, `USERPROFILE`, or `APPDATA`, but it never copies or stores credentials.
 
-## 23. Discussion and approval safety (planned)
+## 23. Discussion and approval safety
 
 The discussion step (`discuss`) runs with every participant in read-only mode, and file-change or command-execution permission requests are rejected. Untrusted inputs such as Issues, comments, and external documents are wrapped in delimiter tags and explicitly marked as content whose instructions must not be followed.
+
+Human messages are written to `inbox/` by `meguribi say` only while agents are actively continuing the discussion, and imported between turns. They are not accepted while a Run is `awaiting_human`. Their contents are also treated as untrusted input and wrapped in delimiter tags before being passed to other discussion participants.
 
 Discussion has the following limits:
 

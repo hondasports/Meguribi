@@ -635,6 +635,43 @@ describe("runDiscussion", () => {
     expect(codex.sessions[0]?.closeCalls).toBe(1);
   });
 
+  it("closes a session that finishes opening after abort", async () => {
+    let resolveOpen: ((session: RoleSession) => void) | undefined;
+    const openInputs: OpenRoleSessionInput[] = [];
+    const agent: RoleAgent = {
+      profileId: "claude",
+      kind: "claude-code",
+      openSession(openInput: OpenRoleSessionInput): Promise<RoleSession> {
+        openInputs.push(openInput);
+        return new Promise((resolve) => {
+          resolveOpen = resolve;
+        });
+      },
+    };
+    const close = vi.fn(async () => undefined);
+    const lateSession: RoleSession = {
+      sessionId: "late-session",
+      send: vi.fn(async () => ({ sessionId: "late-session", text: "", events: [] })),
+      close,
+    };
+    const { ports } = createPorts();
+    const controller = new AbortController();
+
+    const running = runDiscussion(
+      discussionInput([agent], ports, { abortSignal: controller.signal }),
+    );
+    await flushMicrotasks();
+    expect(openInputs).toHaveLength(1);
+    controller.abort();
+    await flushMicrotasks();
+    resolveOpen?.(lateSession);
+    await flushMicrotasks();
+    const caught = await running.catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({ message: "discussion cancelled", code: "cancelled" });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("closes sessions and throws a cancelled error when aborted during send", async () => {
     const claude = createScriptedAgent({
       profileId: "claude",

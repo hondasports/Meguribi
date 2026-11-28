@@ -1,5 +1,6 @@
 import type {
   AgentAdapter,
+  AgentProfile,
   AgentDiagnosis,
   DeliveryDependencies,
   IssueRecord,
@@ -20,7 +21,11 @@ import {
   MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
 } from "@meguribi/adapters";
 import { describe, expect, it } from "vitest";
-import { createDeliveryDeps, createPlanDependencies } from "./create-delivery-deps.js";
+import {
+  createDeliveryDeps,
+  createDiscussionDependencies,
+  createPlanDependencies,
+} from "./create-delivery-deps.js";
 
 const healthyAcpDiagnosis: AgentDiagnosis = {
   executable: { status: "ok", path: "claude-agent-acp" },
@@ -693,5 +698,108 @@ describe("createDeliveryDeps role validation", () => {
       code: "same_implementer_reviewer",
       nextAction: "`allowSameImplementerReviewer: true` を明示してください",
     });
+  });
+});
+
+function discussionProfile(id: string, transport: "acp" | "sdk" = "acp"): AgentProfile {
+  return {
+    id,
+    kind: id === "codex-sdk" ? "codex" : "claude-code",
+    transport,
+    executable: id,
+    startupTimeoutMs: 1_000,
+    turnTimeoutMinutes: 5,
+    inheritedMcpPolicy: "allow",
+  };
+}
+
+function discussionAgentsResult(
+  discussants: readonly string[],
+  options: { summarizer?: string; transport?: "acp" | "sdk" } = {},
+) {
+  const ids = [...new Set([...discussants, ...(options.summarizer ? [options.summarizer] : [])])];
+  return {
+    profiles: ids.map((id) =>
+      discussionProfile(id, id === "codex-sdk" ? "sdk" : (options.transport ?? "acp")),
+    ),
+    roles: {
+      discussants: [...discussants],
+      ...(options.summarizer === undefined ? {} : { summarizer: options.summarizer }),
+      planner: "codex",
+      reviewer: "codex",
+      allowSameImplementerReviewer: false,
+    },
+    snapshot: {},
+  };
+}
+
+describe("createDiscussionDependencies", () => {
+  function baseOptions(agentsResult: unknown) {
+    return {
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      loadAgentsConfig: async () => agentsResult as never,
+      diagnoseAcpServer: async () => healthyAcpDiagnosis,
+      createAcpRoleAgent: (options: { profile: AgentProfile }) =>
+        unusedRoleAgent(options.profile.id),
+    };
+  }
+
+  it("builds discussants and defaults the summarizer to the first discussant", async () => {
+    const created: string[] = [];
+    const deps = await createDiscussionDependencies({
+      ...baseOptions(discussionAgentsResult(["alpha", "beta"])),
+      createAcpRoleAgent: (options: { profile: AgentProfile }) => {
+        created.push(options.profile.id);
+        return unusedRoleAgent(options.profile.id);
+      },
+    } as never);
+
+    expect(deps.discussants.map((agent) => agent.profileId)).toEqual(["alpha", "beta"]);
+    expect(deps.summarizer.profileId).toBe("alpha");
+    // summarizer は先頭 discussant と同じプロファイルなら使い回す。
+    expect(created).toEqual(["alpha", "beta"]);
+    expect(typeof deps.createStore).toBe("function");
+    expect(typeof deps.parseEnvelope).toBe("function");
+    expect(typeof deps.hashConclusion).toBe("function");
+  });
+
+  it("uses roles.summarizer when specified", async () => {
+    const deps = await createDiscussionDependencies(
+      baseOptions(discussionAgentsResult(["alpha", "beta"], { summarizer: "gamma" })) as never,
+    );
+
+    expect(deps.summarizer.profileId).toBe("gamma");
+  });
+
+  it.each([
+    { discussants: ["alpha"], label: "fewer than 2" },
+    { discussants: ["a", "b", "c", "d", "e"], label: "more than 4" },
+  ])("throws invalid_discussants for $label discussants", async ({ discussants }) => {
+    const error = await createDiscussionDependencies(
+      baseOptions(discussionAgentsResult(discussants)) as never,
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(RoleAssignmentError);
+    expect((error as RoleAssignmentError).code).toBe("invalid_discussants");
+    expect((error as RoleAssignmentError).nextAction).toContain("roles.discussants");
+  });
+
+  it("throws transport_unsupported for an sdk discussant", async () => {
+    const error = await createDiscussionDependencies(
+      baseOptions(discussionAgentsResult(["alpha", "codex-sdk"])) as never,
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(RoleAssignmentError);
+    expect((error as RoleAssignmentError).code).toBe("transport_unsupported");
+    expect((error as RoleAssignmentError).nextAction).toContain("transport: acp");
   });
 });
