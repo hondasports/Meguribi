@@ -230,3 +230,7 @@ export type {
   AgentActivityState,
   DeriveAgentActivityOptions,
 } from "./agent-activity.js";
+export type {
+  WorkflowEventLog,
+  WorkflowEventRecord,
+} from "./workflow-engine/event-log.js";
