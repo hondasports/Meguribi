@@ -102,7 +102,9 @@ apps/cli
 
 ### Workflow
 
-P2 で、Meguribi は工程種別が閉じた宣言的 YAML ワークフローを逐次実行するエンジンを持つ予定です（計画中）。既存の `runDelivery` は、外から見た振る舞い・成果物・終了コードを変えずに、組み込みワークフロー `delivery`（`plan → implement → verify → review ⇄ fix → publish`）として移植します。
+P2a で、Meguribi は工程種別が閉じた宣言的ワークフローを逐次実行するエンジンを core に持ちます。既存の `runDelivery` / `resumeDelivery` は、外から見た振る舞い・成果物・終了コードを変えずに、組み込みワークフロー `delivery` として実装済みです。YAML の読み込みと利用者向け `workflow` コマンドは P2b で追加します。
+
+組み込み `delivery` の工程 ID は、定義順に `plan`、`implement`、`verify`、`review`、`fix-after-verify`、`fix-after-review`、`publish` です。
 
 工程種別は `discuss`、`approve`、`specify`、`plan`、`implement`、`fix`、`verify`、`review`、`publish` の閉じた集合です。制御は逐次実行、`onChangesRequired: { goto, max }` による上限付きループ、工程完了後の `then`、承認対象を示す `of` だけに限定し、条件式・変数・任意コマンドは持ちません。
 
