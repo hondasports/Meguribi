@@ -155,9 +155,18 @@ describe("startDevinAcpSession integration", () => {
     expect(result.status).toBe("completed");
     const termination = JSON.parse(
       await fs.readFile(path.join(artifactRoot, "termination.json"), "utf8"),
-    ) as { stdinClosed: boolean; residualProcesses: number };
+    ) as {
+      stdinClosed: boolean;
+      gracefulExit: boolean;
+      terminateSent: boolean;
+      residualProcesses: number;
+      cleanupError?: { code: string };
+    };
     expect(termination.stdinClosed).toBe(true);
+    expect(termination.gracefulExit).toBe(true);
+    expect(termination.terminateSent).toBe(false);
     expect(termination.residualProcesses).toBe(0);
+    expect(termination.cleanupError).toBeUndefined();
   });
 
   it("redacts secrets in persisted message artifacts and yielded events", async () => {

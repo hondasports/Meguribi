@@ -107,6 +107,110 @@ function fakeTransportConnection(sessionId: string): AcpConnection {
   };
 }
 
+describe("createAcpRoleAgent sessionEnvHook cleanup", () => {
+  async function openWithHook(input: {
+    hook: () => Promise<{ env?: NodeJS.ProcessEnv; acpArgs?: readonly string[]; cleanup?: () => Promise<void> }>;
+    transport?: AcpTransport;
+  }) {
+    const { cwd, artifactRoot } = await tempGit();
+    const agent = createAcpRoleAgent({
+      profile: claudeCodeProfile(),
+      executable: "fake-agent-cli",
+      diagnosis: runnableDiagnosis(),
+      mode: "non-interactive",
+      sessionEnvHook: input.hook,
+      ...(input.transport ? { transport: input.transport } : {}),
+      executableArgs: input.transport ? undefined : [fakeAcpServer()],
+      ...(input.transport ? {} : { executable: node() }),
+    });
+    return agent.openSession({
+      cwd,
+      mode: "read-only",
+      role: "planner",
+      artifactRoot,
+    });
+  }
+
+  it("runs cleanup exactly once when the session closes normally", async () => {
+    let cleanupCalls = 0;
+    const session = await openWithHook({
+      hook: async () => ({
+        acpArgs: ["--process-model", "in-process"],
+        cleanup: async () => {
+          cleanupCalls += 1;
+        },
+      }),
+      transport: { start: async () => fakeTransportConnection("cleanup-normal") },
+    });
+    expect(cleanupCalls).toBe(0);
+    await session.close();
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it("runs cleanup even when close throws", async () => {
+    let cleanupCalls = 0;
+    const transport: AcpTransport = {
+      start: async () => ({
+        ...fakeTransportConnection("cleanup-error"),
+        terminate: async () => {
+          throw new Error("terminate failed");
+        },
+      }),
+    };
+    const session = await openWithHook({
+      hook: async () => ({
+        cleanup: async () => {
+          cleanupCalls += 1;
+        },
+      }),
+      transport,
+    });
+    await session.close().catch(() => undefined);
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it("runs cleanup when openSession itself fails", async () => {
+    let cleanupCalls = 0;
+    const transport: AcpTransport = {
+      start: async () => {
+        throw new Error("spawn failure");
+      },
+    };
+    await expect(openWithHook({
+      hook: async () => ({
+        cleanup: async () => {
+          cleanupCalls += 1;
+        },
+      }),
+      transport,
+    })).rejects.toThrow();
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it("merges hook acpArgs after configured acpArgs", async () => {
+    const seen: (string[] | undefined)[] = [];
+    const transport: AcpTransport = {
+      start: async (input) => {
+        seen.push(input.acpArgs);
+        return fakeTransportConnection("cleanup-args");
+      },
+    };
+    const { cwd, artifactRoot } = await tempGit();
+    const agent = createAcpRoleAgent({
+      profile: claudeCodeProfile(),
+      executable: "fake-agent-cli",
+      diagnosis: runnableDiagnosis(),
+      mode: "non-interactive",
+      acpArgs: ["acp"],
+      sessionEnvHook: async () => ({ acpArgs: ["--process-model", "in-process"] }),
+      transport,
+    });
+    const session = await agent.openSession({ cwd, mode: "read-only", role: "planner", artifactRoot });
+    await session.close();
+    expect(seen[0]).toEqual(["acp", "--process-model", "in-process"]);
+  });
+});
+
 describe("createAcpRoleAgent integration", () => {
   it("passes configured acpArgs to the transport and defaults to an empty array", async () => {
     const startedAcpArgs: (string[] | undefined)[] = [];
@@ -253,8 +357,16 @@ describe("createAcpRoleAgent integration", () => {
     await expect(fs.access(store.terminationPath)).resolves.toBeUndefined();
     const termination = JSON.parse(await fs.readFile(store.terminationPath, "utf8")) as {
       reason?: string;
+      gracefulExit?: boolean;
+      terminateSent?: boolean;
+      residualProcesses?: number;
+      cleanupError?: { code: string };
     };
     expect(termination.reason).toBe("completed");
+    expect(termination.gracefulExit).toBe(true);
+    expect(termination.terminateSent).toBe(false);
+    expect(termination.residualProcesses).toBe(0);
+    expect(termination.cleanupError).toBeUndefined();
 
     await expect(session.close()).resolves.toBeUndefined();
   });

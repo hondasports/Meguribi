@@ -9,7 +9,11 @@ import type {
   RoleSession,
 } from "@meguribi/core";
 import { agentDisplayName, resolveDiscussionMcpPolicy, type DiscussionMcpPolicy } from "@meguribi/core";
-import { startAcpSession, type AcpSession } from "../acp/session.js";
+import {
+  COMPLETED_GRACEFUL_SHUTDOWN_MS,
+  startAcpSession,
+  type AcpSession,
+} from "../acp/session.js";
 import type { AcpTransport } from "../acp/transport.js";
 import { createPermissionMediator } from "../acp/permissions.js";
 import { AcpAgentArtifactStore } from "../acp/artifact-store.js";
@@ -28,6 +32,16 @@ export interface CreateAcpRoleAgentOptions {
   discussionMcpPolicy?: DiscussionMcpPolicy;
   transport?: AcpTransport;
   env?: NodeJS.ProcessEnv;
+  /**
+   * openSession ごとに呼ばれる環境フック。返された env / acpArgs は既定値を
+   * 上書きし、cleanup はセッション close または open 失敗時に必ず呼ばれる。
+   * MCP 隔離ディレクトリのようなセッション寿命のリソース用。
+   */
+  sessionEnvHook?: () => Promise<{
+    env?: NodeJS.ProcessEnv;
+    acpArgs?: readonly string[];
+    cleanup?: () => Promise<void>;
+  }>;
 }
 
 /**
@@ -125,7 +139,7 @@ class AcpRoleSession implements RoleSession {
     this.removeAbortListener?.();
     try {
       await this.session.shutdown("completed", {
-        gracefulShutdownMs: 1,
+        gracefulShutdownMs: COMPLETED_GRACEFUL_SHUTDOWN_MS,
         terminateTimeoutMs: 1_000,
       });
     } catch {
@@ -178,12 +192,20 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
         ? await captureGitWorktreeSnapshot({ cwd: input.cwd })
         : undefined;
 
-      const session = await startAcpSession({
+      const hookResult = options.sessionEnvHook === undefined
+        ? undefined
+        : await options.sessionEnvHook();
+      const runHookCleanup = async () => {
+        await hookResult?.cleanup?.().catch(() => undefined);
+      };
+      let session;
+      try {
+        session = await startAcpSession({
         executable: options.executable,
         executableArgs: options.executableArgs,
-        acpArgs: options.acpArgs ?? [],
+        acpArgs: [...(options.acpArgs ?? []), ...(hookResult?.acpArgs ?? [])],
         cwd: input.cwd,
-        env: options.env,
+        env: hookResult?.env ?? options.env,
         startupTimeoutMs: profile.startupTimeoutMs,
         promptTimeoutMs: profile.turnTimeoutMinutes * 60_000,
         diagnosis: options.diagnosis,
@@ -202,6 +224,11 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
         multiTurn: true,
         ...(options.transport ? { transport: options.transport } : {}),
       });
+      } catch (error) {
+        // open 失敗時は自分が作った隔離 dir だけを確実に片付ける。
+        await runHookCleanup();
+        throw error;
+      }
 
       let removeAbortListener: (() => void) | undefined;
       if (input.abortSignal) {
@@ -217,7 +244,27 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
         }
       }
 
-      return new AcpRoleSession(session, input, before, removeAbortListener);
+      const inner = new AcpRoleSession(session, input, before, removeAbortListener);
+      // close 完了・例外のいずれでも自分の隔離 dir を片付ける。冪等な cleanup 前提。
+      let cleaned = false;
+      const cleanupOnce = async () => {
+        if (cleaned) {
+          return;
+        }
+        cleaned = true;
+        await runHookCleanup();
+      };
+      return {
+        sessionId: inner.sessionId,
+        send: (prompt) => inner.send(prompt),
+        async close() {
+          try {
+            await inner.close();
+          } finally {
+            await cleanupOnce();
+          }
+        },
+      };
     },
   };
 }

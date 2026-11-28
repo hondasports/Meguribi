@@ -14,6 +14,9 @@ import {
   initialDiscussionMcpPolicy,
 } from "../consultation-view.js";
 import {
+  availableDefaultProfileIds,
+  isProfileAvailable,
+  participantAvailabilityError,
   participantToolbarSummary,
   shouldOpenOptionsForValidation,
 } from "../consultation-composer-view.js";
@@ -47,14 +50,30 @@ let submitInFlight = false;
 watch(
   () => props.defaultProfileIds,
   (ids) => {
-    if (selectedIds.value.length === 0) selectedIds.value = [...ids];
+    if (selectedIds.value.length === 0) {
+      selectedIds.value = availableDefaultProfileIds(ids, props.profiles);
+    }
   },
   { immediate: true },
 );
 
+watch(
+  () => props.profiles,
+  (profiles) => {
+    const availableIds = new Set(
+      profiles.filter((profile) => isProfileAvailable(profile)).map((profile) => profile.id),
+    );
+    selectedIds.value = selectedIds.value.filter((id) => availableIds.has(id));
+  },
+);
+
+const availabilityError = computed(() =>
+  props.loading ? null : participantAvailabilityError(props.profiles, props.loadError),
+);
+
 const disabledReason = computed(() => {
   if (props.loading) return "参加エージェントを読み込んでいます";
-  if (props.loadError !== null) return "参加エージェントを読み込めません";
+  if (availabilityError.value !== null) return availabilityError.value;
   if (props.starting) return "相談を開始しています";
   return validateConsultationInput({ prompt: prompt.value, profileIds: selectedIds.value });
 });
@@ -95,6 +114,8 @@ function clearIssue(): void {
 }
 
 function toggle(id: string): void {
+  const profile = props.profiles.find((candidate) => candidate.id === id);
+  if (profile === undefined || !isProfileAvailable(profile)) return;
   selectedIds.value = selectedIds.value.includes(id)
     ? selectedIds.value.filter((candidate) => candidate !== id)
     : [...selectedIds.value, id];
@@ -105,7 +126,9 @@ function selectDiscussionMcpPolicy(policy: DiscussionMcpPolicy): void {
 }
 
 function submit(): void {
-  if (submitInFlight || props.starting || props.loading || props.loadError !== null) return;
+  if (submitInFlight || props.starting || props.loading || availabilityError.value !== null) {
+    return;
+  }
   const error = validateConsultationInput({ prompt: prompt.value, profileIds: selectedIds.value });
   validationError.value = error;
   if (error !== null) {
@@ -173,7 +196,7 @@ watch(
         <button
           class="send-button"
           type="submit"
-          :disabled="starting || loading || loadError !== null"
+          :disabled="starting || loading || availabilityError !== null"
         >
           {{ starting ? "開始中…" : "相談を開始" }}
         </button>
@@ -188,15 +211,24 @@ watch(
           <p v-if="loading" class="muted">候補を読み込んでいます…</p>
           <p v-else-if="loadError" class="action-error standalone">{{ loadError }}</p>
           <div v-else class="option-grid">
-            <label v-for="profile in profiles" :key="profile.id" class="select-option">
+            <label
+              v-for="profile in profiles"
+              :key="profile.id"
+              :class="['select-option', { unavailable: !isProfileAvailable(profile) }]"
+            >
               <input
                 type="checkbox"
                 :checked="selectedIds.includes(profile.id)"
-                :disabled="starting"
+                :disabled="starting || !isProfileAvailable(profile)"
                 @change="toggle(profile.id)"
               />
               <span>
-                <b>{{ profile.label }}</b>
+                <span class="profile-heading">
+                  <b>{{ profile.label }}</b>
+                  <small v-if="!isProfileAvailable(profile)" class="unavailable-reason">
+                    {{ profile.unavailableReason ?? "現在利用できません" }}
+                  </small>
+                </span>
                 <small>{{ profile.id }}</small>
               </span>
             </label>
@@ -292,7 +324,10 @@ watch(
       </div>
     </div>
 
-    <p v-if="validationError" class="action-error standalone" aria-live="polite">
+    <p v-if="availabilityError" class="action-error standalone" aria-live="polite">
+      {{ availabilityError }}
+    </p>
+    <p v-else-if="validationError" class="action-error standalone" aria-live="polite">
       {{ validationError }}
     </p>
     <p v-else-if="startError" class="action-error standalone" aria-live="polite">
@@ -482,10 +517,31 @@ watch(
   margin-top: 0.1rem;
 }
 
+.select-option.unavailable {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.select-option.unavailable input {
+  cursor: not-allowed;
+}
+
+.unavailable-reason {
+  color: #f0b6a9;
+  font-weight: 700;
+}
+
 .select-option span {
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.profile-heading {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
 
 .select-option b {

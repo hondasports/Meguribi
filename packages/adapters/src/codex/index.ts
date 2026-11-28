@@ -17,3 +17,12 @@ export type {
   ReviewInput,
   VerificationSummary,
 } from "./types.js";
+export {
+  CodexExecError,
+  createCodexExecRoleAgent,
+  diagnoseCodexExec,
+} from "./exec-role-agent.js";
+export type {
+  CreateCodexExecRoleAgentOptions,
+  DiagnoseCodexExecOptions,
+} from "./exec-role-agent.js";

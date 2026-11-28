@@ -42,6 +42,11 @@ import {
   preflightCursor,
   preflightDevin,
   createRoleAgentPlanningBridge,
+  createDevinMcpIsolationFactory,
+  resolveAcpServerExecutable,
+  resolveAcpServerMainCli,
+  createCodexExecRoleAgent,
+  diagnoseCodexExec,
 } from "@meguribi/adapters";
 import {
   loadAgentsConfig,
@@ -79,6 +84,8 @@ import type { CodexClient, CodexWorkspaceGuard } from "@meguribi/adapters";
 export interface AgentWiringOverrides {
   userConfigPath?: string;
   environment?: NodeJS.ProcessEnv;
+  /** Run 状態ルート。MCP 隔離 config などの Meguribi 管理ファイルの配置に使う。 */
+  runsRoot?: string;
   loadAgentsConfig?: typeof loadAgentsConfig;
   loadImplementerConfig?: typeof loadImplementerConfig;
   loadDevinConfig?: typeof loadDevinConfig;
@@ -86,7 +93,9 @@ export interface AgentWiringOverrides {
   diagnoseAcpServer?: typeof diagnoseAcpServer;
   diagnoseDevin?: typeof diagnoseDevin;
   diagnoseCursor?: typeof diagnoseCursor;
+  diagnoseCodexExec?: typeof diagnoseCodexExec;
   createAcpRoleAgent?: typeof createAcpRoleAgent;
+  createCodexExecRoleAgent?: typeof createCodexExecRoleAgent;
   createRoleAgentPlanningBridge?: typeof createRoleAgentPlanningBridge;
   createCodexBridge?: typeof createCodexBridge;
   createAcpServerImplementer?: typeof createAcpServerImplementer;
@@ -297,10 +306,6 @@ function configSourceOptions(options: AgentWiringOverrides): {
   };
 }
 
-function profileExecutable(profile: AgentProfile): string {
-  return profile.executable ?? profile.id;
-}
-
 function isSdkCodex(profile: AgentProfile): boolean {
   return profile.kind === "codex" && profile.transport === "sdk";
 }
@@ -343,6 +348,8 @@ function roleAgentArtifactRoot(runsRoot?: string): string {
 interface AcpPlanningAgentOptions extends AgentWiringOverrides {
   repositoryPath: string;
   nonInteractive: boolean;
+  /** createDiscussionDependencies 経由の相談/議論 Run でのみ true。 */
+  discussionRun?: boolean;
   /** 議論 Run 限定の明示 MCP 方針。planner/reviewer/delivery では未定義のまま。 */
   discussionMcpPolicy?: DiscussionMcpPolicy;
 }
@@ -404,12 +411,30 @@ async function createDevinPlanningAgent(
     probeTimeoutMs: Math.min(config.config.startupTimeoutMs, 10_000),
     minimumSupportedVersion: MINIMUM_SUPPORTED_DEVIN_CLI_VERSION,
   });
+  // deny 解決時はユーザーのグローバル MCP を継承しない根本隔離を適用する。
+  // XDG_CONFIG_HOME を Meguribi 管理ディレクトリへ向け、read_config_from を
+  // 全て false にした config で import/cloud/user 由来の継承を遮断する。
+  // 認証は XDG data dir 側の credentials.toml で維持され、永続設定は変更しない。
+  // in-process 強制で共有 daemon 経由の隔離バイパスを防ぐ。検知は安全網として残る。
+  // 相談/議論 Run 限定。planner/reviewer/delivery には広げない。
+  // 隔離 dir は openSession ごとに mkdtemp で作成し、close/例外時に自分の分だけ
+  // 片付ける。繰り返しの相談で一時 dir が残り続けないようにするため、
+  // wiring 時点では作成しない。
+  const isolationFactory = options.discussionRun === true && diagnosisMcpPolicy === "deny"
+    ? createDevinMcpIsolationFactory({
+        // runsRoot 配下なら Meguribi 管理の信頼済みストア内に収まる。
+        isolationRootParent: options.runsRoot ?? "",
+        // 呼び出し側が指定した env を process.env で上書きしない。
+        baseEnv: options.environment ?? process.env,
+      })
+    : undefined;
   return createRoleAgent({
     profile: roleProfile,
     executable: config.config.executable,
     acpArgs: ["acp"],
     diagnosis,
     mode: options.nonInteractive ? "non-interactive" : "interactive",
+    ...(isolationFactory ? { sessionEnvHook: isolationFactory } : {}),
     ...discussionMcpPolicyOption(options),
   });
 }
@@ -453,6 +478,23 @@ async function createCursorPlanningAgent(
   });
 }
 
+function mainCliEnvironment(
+  mainCli: ReturnType<typeof resolveAcpServerMainCli>,
+  options: Pick<AgentWiringOverrides, "environment">,
+): NodeJS.ProcessEnv | undefined {
+  if (mainCli === undefined) return undefined;
+  return {
+    ...(options.environment ?? process.env),
+    [mainCli.executableEnvVar]: mainCli.executable,
+  };
+}
+
+function assertNativeCodexRunnable(diagnosis: { runnable: boolean; errors: readonly { message: string }[] }): void {
+  if (!diagnosis.runnable) {
+    throw new Error(diagnosis.errors[0]?.message ?? "Codex CLI is not runnable according to preflight diagnosis");
+  }
+}
+
 async function createAcpPlanningAgent(
   profile: AgentProfile,
   options: AcpPlanningAgentOptions,
@@ -463,26 +505,57 @@ async function createAcpPlanningAgent(
   if (profile.kind === "cursor") {
     return createCursorPlanningAgent(profile, options);
   }
-  const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
-  const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
-  const executable = profileExecutable(profile);
   const effectiveMcpPolicy = effectiveDiscussionMcpPolicy(
     [profile.inheritedMcpPolicy],
     options.discussionMcpPolicy,
   );
+  const diagnosisMcpPolicy = effectiveMcpPolicy ?? profile.inheritedMcpPolicy;
   const roleProfile = profileWithInheritedMcpPolicy(profile, effectiveMcpPolicy);
+  const mainCli = resolveAcpServerMainCli(profile, options.environment ?? process.env);
+  const mainCliEnv = mainCliEnvironment(mainCli, options);
+
+  if (
+    options.discussionRun === true &&
+    profile.kind === "codex" &&
+    mainCli !== undefined &&
+    diagnosisMcpPolicy === "deny"
+  ) {
+    const diagnoseNative = options.diagnoseCodexExec ?? diagnoseCodexExec;
+    const createNativeRoleAgent = options.createCodexExecRoleAgent ?? createCodexExecRoleAgent;
+    const diagnosis = await diagnoseNative({
+      profile: roleProfile,
+      executable: mainCli.executable,
+      probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
+      ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
+    });
+    assertNativeCodexRunnable(diagnosis);
+    return createNativeRoleAgent({
+      profile: roleProfile,
+      executable: mainCli.executable,
+      mcpPolicy: "deny",
+      ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
+    });
+  }
+
+  const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
+  const createRoleAgent = options.createAcpRoleAgent ?? createAcpRoleAgent;
+  const resolvedExecutable = resolveAcpServerExecutable(profile);
   const diagnosis = await diagnose({
     profile: roleProfile,
-    executable,
+    executable: resolvedExecutable.executable,
+    executableArgs: [...resolvedExecutable.executableArgs],
     cwd: options.repositoryPath,
     nonInteractive: options.nonInteractive,
     probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
+    ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
   });
   return createRoleAgent({
     profile: roleProfile,
-    executable,
+    executable: resolvedExecutable.executable,
+    executableArgs: [...resolvedExecutable.executableArgs],
     diagnosis,
     mode: options.nonInteractive ? "non-interactive" : "interactive",
+    ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
     ...discussionMcpPolicyOption(options),
   });
 }
@@ -540,17 +613,21 @@ async function preflightAcpServer(
   options: AgentWiringOverrides & {
     profile: AgentProfile;
     executable: string;
+    executableArgs?: string[];
     cwd: string;
     nonInteractive: boolean;
+    env?: NodeJS.ProcessEnv;
   },
 ) {
   const diagnose = options.diagnoseAcpServer ?? diagnoseAcpServer;
   const diagnosis = await diagnose({
     profile: options.profile,
     executable: options.executable,
+    ...(options.executableArgs === undefined ? {} : { executableArgs: options.executableArgs }),
     cwd: options.cwd,
     nonInteractive: options.nonInteractive,
     probeTimeoutMs: Math.min(options.profile.startupTimeoutMs, 10_000),
+    ...(options.env === undefined ? {} : { env: options.env }),
   });
   assertAcpServerRunnable(diagnosis);
   return diagnosis;
@@ -667,18 +744,27 @@ export async function createDeliveryDeps(
   if (config.kind === "acp-server") {
     const { profile } = config;
     const inheritedMcpPolicy = profile.inheritedMcpPolicy;
-    const executable = profileExecutable(profile);
+    const resolvedExecutable = resolveAcpServerExecutable(profile);
+    const executable = resolvedExecutable.executable;
+    const executableArgs = [...resolvedExecutable.executableArgs];
+    const mainCliEnv = mainCliEnvironment(
+      resolveAcpServerMainCli(profile, options.environment ?? process.env),
+      options,
+    );
     const diagnosis = await (options.diagnoseAcpServer ?? diagnoseAcpServer)({
       profile,
       executable,
+      executableArgs,
       nonInteractive,
       cwd,
       probeTimeoutMs: Math.min(profile.startupTimeoutMs, 10_000),
+      ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
     });
     let currentDiagnosis = diagnosis;
     const implementer = (options.createAcpServerImplementer ?? createAcpServerImplementer)({
       profile,
       executable,
+      executableArgs,
       diagnosis,
       getDiagnosis: () => currentDiagnosis,
       inheritedMcpPolicy,
@@ -686,6 +772,7 @@ export async function createDeliveryDeps(
       explicitAllowInheritedMcp: allowInheritedMcp,
       startupTimeoutMs: profile.startupTimeoutMs,
       promptTimeoutMs: profile.turnTimeoutMinutes * 60_000,
+      ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
     });
 
     const deps: DeliveryDependencies = {
@@ -713,8 +800,10 @@ export async function createDeliveryDeps(
           ...options,
           profile,
           executable,
+          executableArgs,
           cwd,
           nonInteractive,
+          ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
         });
       },
       async assertDevinReady() {
@@ -722,8 +811,10 @@ export async function createDeliveryDeps(
           ...options,
           profile,
           executable,
+          executableArgs,
           cwd,
           nonInteractive,
+          ...(mainCliEnv === undefined ? {} : { env: mainCliEnv }),
         });
       },
     };
@@ -1180,6 +1271,7 @@ export async function createDiscussionDependencies(
           ...options,
           repositoryPath,
           nonInteractive,
+          discussionRun: true,
         });
     roleAgents.set(profile.id, agent);
     return agent;

@@ -3,6 +3,8 @@ import { MAX_CONSULTATION_PROMPT_LENGTH } from "./consultation-contract.js";
 export interface DiscussionProfile {
   id: string;
   label: string;
+  available: boolean;
+  unavailableReason?: string;
 }
 
 export interface DiscussionProfilesResponse {

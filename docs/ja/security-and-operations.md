@@ -305,6 +305,8 @@ ACP の permission request は adapter 境界で `PermissionRequest` へ正規�
 
 agent CLI の保存済み MCP 設定を完全に隔離できるとは表現しません。`warn` は対話時に確認し、非対話時は明示許可なしで停止します。`deny` は検知可能な stdio / HTTP MCP 接続を SECURITY_ALERT として記録し、prompt 前または検知直後に停止します。接続先、credential、token は redaction 前の値を成果物へ保存しません。
 
+相談・議論 Run で `deny` が解決された Devin セッションでは、継承そのものを遮断する隔離を適用します。`XDG_CONFIG_HOME` を mkdtemp で作成した Meguribi 管理の固有ディレクトリ（0700）へ向け、`read_config_from` を全て false にした config を置くことで、ユーザー・import・cloud 由来の MCP 設定を読み込ませません。認証情報は XDG data dir 側に残るためコピーせず、ユーザーの永続設定も変更しません。共有 daemon 経由の隔離回避を防ぐため `--process-model in-process` を強制します。この隔離は planner / reviewer / delivery には適用しません。組織強制 plugin など隔離できない経路に備え、検知は安全網として残します。検知は行単位で、MCP 言及と接続確立の証跡（動詞・stdio / HTTP endpoint）の近接を根拠とし、Meguribi 自身の警告行や起動ログのノイズでは発火しません。
+
 ## 21. prompt と Git の安全境界
 
 Issue、comment、previous attempt、fix instruction は untrusted content として prompt 内で明示的に区切ります。repository rules、主 skill、approved plan、protected paths、limits は trusted contract として別ブロックに置きます。control character、zero-width character、delimiter の脱出、secret pattern、worktree 外 path を正規化・拒否し、prompt version と hash を保存します。

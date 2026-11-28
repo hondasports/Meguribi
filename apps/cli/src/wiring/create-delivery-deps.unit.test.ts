@@ -27,6 +27,10 @@ import {
   createPlanDependencies,
 } from "./create-delivery-deps.js";
 
+function normalizedPathForExpectation(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
 const healthyAcpDiagnosis: AgentDiagnosis = {
   executable: { status: "ok", path: "claude-agent-acp" },
   version: { status: "unknown" },
@@ -311,6 +315,7 @@ describe("createDeliveryDeps ACP wiring", () => {
     const profile = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
     if (profile === undefined) throw new Error("claude-code profile missing");
     let diagnoses = 0;
+    const diagnoseInputs: Array<{ executable?: string; executableArgs?: string[] }> = [];
     let sawImplementerOptions: unknown;
     const implementer: AgentAdapter = {
       implement: async () => {
@@ -330,8 +335,9 @@ describe("createDeliveryDeps ACP wiring", () => {
         profile,
         snapshot: {},
       }),
-      diagnoseAcpServer: async () => {
+      diagnoseAcpServer: async (input: { executable?: string; executableArgs?: string[] }) => {
         diagnoses += 1;
+        diagnoseInputs.push(input);
         return healthyAcpDiagnosis;
       },
       createAcpServerImplementer: (options) => {
@@ -344,10 +350,19 @@ describe("createDeliveryDeps ACP wiring", () => {
     expect(wiring.deps.implementerProfile).toEqual({ id: "claude-code", kind: "claude-code" });
     expect(sawImplementerOptions).toMatchObject({
       profile: { id: "claude-code" },
-      executable: "claude-agent-acp",
+      executable: process.execPath,
     });
+    expect((sawImplementerOptions as { env?: NodeJS.ProcessEnv }).env?.CLAUDE_CODE_EXECUTABLE).toBe("claude");
+    const implementerArgs = (sawImplementerOptions as { executableArgs?: string[] }).executableArgs;
+    expect(implementerArgs).toHaveLength(1);
+    expect(normalizedPathForExpectation(implementerArgs?.[0] ?? "")).toContain("@agentclientprotocol/claude-agent-acp");
     await wiring.deps.assertImplementerReady?.();
     expect(diagnoses).toBe(2);
+    for (const input of diagnoseInputs) {
+      expect(input.executable).toBe(process.execPath);
+      expect(input.executableArgs).toEqual(implementerArgs);
+      expect((input as { env?: NodeJS.ProcessEnv }).env?.CLAUDE_CODE_EXECUTABLE).toBe("claude");
+    }
   });
 
   it("passes the injected agent observer to role planning and delivery dependencies", async () => {
@@ -764,6 +779,193 @@ describe("createDiscussionDependencies", () => {
     expect(typeof deps.createStore).toBe("function");
     expect(typeof deps.parseEnvelope).toBe("function");
     expect(typeof deps.hashConclusion).toBe("function");
+  });
+
+  it("uses the same bundled executable resolution for discussion diagnosis and startup", async () => {
+    const claude = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
+    const codex = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "codex-acp");
+    if (claude === undefined || codex === undefined) throw new Error("builtin ACP profiles missing");
+    const diagnoseInputs: Array<{ executable?: string; executableArgs?: string[] }> = [];
+    const roleInputs: Array<{ executable?: string; executableArgs?: string[] }> = [];
+    const agents = {
+      profiles: [claude, codex],
+      roles: {
+        discussants: ["claude-code", "codex-acp"],
+        planner: "codex",
+        reviewer: "codex",
+        allowSameImplementerReviewer: false,
+      },
+      snapshot: {},
+    };
+
+    await createDiscussionDependencies({
+      ...baseOptions(agents),
+      diagnoseAcpServer: async (input: { executable?: string; executableArgs?: string[] }) => {
+        diagnoseInputs.push(input);
+        return healthyAcpDiagnosis;
+      },
+      createAcpRoleAgent: (input: { profile: AgentProfile; executable?: string; executableArgs?: string[] }) => {
+        roleInputs.push(input);
+        return unusedRoleAgent(input.profile.id);
+      },
+    } as never);
+
+    expect(diagnoseInputs).toHaveLength(2);
+    expect(roleInputs).toHaveLength(2);
+    for (const [index, input] of diagnoseInputs.entries()) {
+      expect(input.executable).toBe(process.execPath);
+      expect(input.executableArgs).toEqual(roleInputs[index]?.executableArgs);
+      expect(normalizedPathForExpectation(input.executableArgs?.[0] ?? "")).toContain("@agentclientprotocol/");
+    }
+  });
+
+  it("routes only the standard Codex ACP profile to native exec when the effective discussion policy is deny", async () => {
+    const claude = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
+    const codex = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "codex-acp");
+    if (claude === undefined || codex === undefined) throw new Error("builtin ACP profiles missing");
+    const nativeCreated: Array<Record<string, unknown>> = [];
+    const nativeDiagnosed: Array<Record<string, unknown>> = [];
+    const acpCreated: string[] = [];
+    const agents = {
+      profiles: [claude, codex],
+      roles: {
+        discussants: ["claude-code", "codex-acp"],
+        planner: "codex",
+        reviewer: "codex",
+        allowSameImplementerReviewer: false,
+      },
+      snapshot: {},
+    };
+
+    await createDiscussionDependencies({
+      ...baseOptions(agents),
+      discussionMcpPolicy: "deny",
+      diagnoseCodexExec: async (input: Record<string, unknown>) => {
+        nativeDiagnosed.push(input);
+        return healthyAcpDiagnosis;
+      },
+      createCodexExecRoleAgent: (input: Record<string, unknown>) => {
+        nativeCreated.push(input);
+        return unusedRoleAgent((input.profile as AgentProfile).id);
+      },
+      createAcpRoleAgent: (input: { profile: AgentProfile }) => {
+        acpCreated.push(input.profile.id);
+        return unusedRoleAgent(input.profile.id);
+      },
+    } as never);
+
+    expect(nativeCreated).toHaveLength(1);
+    expect(nativeCreated[0]).toMatchObject({
+      executable: "codex",
+      mcpPolicy: "deny",
+      profile: { id: "codex-acp", inheritedMcpPolicy: "deny" },
+    });
+    expect((nativeCreated[0]?.env as NodeJS.ProcessEnv | undefined)?.CODEX_PATH).toBe("codex");
+    expect(nativeDiagnosed[0]).toMatchObject({ executable: "codex" });
+    expect(acpCreated).toEqual(["claude-code"]);
+  });
+
+  it("does not route planner or reviewer Codex ACP roles to native exec outside discussion runs", async () => {
+    const codex = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "codex-acp");
+    if (codex === undefined) throw new Error("codex-acp profile missing");
+    let nativeCalls = 0;
+    const agents = {
+      profiles: [codex],
+      roles: {
+        discussants: [],
+        planner: "codex-acp",
+        reviewer: "codex-acp",
+        allowSameImplementerReviewer: true,
+      },
+      snapshot: {},
+    };
+
+    await createPlanDependencies({
+      cwd: "C:/fixture/repository",
+      repositoryPath: "C:/fixture/repository",
+      repository: "owner/repo",
+      localOnly: true,
+      useLocalFakes: true,
+      loadAgentsConfig: async () => agents as never,
+      discussionMcpPolicy: "deny",
+      diagnoseAcpServer: async () => healthyAcpDiagnosis,
+      createCodexExecRoleAgent: () => {
+        nativeCalls += 1;
+        return unusedRoleAgent("unexpected");
+      },
+      createAcpRoleAgent: (input: { profile: AgentProfile }) => unusedRoleAgent(input.profile.id),
+    } as never);
+
+    expect(nativeCalls).toBe(0);
+  });
+
+  it("keeps standard Codex on the ACP bridge when the effective discussion policy is allow", async () => {
+    const claude = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
+    const codex = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "codex-acp");
+    if (claude === undefined || codex === undefined) throw new Error("builtin ACP profiles missing");
+    let nativeCalls = 0;
+    const acpCreated: string[] = [];
+    const agents = {
+      profiles: [claude, codex],
+      roles: {
+        discussants: ["claude-code", "codex-acp"],
+        planner: "codex",
+        reviewer: "codex",
+        allowSameImplementerReviewer: false,
+      },
+      snapshot: {},
+    };
+
+    await createDiscussionDependencies({
+      ...baseOptions(agents),
+      discussionMcpPolicy: "allow",
+      createCodexExecRoleAgent: () => {
+        nativeCalls += 1;
+        return unusedRoleAgent("unexpected");
+      },
+      createAcpRoleAgent: (input: { profile: AgentProfile }) => {
+        acpCreated.push(input.profile.id);
+        return unusedRoleAgent(input.profile.id);
+      },
+    } as never);
+
+    expect(nativeCalls).toBe(0);
+    expect(acpCreated).toEqual(["claude-code", "codex-acp"]);
+  });
+
+  it("keeps a custom Codex ACP executable on the ACP bridge even when policy is deny", async () => {
+    const claude = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "claude-code");
+    const codex = BUILTIN_AGENT_PROFILES.find((candidate) => candidate.id === "codex-acp");
+    if (claude === undefined || codex === undefined) throw new Error("builtin ACP profiles missing");
+    const customCodex = { ...codex, executable: "/opt/custom/codex-acp" };
+    let nativeCalls = 0;
+    const acpCreated: string[] = [];
+    const agents = {
+      profiles: [claude, customCodex],
+      roles: {
+        discussants: ["claude-code", "codex-acp"],
+        planner: "codex",
+        reviewer: "codex",
+        allowSameImplementerReviewer: false,
+      },
+      snapshot: {},
+    };
+
+    await createDiscussionDependencies({
+      ...baseOptions(agents),
+      discussionMcpPolicy: "deny",
+      createCodexExecRoleAgent: () => {
+        nativeCalls += 1;
+        return unusedRoleAgent("unexpected");
+      },
+      createAcpRoleAgent: (input: { profile: AgentProfile }) => {
+        acpCreated.push(input.profile.id);
+        return unusedRoleAgent(input.profile.id);
+      },
+    } as never);
+
+    expect(nativeCalls).toBe(0);
+    expect(acpCreated).toEqual(["claude-code", "codex-acp"]);
   });
 
   it("uses roles.summarizer when specified", async () => {

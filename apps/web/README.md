@@ -21,7 +21,7 @@ meguribi desk --port 4199
 4. MCP は既定の `使わない（deny）` か、この相談だけの `今回だけ許可（allow）` を選ぶ
 5. `相談を開始` を押す
 
-参加エージェント候補と既定選択は `GET /api/discussion/profiles` が返す実設定由来の値です。開始は `POST /api/discussions` へ `{ prompt, profileIds, target?, discussionMcpPolicy }` を送り、成功時は永続 RunStore ID を受け取ります。`discussionMcpPolicy` は `deny` または `allow` で、送信後に画面の選択は安全側の `deny` へ戻ります。`deny` は検出した MCP 接続を停止し、`allow` はその相談 Run だけ継承を許可します。固定 `deny` の設定は UI の `allow` では弱めず、この選択は `discuss-to-pr` や delivery の implementer 許可へは波及しません。Issue target を付けた通常開始でも、実装・push・Draft PR 作成へ自動では進みません。実装まで進める `discuss-to-pr` は、明示的に選択した workflow だけです。
+参加エージェント候補と既定選択は `GET /api/discussion/profiles` が返す実設定由来の値です。利用できないプロファイルは理由（`unavailableReason` —— 未インストール、未認証、ACP 非対応など）を表示したうえで選択できません。組み込みの `claude-code` / `codex-acp` ブリッジは Meguribi 同梱のため追加インストールは不要で、本体 CLI の認証済みであれば利用できます。開始は `POST /api/discussions` へ `{ prompt, profileIds, target?, discussionMcpPolicy }` を送り、成功時は永続 RunStore ID を受け取ります。`discussionMcpPolicy` は `deny` または `allow` で、送信後に画面の選択は安全側の `deny` へ戻ります。`deny` は Devin セッションで保存済み MCP 設定の継承を隔離したうえで残りの経路の接続を停止し、`allow` はその相談 Run だけ継承を許可します。固定 `deny` の設定は UI の `allow` では弱めず、この選択は `discuss-to-pr` や delivery の implementer 許可へは波及しません。Issue target を付けた通常開始でも、実装・push・Draft PR 作成へ自動では進みません。実装まで進める `discuss-to-pr` は、明示的に選択した workflow だけです。
 
 開始後はスレッドワークスペースへ移り、左側に相談・議論の一覧、中央に相談内容と話者名付きの会話、下部に追加入力が表示されます。一覧はタイトル・識別子で検索でき、矢印キーでも移動できます。状態は一覧と会話ヘッダーのラベルで確認できます。大きな新規入力フォームは畳まれ、`新規相談` / `新しい相談` から入力画面へ戻れます。`相談へ戻る` で進行中の会話へ復帰できます。長い会話は中央の会話領域をスクロールして読み、追加入力は下部に固定されたままです。
 

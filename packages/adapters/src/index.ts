@@ -22,6 +22,7 @@ export type {
   GitWorktreeSnapshot,
   GitWorktreeSnapshotInput,
 } from "./git-boundary.js";
+export * from "./devin/mcp-isolation.js";
 export {
   assertDevinRunnable,
   createDevinAcpAdapter,
@@ -122,11 +123,15 @@ export {
   createAcpRoleAgent,
   diagnoseAcpServer,
   formatAcpServerDiagnosisHuman,
+  resolveAcpServerExecutable,
+  resolveAcpServerMainCli,
   RoleSessionWriteViolationError,
 } from "./acp-server/index.js";
 export type {
   CreateAcpRoleAgentOptions,
   DiagnoseAcpServerOptions,
+  ResolvedAcpServerExecutable,
+  ResolvedAcpServerMainCli,
 } from "./acp-server/index.js";
 export {
   ACP_SERVER_PROMPT_VERSION,

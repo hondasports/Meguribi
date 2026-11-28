@@ -28,6 +28,8 @@ import {
   type GitWorktreeSnapshot,
 } from "../git-boundary.js";
 
+export const COMPLETED_GRACEFUL_SHUTDOWN_MS = 2_000;
+
 export interface AcpAgentSessionMetadata {
   sessionId: string;
   cwd: string;
@@ -249,7 +251,10 @@ class AcpSessionImpl implements AcpSession {
       });
       turnFinished = true;
       if (!this.multiTurn) {
-        await this.shutdown("completed", { gracefulShutdownMs: 1, terminateTimeoutMs: 1_000 });
+        await this.shutdown("completed", {
+          gracefulShutdownMs: COMPLETED_GRACEFUL_SHUTDOWN_MS,
+          terminateTimeoutMs: 1_000,
+        });
       }
     } catch (error) {
       const agentError =
@@ -324,7 +329,7 @@ class AcpSessionImpl implements AcpSession {
 
   async terminate(graceMs?: number): Promise<void> {
     await this.shutdown("completed", {
-      gracefulShutdownMs: 1,
+      gracefulShutdownMs: COMPLETED_GRACEFUL_SHUTDOWN_MS,
       terminateTimeoutMs: graceMs ?? 1_000,
     });
   }
