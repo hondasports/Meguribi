@@ -83,6 +83,7 @@ describe("runWorkflow", () => {
     const definition: WorkflowDefinition = {
       name: "test",
       steps: [
+        // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
         { id: "plan", kind: "plan", then: "verify" },
         { id: "implement", kind: "implement" },
         { id: "verify", kind: "verify" },
@@ -104,6 +105,7 @@ describe("runWorkflow", () => {
       name: "test",
       steps: [
         { id: "verify", kind: "verify", onFailure: { goto: "fix", max: 2 } },
+        // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
         { id: "fix", kind: "fix", of: "verify", then: "verify" },
       ],
     };

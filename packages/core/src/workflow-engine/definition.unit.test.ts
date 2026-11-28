@@ -13,8 +13,11 @@ function deliveryLikeDefinition(): WorkflowDefinition {
       { id: "plan", kind: "plan" },
       { id: "implement", kind: "implement" },
       { id: "verify", kind: "verify", onFailure: { goto: "fix-after-verify", max: 1 } },
+      // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
       { id: "review", kind: "review", then: "publish", onChangesRequired: { goto: "fix-after-review", max: 1 } },
+      // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
       { id: "fix-after-verify", kind: "fix", of: "verify", then: "review" },
+      // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
       { id: "fix-after-review", kind: "fix", of: "review", then: "publish", onChangesRequired: { goto: "fix-after-review", max: 3 } },
       { id: "publish", kind: "publish" },
     ],
@@ -45,6 +48,7 @@ describe("validateWorkflowDefinition", () => {
     const definition: WorkflowDefinition = {
       name: "x",
       steps: [
+        // oxlint-disable-next-line unicorn/no-thenable -- ワークフロー定義の `then` はデータフィールドであり thenable ではない
         { id: "a", kind: "plan", then: "missing-then" },
         { id: "b", kind: "fix", of: "missing-of" },
         { id: "c", kind: "verify", onFailure: { goto: "missing-goto", max: 1 } },
