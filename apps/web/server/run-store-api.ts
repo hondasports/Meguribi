@@ -29,6 +29,8 @@ export interface RunSummary {
   currentStep?: string;
   updatedAt: string;
   pullRequestNumber: number | null;
+  /** 永続化された相談/議論プロンプト由来の表示タイトル。解決できない場合は省略する。 */
+  title?: string;
 }
 
 export type PipelineStepStatus = "pending" | "running" | "completed" | "failed";
@@ -52,6 +54,8 @@ export interface DiscussionDetail {
   approval: ApprovalRecord | null;
   canInterject: boolean;
   canDecide: boolean;
+  /** 履歴再読み込みで利用者の入力を復元するためのマスク済みプロンプト。保存されていない Run では省略。 */
+  prompt?: string;
 }
 
 export interface RunStoreApiOptions {
@@ -136,6 +140,72 @@ function parseListLimit(searchParams: URLSearchParams): number | null {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed < 1) return null;
   return Math.min(parsed, MAX_LIST_LIMIT);
+}
+
+/**
+ * 永続化プロンプト（topic / userRequest）から表示タイトルを作る。
+ * 最初の非空行を使い、長い場合は 80 文字で切り詰める。文字列以外や空は undefined。
+ */
+export function artifactPromptTitle(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  // 利用者のプロンプトには token や URL が紛れ込みうる。
+  // 履歴タイトルは広く表示されるため、行抽出・切り詰めより先に redact する
+  //（切り詰め後に redact すると、パターンが途中で切れて検出を逃がす）。
+  const redacted = redactDiagnosticText(value);
+  const firstLine = redacted
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (firstLine === undefined) return undefined;
+  return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
+}
+
+/**
+ * Run ごとの永続化入力アーティファクトからタイトルを安全・有限に読み出す。
+ * - 対象は consult / discuss だけ（他コマンドは読まない）
+ * - 破損・型不正・読み取り失敗は一覧全体を落とさず undefined に倒す
+ * - 呼び出し件数は listRecent の limit で既に上限済み
+ */
+async function readRunTitle(
+  runStore: FileSystemRunStore,
+  state: RunState,
+): Promise<string | undefined> {
+  return artifactPromptTitle(await readPersistedPrompt(runStore, state));
+}
+
+/**
+ * 保存済み入力アーティファクトから利用者プロンプトを安全に読み、redact 済みで返す。
+ * consult は consultation-input.json の topic、discuss は discussion-input.json の
+ * userRequest を使う。破損・型不正・読み取り失敗では undefined に倒し、
+ * 利用者の操作を失敗させない。redact はここで一括適用し、全利用者で漏れないようにする。
+ */
+async function readPersistedPrompt(
+  runStore: FileSystemRunStore,
+  state: RunState,
+): Promise<string | undefined> {
+  try {
+    if (state.command === "consult") {
+      const artifact = await runStore.readArtifact<{ topic?: unknown }>(
+        state.runId,
+        "consultation-input.json",
+      );
+      return typeof artifact?.topic === "string" ? redactDiagnosticText(artifact.topic) : undefined;
+    }
+    if (state.command === "discuss") {
+      const artifact = await runStore.readArtifact<{ userRequest?: unknown}>(
+        state.runId,
+        "discussion-input.json",
+      );
+      return typeof artifact?.userRequest === "string"
+        ? redactDiagnosticText(artifact.userRequest)
+        : undefined;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function summarizeRun(state: RunState): RunSummary {
@@ -275,12 +345,14 @@ export async function readDiscussionDetail(
     runStore.readArtifact<unknown>(runId, "approval.json"),
   ]);
   const approval = isApprovalRecord(approvalValue) ? approvalValue : null;
+  const prompt = await readPersistedPrompt(runStore, state);
   return {
     turns: redacted(turns),
     conclusion: conclusion === null ? null : redacted(conclusion),
     approval: approval === null ? null : redacted(approval),
     canInterject: !INTERJECT_CLOSED_STATUSES.has(state.status),
     canDecide: state.command === "discuss" && state.status === "awaiting_human" && conclusion !== null,
+    ...(prompt === undefined ? {} : { prompt }),
   };
 }
 
@@ -316,7 +388,14 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
       return;
     }
     const states = await options.runStore.listRecent(limit);
-    writeJson(res, 200, states.map(summarizeRun));
+    const summaries = await Promise.all(
+      states.map(async (state) => {
+        const summary = summarizeRun(state);
+        const title = await readRunTitle(options.runStore, state);
+        return title === undefined ? summary : { ...summary, title };
+      }),
+    );
+    writeJson(res, 200, summaries);
   }
 
   async function handleDetail(runId: string, res: http.ServerResponse): Promise<void> {

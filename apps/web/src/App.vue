@@ -9,14 +9,20 @@ import DiscussionThread from "./components/DiscussionThread.vue";
 import InterjectBox from "./components/InterjectBox.vue";
 import RunList from "./components/RunList.vue";
 import RunPipeline from "./components/RunPipeline.vue";
+import ThreadSidebar from "./components/ThreadSidebar.vue";
 import {
   createConsultationApi,
   type DiscussionProfile,
   type StartDiscussionInput,
 } from "./consultation-api.js";
-import { consultationTitle, isConsultationCommand } from "./consultation-view.js";
+import {
+  consultationPromptForDisplay,
+  consultationTitle,
+  isConsultationCommand,
+} from "./consultation-view.js";
 import { createDiscussionApi, type DiscussionDetail } from "./discussion-api.js";
 import { buildConclusionView } from "./discussion-view.js";
+import { isCurrentRunSelection, type RunSelectionToken } from "./run-selection.js";
 import { applyDetail, applyLog, createRunViewState } from "./run-view.js";
 
 type CommandId =
@@ -271,6 +277,7 @@ const consultationProfilesError = ref<string | null>(null);
 const consultationStartError = ref<string | null>(null);
 const consultationStarting = ref(false);
 const consultationComposerVisible = ref(true);
+const consultationSidebarOpen = ref(false);
 const consultationPrompts = ref<Record<string, string>>({});
 const discussionDetail = ref<DiscussionDetail | null>(null);
 const discussionLoading = ref(false);
@@ -282,9 +289,21 @@ const interjectionNotice = ref<string | null>(null);
 const discussionActionPending = ref<"say" | "approve" | "reject" | null>(null);
 const discussionThreadRef = ref<InstanceType<typeof DiscussionThread> | null>(null);
 const interjectBoxRef = ref<InstanceType<typeof InterjectBox> | null>(null);
+const consultationRunSummaries = computed(() =>
+  runSummaries.value.filter((run) => isConsultationCommand(run.command)),
+);
+const selectedRunSummary = computed(() => {
+  const runId = selectedRunId.value;
+  return runId === null
+    ? null
+    : (runSummaries.value.find((run) => run.runId === runId) ?? null);
+});
 const activeConsultationPrompt = computed(() => {
   const runId = selectedRunId.value;
-  return runId === null ? null : (consultationPrompts.value[runId] ?? null);
+  return consultationPromptForDisplay({
+    persistedPrompt: discussionDetail.value?.prompt,
+    localPrompt: runId === null ? undefined : consultationPrompts.value[runId],
+  });
 });
 const activeConsultationTitle = computed(() =>
   activeConsultationPrompt.value === null
@@ -292,6 +311,8 @@ const activeConsultationTitle = computed(() =>
     : consultationTitle(activeConsultationPrompt.value),
 );
 const selectedRunTitle = computed(() => {
+  const summaryTitle = selectedRunSummary.value?.title?.trim();
+  if (summaryTitle !== undefined && summaryTitle.length > 0) return summaryTitle;
   const state = runDetail.value?.state;
   if (state === undefined) return "相談";
   if (state.command === "consult") return activeConsultationTitle.value;
@@ -310,6 +331,20 @@ const conclusionView = computed(() => {
 let runListTimer: ReturnType<typeof setInterval> | undefined;
 let runEvents: EventSource | undefined;
 let discussionLoadingFor: string | null = null;
+let runSelectionVersion = 0;
+
+function currentRunSelectionToken(runId: string): RunSelectionToken {
+  return { runId, version: runSelectionVersion };
+}
+
+function nextRunSelectionToken(runId: string): RunSelectionToken {
+  runSelectionVersion += 1;
+  return currentRunSelectionToken(runId);
+}
+
+function isCurrentSelection(token: RunSelectionToken): boolean {
+  return isCurrentRunSelection(token, selectedRunId.value, runSelectionVersion);
+}
 
 const runStatusLabels: Record<string, string> = {
   created: "作成済み",
@@ -367,6 +402,18 @@ async function startConsultation(input: StartDiscussionInput): Promise<void> {
 function showNewConsultation(): void {
   consultationStartError.value = null;
   consultationComposerVisible.value = true;
+  consultationSidebarOpen.value = false;
+}
+
+function selectWorkspaceView(view: "consult" | "commands" | "runs"): void {
+  activeView.value = view;
+  consultationSidebarOpen.value = false;
+}
+
+function selectConsultationRun(runId: string): void {
+  consultationComposerVisible.value = false;
+  consultationSidebarOpen.value = false;
+  selectRun(runId);
 }
 
 function returnToConsultation(): void {
@@ -398,32 +445,38 @@ function resetDiscussionState(): void {
   discussionActionPending.value = null;
 }
 
-async function loadDiscussion(runId: string): Promise<void> {
-  if (discussionLoadingFor === runId) return;
+async function loadDiscussion(
+  runId: string,
+  token = currentRunSelectionToken(runId),
+): Promise<void> {
+  if (!isCurrentSelection(token) || discussionLoadingFor === runId) return;
   discussionLoadingFor = runId;
   discussionLoading.value = true;
   discussionError.value = null;
   try {
     const detail = await discussionApi.load(runId);
-    if (selectedRunId.value === runId) discussionDetail.value = detail;
+    if (isCurrentSelection(token)) discussionDetail.value = detail;
   } catch (cause) {
-    if (selectedRunId.value === runId) discussionError.value = errorText(cause);
+    if (isCurrentSelection(token)) discussionError.value = errorText(cause);
   } finally {
     if (discussionLoadingFor === runId) {
       discussionLoadingFor = null;
-      if (selectedRunId.value === runId) discussionLoading.value = false;
+      if (isCurrentSelection(token)) discussionLoading.value = false;
     }
   }
 }
 
-async function refreshRunDetail(runId: string): Promise<void> {
+async function refreshRunDetail(
+  runId: string,
+  token = currentRunSelectionToken(runId),
+): Promise<void> {
   const response = await fetch(`/api/run-store/runs/${encodeURIComponent(runId)}`).catch(
     () => null,
   );
   if (response === null || !response.ok) return;
   try {
     const detail = (await response.json()) as RunDetail;
-    if (selectedRunId.value === runId) runView.value = applyDetail(runView.value, detail);
+    if (isCurrentSelection(token)) runView.value = applyDetail(runView.value, detail);
   } catch {
     return;
   }
@@ -437,11 +490,13 @@ function actionFailureText(result: { stderr?: string }, fallback: string): strin
 async function submitInterjection(message: string): Promise<void> {
   const runId = selectedRunId.value;
   if (runId === null || discussionActionPending.value !== null) return;
+  const token = currentRunSelectionToken(runId);
   discussionActionPending.value = "say";
   interjectionError.value = null;
   interjectionNotice.value = null;
   try {
     const result = await discussionApi.say(runId, message);
+    if (!isCurrentSelection(token)) return;
     if (result.ok) {
       interjectBoxRef.value?.clear();
       interjectionNotice.value = result.stdout?.trim() || "発言を送りました";
@@ -449,56 +504,60 @@ async function submitInterjection(message: string): Promise<void> {
       interjectionError.value = actionFailureText(result, "発言を送れませんでした");
     }
   } catch (cause) {
-    interjectionError.value = errorText(cause);
+    if (isCurrentSelection(token)) interjectionError.value = errorText(cause);
   } finally {
-    discussionActionPending.value = null;
+    if (isCurrentSelection(token)) discussionActionPending.value = null;
   }
 }
 
 async function approveCurrentDiscussion(): Promise<void> {
   const runId = selectedRunId.value;
   if (runId === null || discussionActionPending.value !== null) return;
+  const token = currentRunSelectionToken(runId);
   discussionActionPending.value = "approve";
   discussionActionError.value = null;
   discussionActionNotice.value = null;
   try {
     const result = await discussionApi.approve(runId);
+    if (!isCurrentSelection(token)) return;
     if (result.ok) {
       discussionActionNotice.value = result.stdout?.trim() || "結論を承認しました";
-      await Promise.all([loadDiscussion(runId), refreshRunDetail(runId)]);
+      await Promise.all([loadDiscussion(runId, token), refreshRunDetail(runId, token)]);
       void loadRuns();
     } else {
       discussionActionError.value = actionFailureText(result, "結論を承認できませんでした");
     }
   } catch (cause) {
-    discussionActionError.value = errorText(cause);
+    if (isCurrentSelection(token)) discussionActionError.value = errorText(cause);
   } finally {
-    discussionActionPending.value = null;
+    if (isCurrentSelection(token)) discussionActionPending.value = null;
   }
 }
 
 async function rejectCurrentDiscussion(payload: { reason: string; redo: boolean }): Promise<void> {
   const runId = selectedRunId.value;
   if (runId === null || discussionActionPending.value !== null) return;
+  const token = currentRunSelectionToken(runId);
   discussionActionPending.value = "reject";
   discussionActionError.value = null;
   discussionActionNotice.value = null;
   try {
     const result = await discussionApi.reject(runId, payload.reason, payload.redo);
+    if (!isCurrentSelection(token)) return;
     if (result.ok) {
       discussionActionNotice.value =
         result.stdout?.trim() ||
         (payload.redo ? "却下して再議論を開始しました" : "結論を却下しました");
-      await Promise.all([loadDiscussion(runId), refreshRunDetail(runId)]);
-      if (payload.redo) openRunEvents(runId);
+      await Promise.all([loadDiscussion(runId, token), refreshRunDetail(runId, token)]);
+      if (payload.redo && isCurrentSelection(token)) openRunEvents(runId, token);
       void loadRuns();
     } else {
       discussionActionError.value = actionFailureText(result, "結論を却下できませんでした");
     }
   } catch (cause) {
-    discussionActionError.value = errorText(cause);
+    if (isCurrentSelection(token)) discussionActionError.value = errorText(cause);
   } finally {
-    discussionActionPending.value = null;
+    if (isCurrentSelection(token)) discussionActionPending.value = null;
   }
 }
 
@@ -506,18 +565,18 @@ function openDiscussionTurn(turnId: string): void {
   discussionThreadRef.value?.focusTurn(turnId);
 }
 
-function openRunEvents(runId: string): void {
+function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): void {
   closeRunEvents();
   let streamEnded = false;
   const events = new EventSource(`/api/run-store/runs/${encodeURIComponent(runId)}/stream`);
   runEvents = events;
   events.addEventListener("log", (event) => {
-    if (selectedRunId.value !== runId) return;
+    if (!isCurrentSelection(token)) return;
     const chunk = JSON.parse((event as MessageEvent).data) as { pane: string; text: string };
     runView.value = applyLog(runView.value, chunk);
   });
   events.addEventListener("detail", (event) => {
-    if (selectedRunId.value !== runId) return;
+    if (!isCurrentSelection(token)) return;
     const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
     runView.value = applyDetail(runView.value, detail);
     if (
@@ -525,11 +584,11 @@ function openRunEvents(runId: string): void {
       discussionDetail.value === null &&
       discussionLoadingFor !== runId
     ) {
-      void loadDiscussion(runId);
+      void loadDiscussion(runId, token);
     }
   });
   events.addEventListener("discussion", (event) => {
-    if (selectedRunId.value !== runId) return;
+    if (!isCurrentSelection(token)) return;
     discussionDetail.value = JSON.parse((event as MessageEvent).data) as DiscussionDetail;
     discussionError.value = null;
   });
@@ -538,12 +597,12 @@ function openRunEvents(runId: string): void {
     events.close();
   });
   events.addEventListener("error", (event) => {
-    if (selectedRunId.value !== runId) return;
+    if (!isCurrentSelection(token)) return;
     const payload = JSON.parse((event as MessageEvent).data) as { message?: string };
     runStreamError.value = payload.message ?? "Run の読み込みでエラーが発生しました";
   });
   events.onerror = () => {
-    if (!streamEnded && selectedRunId.value === runId) {
+    if (!streamEnded && isCurrentSelection(token)) {
       runStreamError.value = "Run のライブログとの接続が切れました";
     }
     events.close();
@@ -556,13 +615,15 @@ function selectRun(runId: string): void {
   runView.value = createRunViewState();
   runStreamError.value = null;
   resetDiscussionState();
+  const token = nextRunSelectionToken(runId);
   if (isConsultationCommand(runSummaries.value.find((run) => run.runId === runId)?.command ?? "")) {
-    void loadDiscussion(runId);
+    void loadDiscussion(runId, token);
   }
-  openRunEvents(runId);
+  openRunEvents(runId, token);
 }
 
 function clearSelectedRun(): void {
+  runSelectionVersion += 1;
   selectedRunId.value = null;
   runView.value = createRunViewState();
   resetDiscussionState();
@@ -618,29 +679,15 @@ onBeforeUnmount(() => {
         <span class="brand-mark">↻</span>
         <div><strong>Meguribi</strong><span>Command Desk</span></div>
       </div>
-      <nav class="view-tabs" aria-label="画面切り替え">
-        <button
-          :class="['view-tab', { active: activeView === 'consult' }]"
-          type="button"
-          @click="activeView = 'consult'"
-        >
-          相談
-        </button>
-        <button
-          :class="['view-tab', { active: activeView === 'commands' }]"
-          type="button"
-          @click="activeView = 'commands'"
-        >
-          既存操作
-        </button>
-        <button
-          :class="['view-tab', { active: activeView === 'runs' }]"
-          type="button"
-          @click="activeView = 'runs'"
-        >
-          Run履歴
-        </button>
-      </nav>
+      <button
+        class="drawer-toggle"
+        type="button"
+        aria-label="相談ナビゲーションを開く"
+        :aria-expanded="consultationSidebarOpen"
+        @click="consultationSidebarOpen = !consultationSidebarOpen"
+      >
+        ☰
+      </button>
       <div class="connection">
         <span :class="['dot', connection]"></span
         >{{ connection === "online" ? "ローカルブリッジ接続中" : "待機中" }}
@@ -649,38 +696,57 @@ onBeforeUnmount(() => {
 
     <div class="workspace">
       <template v-if="activeView === 'consult'">
-        <section class="content consultation-content">
-          <div v-if="consultationComposerVisible" class="composer-header-row">
-            <button
-              v-if="isConsultationCommand(runDetail?.state.command ?? '')"
-              class="secondary-link-button"
-              type="button"
-              @click="returnToConsultation"
-            >
-              相談へ戻る
-            </button>
-          </div>
-          <ConsultationComposer
-            v-if="consultationComposerVisible"
-            :profiles="consultationProfiles"
-            :default-profile-ids="consultationDefaultProfileIds"
-            :loading="consultationProfilesLoading"
-            :starting="consultationStarting"
-            :load-error="consultationProfilesError"
-            :start-error="consultationStartError"
-            :load-issues="consultationApi.loadIssues"
-            @start="startConsultation"
-          />
+        <button
+          v-if="consultationSidebarOpen"
+          class="sidebar-scrim"
+          type="button"
+          aria-label="相談ナビゲーションを閉じる"
+          @click="consultationSidebarOpen = false"
+        ></button>
+        <ThreadSidebar
+          :class="['consult-sidebar', { open: consultationSidebarOpen }]"
+          :runs="consultationRunSummaries"
+          :selected-run-id="selectedRunId"
+          :loading="runsLoading"
+          :error="runListError"
+          @select="selectConsultationRun"
+          @new-consultation="showNewConsultation"
+          @navigate="selectWorkspaceView"
+          @close="consultationSidebarOpen = false"
+        />
+
+        <section class="content consultation-content thread-workspace">
+          <template v-if="consultationComposerVisible">
+            <div class="composer-header-row">
+              <button
+                v-if="isConsultationCommand(runDetail?.state.command ?? '')"
+                class="secondary-link-button"
+                type="button"
+                @click="returnToConsultation"
+              >
+                相談へ戻る
+              </button>
+            </div>
+            <ConsultationComposer
+              :profiles="consultationProfiles"
+              :default-profile-ids="consultationDefaultProfileIds"
+              :loading="consultationProfilesLoading"
+              :starting="consultationStarting"
+              :load-error="consultationProfilesError"
+              :start-error="consultationStartError"
+              :load-issues="consultationApi.loadIssues"
+              @start="startConsultation"
+            />
+          </template>
 
           <section
-            v-if="
-              !consultationComposerVisible && isConsultationCommand(runDetail?.state.command ?? '')
-            "
-            class="discussion-area consultation-live"
+            v-else-if="isConsultationCommand(runDetail?.state.command ?? '')"
+            class="discussion-area consultation-live conversation-shell"
           >
-            <div class="consultation-live-header">
+            <header class="conversation-header">
               <div>
-                <h2>{{ selectedRunTitle }}</h2>
+                <span class="eyebrow">CONSULTATION</span>
+                <h1>{{ selectedRunTitle }}</h1>
               </div>
               <div class="consultation-live-actions">
                 <span class="badge">{{ selectedRunStatusLabel }}</span>
@@ -688,36 +754,54 @@ onBeforeUnmount(() => {
                   新しい相談
                 </button>
               </div>
+            </header>
+            <div class="conversation-scroll">
+              <section class="consultation-prompt-card" aria-label="相談内容">
+                <h3>相談内容</h3>
+                <p>
+                  {{ activeConsultationPrompt ?? "相談内容は現在のAPI応答からは復元できません" }}
+                </p>
+              </section>
+              <p v-if="discussionError" class="run-stream-error">{{ discussionError }}</p>
+              <p v-else-if="discussionLoading" class="discussion-loading">
+                議論を読み込んでいます…
+              </p>
+              <DiscussionThread ref="discussionThreadRef" :turns="discussionDetail?.turns ?? []" />
+              <ConclusionPanel
+                :view="conclusionView"
+                :approval="discussionDetail?.approval ?? null"
+                :can-decide="discussionDetail?.canDecide ?? false"
+                :action-pending="discussionActionPending === 'say' ? null : discussionActionPending"
+                :action-error="discussionActionError"
+                :action-notice="discussionActionNotice"
+                @approve="approveCurrentDiscussion"
+                @reject="rejectCurrentDiscussion"
+                @open-turn="openDiscussionTurn"
+              />
             </div>
-            <section class="consultation-prompt-card" aria-label="相談内容">
-              <h3>相談内容</h3>
-              <p>{{ activeConsultationPrompt ?? "相談内容は現在のAPI応答からは復元できません" }}</p>
-            </section>
-            <p v-if="discussionError" class="run-stream-error">{{ discussionError }}</p>
-            <p v-else-if="discussionLoading" class="discussion-loading">議論を読み込んでいます…</p>
-            <DiscussionThread ref="discussionThreadRef" :turns="discussionDetail?.turns ?? []" />
-            <InterjectBox
-              ref="interjectBoxRef"
-              :can-interject="discussionDetail?.canInterject ?? false"
-              :sending="discussionActionPending === 'say'"
-              @submit="submitInterjection"
-            />
-            <p v-if="interjectionError" class="action-error standalone">{{ interjectionError }}</p>
-            <p v-if="interjectionNotice" class="action-notice standalone">
-              {{ interjectionNotice }}
-            </p>
-            <ConclusionPanel
-              :view="conclusionView"
-              :approval="discussionDetail?.approval ?? null"
-              :can-decide="discussionDetail?.canDecide ?? false"
-              :action-pending="discussionActionPending === 'say' ? null : discussionActionPending"
-              :action-error="discussionActionError"
-              :action-notice="discussionActionNotice"
-              @approve="approveCurrentDiscussion"
-              @reject="rejectCurrentDiscussion"
-              @open-turn="openDiscussionTurn"
-            />
+            <footer class="thread-input-dock">
+              <p v-if="interjectionError" class="action-error standalone">
+                {{ interjectionError }}
+              </p>
+              <p v-if="interjectionNotice" class="action-notice standalone">
+                {{ interjectionNotice }}
+              </p>
+              <InterjectBox
+                ref="interjectBoxRef"
+                :can-interject="discussionDetail?.canInterject ?? false"
+                :sending="discussionActionPending === 'say'"
+                @submit="submitInterjection"
+              />
+            </footer>
           </section>
+
+          <div v-else class="empty-terminal empty-consultation">
+            <span>_</span>
+            <p>左の履歴から相談を選ぶか、新しい相談を開始してください</p>
+            <button class="secondary-link-button" type="button" @click="showNewConsultation">
+              新しい相談
+            </button>
+          </div>
         </section>
       </template>
 
