@@ -20,17 +20,24 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`status`、`workflow`、`measure`、`cleanup` です。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`desk`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`status`、`workflow`、`measure`、`cleanup` です。
 
 ### Command Desk（ローカル UI）
 
-コマンドライン入力を省略したい場合は、`apps/web` の Vite + Vue UI を起動できます。
+コマンドライン入力を省略したい場合は、Command Desk（`apps/web` の Vite + Vue UI）を起動できます。
 
-```powershell
-pnpm.cmd --filter @meguribi/web dev
+```bash
+meguribi desk
+meguribi desk --port 4199
 ```
 
-ブラウザで `http://127.0.0.1:4173` を開くと、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。stdout / stderr は SSE で表示され、成果物は通常の RunStore に保存されます。認証・リモート公開・マルチユーザー運用は提供しません。詳細は `apps/web/README.md` を参照してください。
+`meguribi desk` は Meguribi リポジトリのルートで `pnpm --filter @meguribi/web dev` を引数配列として起動し、表示された URL（既定は `http://127.0.0.1:4173`）を開いて使います。子プロセスの終了コードはそのまま CLI の終了コードになります。
+
+`コマンド` タブでは、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。stdout / stderr は SSE で表示され、成果物は通常の RunStore に保存されます。
+
+`Run` タブでは、RunStore に保存された最近の Run 一覧、delivery 工程のパイプライン、エージェントの活動状態と応答なし警告、エージェント別ライブログペイン、全体ログを読み取り専用で表示します。Command Desk から開始した Run だけでなく、CLI で実行した `meguribi run` / `resume` の Run も同じ RunStore を読むため表示されます。RunStore の場所は CLI と同じ規則で解決し、テスト用には `MEGURIBI_RUNS_ROOT` でルートを明示できます。
+
+認証・リモート公開・マルチユーザー運用は提供しません。詳細は `apps/web/README.md` を参照してください。
 
 ### `meguribi init`
 

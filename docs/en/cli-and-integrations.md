@@ -20,17 +20,24 @@ The repository may be omitted only when the current directory is a Git repositor
 
 ## 2. Commands
 
-The currently implemented CLI commands are `init`, `doctor`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `status`, `workflow`, `measure`, and `cleanup`.
+The currently implemented CLI commands are `init`, `doctor`, `desk`, `discover`, `hypothesis`, `promote`, `explore`, `require`, `plan`, `review`, `run`, `resume`, `status`, `workflow`, `measure`, and `cleanup`.
 
 ### Command Desk (local UI)
 
-When typing CLI arguments is inconvenient, start the Vite + Vue UI in `apps/web`:
+When typing CLI arguments is inconvenient, start Command Desk (the Vite + Vue UI in `apps/web`):
 
-```powershell
-pnpm.cmd --filter @meguribi/web dev
+```bash
+meguribi desk
+meguribi desk --port 4199
 ```
 
-Open `http://127.0.0.1:4173` to select and run the supported Meguribi commands. The UI does not accept arbitrary shell commands; it validates command names and options, then passes an argument array to the local Meguribi CLI. stdout / stderr are streamed over SSE, and artifacts are saved in the normal RunStore. Authentication, remote exposure, and multi-user operation are intentionally out of scope. See `apps/web/README.md` for details.
+`meguribi desk` starts `pnpm --filter @meguribi/web dev` as an argument array in the Meguribi repository root. Open the printed URL (`http://127.0.0.1:4173` by default). The child process exit code is propagated as the CLI exit code.
+
+In the `Commands` tab, select and run the supported Meguribi commands. The UI does not accept arbitrary shell commands; it validates command names and options, then passes an argument array to the local Meguribi CLI. stdout / stderr are streamed over SSE, and artifacts are saved in the normal RunStore.
+
+The `Run` tab read-only displays recent Runs from the RunStore, the delivery pipeline, agent activity including no-response warnings, per-agent live-log panes, and the combined log. It shows not only Runs started from Command Desk but also `meguribi run` / `resume` Runs started from the CLI, because both use the same RunStore. The RunStore location resolves with the same rules as the CLI; for tests, set `MEGURIBI_RUNS_ROOT` to the desired root.
+
+Authentication, remote exposure, and multi-user operation are intentionally out of scope. See `apps/web/README.md` for details.
 
 ### `meguribi init`
 
