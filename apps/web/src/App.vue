@@ -7,6 +7,7 @@ import ConclusionPanel from "./components/ConclusionPanel.vue";
 import ConsultationComposer from "./components/ConsultationComposer.vue";
 import DiscussionThread from "./components/DiscussionThread.vue";
 import InterjectBox from "./components/InterjectBox.vue";
+import LiveTerminal from "./components/LiveTerminal.vue";
 import RunList from "./components/RunList.vue";
 import RunPipeline from "./components/RunPipeline.vue";
 import ThreadSidebar from "./components/ThreadSidebar.vue";
@@ -23,6 +24,15 @@ import {
 import { createDiscussionApi, type DiscussionDetail } from "./discussion-api.js";
 import { buildConclusionView } from "./discussion-view.js";
 import { isCurrentRunSelection, type RunSelectionToken } from "./run-selection.js";
+import {
+  applyTerminalSnapshot,
+  clearPaneTextForReplay,
+  parseTerminalSnapshot,
+  reconnectDelayMs,
+  shouldReconnectRunStream,
+  streamErrorMessage,
+} from "./run-stream.js";
+import { TERMINAL_SSE_EVENT, type TerminalRow } from "./terminal-contract.js";
 import {
   canUseConsultationDrawer,
   workspaceNavItems,
@@ -270,6 +280,8 @@ const runSummaries = ref<RunSummary[]>([]);
 const runsLoading = ref(false);
 const runListError = ref<string | null>(null);
 const runStreamError = ref<string | null>(null);
+const terminalRows = ref<TerminalRow[]>([]);
+const terminalEnded = ref(false);
 const selectedRunId = ref<string | null>(null);
 const runView = ref(createRunViewState());
 const runDetail = computed(() => runView.value.detail);
@@ -345,6 +357,7 @@ const conclusionView = computed(() => {
 });
 let runListTimer: ReturnType<typeof setInterval> | undefined;
 let runEvents: EventSource | undefined;
+let runEventReconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let discussionLoadingFor: string | null = null;
 let runSelectionVersion = 0;
 
@@ -440,6 +453,8 @@ function setPaneMode(value: "agents" | "all"): void {
 }
 
 function closeRunEvents(): void {
+  if (runEventReconnectTimer !== undefined) clearTimeout(runEventReconnectTimer);
+  runEventReconnectTimer = undefined;
   runEvents?.close();
   runEvents = undefined;
 }
@@ -583,45 +598,118 @@ function openDiscussionTurn(turnId: string): void {
 function openRunEvents(runId: string, token = currentRunSelectionToken(runId)): void {
   closeRunEvents();
   let streamEnded = false;
-  const events = new EventSource(`/api/run-store/runs/${encodeURIComponent(runId)}/stream`);
-  runEvents = events;
-  events.addEventListener("log", (event) => {
-    if (!isCurrentSelection(token)) return;
-    const chunk = JSON.parse((event as MessageEvent).data) as { pane: string; text: string };
-    runView.value = applyLog(runView.value, chunk);
-  });
-  events.addEventListener("detail", (event) => {
-    if (!isCurrentSelection(token)) return;
-    const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
-    runView.value = applyDetail(runView.value, detail);
+  let reconnectAttempt = 0;
+
+  function markStreamAlive(): void {
+    reconnectAttempt = 0;
+    runStreamError.value = null;
+  }
+
+  function isLiveEvents(events: EventSource): boolean {
+    return runEvents === events && isCurrentSelection(token);
+  }
+
+  function scheduleReconnect(reason: string): void {
+    if (!isCurrentSelection(token) || streamEnded) return;
     if (
-      isConsultationCommand(detail.state.command) &&
-      discussionDetail.value === null &&
-      discussionLoadingFor !== runId
+      !shouldReconnectRunStream({
+        ended: streamEnded,
+        current: isCurrentSelection(token),
+        attempt: reconnectAttempt,
+      })
     ) {
-      void loadDiscussion(runId, token);
+      runStreamError.value = `${reason} 再接続を停止しました。Runを選び直してください。`;
+      return;
     }
-  });
-  events.addEventListener("discussion", (event) => {
-    if (!isCurrentSelection(token)) return;
-    discussionDetail.value = JSON.parse((event as MessageEvent).data) as DiscussionDetail;
-    discussionError.value = null;
-  });
-  events.addEventListener("end", () => {
-    streamEnded = true;
-    events.close();
-  });
-  events.addEventListener("error", (event) => {
-    if (!isCurrentSelection(token)) return;
-    const payload = JSON.parse((event as MessageEvent).data) as { message?: string };
-    runStreamError.value = payload.message ?? "Run の読み込みでエラーが発生しました";
-  });
-  events.onerror = () => {
-    if (!streamEnded && isCurrentSelection(token)) {
-      runStreamError.value = "Run のライブログとの接続が切れました";
+    const delay = reconnectDelayMs(reconnectAttempt);
+    reconnectAttempt += 1;
+    runStreamError.value = `${reason} 再接続します…`;
+    if (runEventReconnectTimer !== undefined) clearTimeout(runEventReconnectTimer);
+    runEventReconnectTimer = setTimeout(() => {
+      runEventReconnectTimer = undefined;
+      connect();
+    }, delay);
+  }
+
+  function connect(): void {
+    if (streamEnded || !isCurrentSelection(token)) return;
+    let expectingLogReplay = true;
+    let failureHandled = false;
+    const events = new EventSource(`/api/run-store/runs/${encodeURIComponent(runId)}/stream`);
+    runEvents = events;
+
+    function failStream(reason: string): void {
+      if (!isLiveEvents(events) || failureHandled) return;
+      failureHandled = true;
+      events.close();
+      if (runEvents === events) runEvents = undefined;
+      scheduleReconnect(reason);
     }
-    events.close();
-  };
+
+    events.addEventListener("log", (event) => {
+      if (!isLiveEvents(events)) return;
+      if (expectingLogReplay) {
+        runView.value = clearPaneTextForReplay(runView.value);
+        expectingLogReplay = false;
+      }
+      const chunk = JSON.parse((event as MessageEvent).data) as { pane: string; text: string };
+      runView.value = applyLog(runView.value, chunk);
+      markStreamAlive();
+    });
+    events.addEventListener("detail", (event) => {
+      if (!isLiveEvents(events)) return;
+      const detail = JSON.parse((event as MessageEvent).data) as NonNullable<typeof runDetail.value>;
+      runView.value = applyDetail(runView.value, detail);
+      markStreamAlive();
+      if (
+        isConsultationCommand(detail.state.command) &&
+        discussionDetail.value === null &&
+        discussionLoadingFor !== runId
+      ) {
+        void loadDiscussion(runId, token);
+      }
+    });
+    events.addEventListener("discussion", (event) => {
+      if (!isLiveEvents(events)) return;
+      discussionDetail.value = JSON.parse((event as MessageEvent).data) as DiscussionDetail;
+      discussionError.value = null;
+      markStreamAlive();
+    });
+    events.addEventListener(TERMINAL_SSE_EVENT, (event) => {
+      if (!isLiveEvents(events)) return;
+      const snapshot = parseTerminalSnapshot((event as MessageEvent).data);
+      if (snapshot === null) return;
+      terminalRows.value = applyTerminalSnapshot(snapshot);
+      markStreamAlive();
+    });
+    events.addEventListener("end", () => {
+      if (!isLiveEvents(events)) return;
+      streamEnded = true;
+      terminalEnded.value = true;
+      if (runEventReconnectTimer !== undefined) clearTimeout(runEventReconnectTimer);
+      runEventReconnectTimer = undefined;
+      events.close();
+      if (runEvents === events) runEvents = undefined;
+    });
+    events.addEventListener("error", (event) => {
+      if (!isLiveEvents(events)) return;
+      const message = streamErrorMessage((event as MessageEvent).data);
+      if (message === null) return;
+      failStream(message);
+    });
+    events.onerror = () => {
+      failStream("Run のライブログとの接続が切れました");
+    };
+  }
+
+  connect();
+}
+
+function reconnectSelectedRunStream(): void {
+  const runId = selectedRunId.value;
+  if (runId === null) return;
+  runStreamError.value = null;
+  openRunEvents(runId, currentRunSelectionToken(runId));
 }
 
 function selectRun(runId: string): void {
@@ -629,6 +717,8 @@ function selectRun(runId: string): void {
   selectedRunId.value = runId;
   runView.value = createRunViewState();
   runStreamError.value = null;
+  terminalRows.value = [];
+  terminalEnded.value = false;
   resetDiscussionState();
   const token = nextRunSelectionToken(runId);
   if (isConsultationCommand(runSummaries.value.find((run) => run.runId === runId)?.command ?? "")) {
@@ -641,6 +731,8 @@ function clearSelectedRun(): void {
   runSelectionVersion += 1;
   selectedRunId.value = null;
   runView.value = createRunViewState();
+  terminalRows.value = [];
+  terminalEnded.value = false;
   resetDiscussionState();
   closeRunEvents();
 }
@@ -817,6 +909,18 @@ onBeforeUnmount(() => {
               <p v-if="interjectionNotice" class="action-notice standalone">
                 {{ interjectionNotice }}
               </p>
+              <div v-if="runStreamError" class="run-stream-error terminal-stream-error" role="alert">
+                <span>{{ runStreamError }}</span>
+                <button class="secondary-link-button" type="button" @click="reconnectSelectedRunStream">
+                  今すぐ再接続
+                </button>
+              </div>
+              <LiveTerminal
+                v-if="selectedRunId !== null"
+                :key="selectedRunId"
+                :rows="terminalRows"
+                :ended="terminalEnded"
+              />
               <InterjectBox
                 ref="interjectBoxRef"
                 :can-interject="discussionDetail?.canInterject ?? false"

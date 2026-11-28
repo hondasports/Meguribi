@@ -601,6 +601,112 @@ describe("run-store api", () => {
     });
   });
 
+  it("streams terminal snapshot events with safe rows and reconnection-stable ids", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createDiscussionRun(runStore);
+    await runStore.update(run.runId, { status: "created" });
+    const deltaEvent = {
+      type: "agent.event" as const,
+      stepId: "discuss",
+      profileId: "alpha",
+      agentLabel: "alpha agent",
+      role: "discussant" as const,
+      event: {
+        type: "message.delta" as const,
+        sessionId: "s-1",
+        text: '{"message":"原因を調べました。設定を確認します',
+        at: "2026-11-28T12:00:00.000Z",
+      },
+    };
+    const turnCompletedEvent = {
+      type: "agent.event" as const,
+      stepId: "discuss",
+      profileId: "alpha",
+      agentLabel: "alpha agent",
+      role: "discussant" as const,
+      event: { type: "turn.completed" as const, sessionId: "s-1", at: "2026-11-28T12:00:01.000Z" },
+    };
+    const turnEvent = {
+      type: "discussion.turn" as const,
+      runId: run.runId,
+      turn: {
+        turnId: "t-1",
+        speaker: "alpha",
+        speakerLabel: "alpha agent",
+        envelope: { message: "原因を調べました。設定を確認します", replyTo: [], addressTo: [], positions: [], newIssues: [], done: false },
+        malformed: false,
+        at: "2026-11-28T12:00:02.000Z",
+      },
+      turnNumber: 1,
+      maxTurns: 9,
+    };
+    await eventLog.append(run.runId, deltaEvent, "2026-11-28T12:00:00.000Z");
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const first = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      interface TerminalPayload {
+        rows: Array<{ id: string; kind: string; text: string; active: boolean }>;
+      }
+      const terminalPayloads = (client: { events: Array<{ name: string; data: string }> }): TerminalPayload[] =>
+        client.events
+          .filter((event) => event.name === "terminal")
+          .map((event) => JSON.parse(event.data) as TerminalPayload);
+
+      await waitFor(
+        () => terminalPayloads(first).some((payload) => payload.rows.some((row) => row.id === "live-alpha")),
+        "live terminal row on first client",
+      );
+
+      await eventLog.append(run.runId, turnCompletedEvent, "2026-11-28T12:00:01.000Z");
+      await eventLog.append(run.runId, turnEvent, "2026-11-28T12:00:02.000Z");
+      await waitFor(
+        () => terminalPayloads(first).some((payload) => payload.rows.some((row) => row.id === "turn-t-1")),
+        "canonical turn row on first client",
+      );
+
+      // 再接続: 同じ履歴から再投影される snapshot の id 体系が一致し、重複行にならない。
+      const second = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await waitFor(
+        () => terminalPayloads(second).some((payload) => payload.rows.some((row) => row.id === "turn-t-1")),
+        "canonical turn row on reconnected client",
+      );
+
+      const latestFirst = terminalPayloads(first).at(-1);
+      const latestSecond = terminalPayloads(second).at(-1);
+      expect(latestFirst).toBeDefined();
+      expect(latestSecond?.rows.map((row) => row.id)).toEqual(latestFirst?.rows.map((row) => row.id));
+      const ids = latestSecond?.rows.map((row) => row.id) ?? [];
+      expect(new Set(ids).size).toBe(ids.length);
+      const turnRow = latestSecond?.rows.find((row) => row.id === "turn-t-1");
+      expect(turnRow?.kind).toBe("message");
+      expect(turnRow?.text).toContain("原因を調べました。");
+      // 生 JSON 構造は露出しない。
+      expect(turnRow?.text).not.toContain('"message"');
+      first.close();
+      second.close();
+    });
+  });
+
+  it("does not stream terminal events for delivery runs", async () => {
+    const { runStore, eventLog } = await createFixture();
+    const run = await createRun(runStore);
+    await runStore.update(run.runId, { status: "implementing", currentStep: "implementing" });
+    await eventLog.append(run.runId, liveStepStarted(), "2026-11-28T12:00:00.000Z");
+    await eventLog.append(run.runId, liveMessage("devin", "implementing now", "2026-11-28T12:00:01.000Z"), "2026-11-28T12:00:01.000Z");
+    await eventLog.append(run.runId, liveToolStarted("devin", "2026-11-28T12:00:02.000Z"), "2026-11-28T12:00:02.000Z");
+
+    await withApiServer({ runStore, eventLog, pollMs: 15 }, async (port) => {
+      const client = connectSse(port, `/api/run-store/runs/${run.runId}/stream`);
+      await waitFor(
+        () => client.events.filter((event) => event.name === "log").length >= 2,
+        "delivery log events still flow",
+      );
+      // delivery run では tool イベントがあっても terminal は一切配信しない。
+      expect(client.events.some((event) => event.name === "terminal")).toBe(false);
+      client.close();
+    });
+  });
+
   it("closes an already terminal run after replaying existing events", async () => {
     const { runStore, eventLog } = await createFixture();
     const run = await createRun(runStore);

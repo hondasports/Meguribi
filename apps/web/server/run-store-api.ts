@@ -19,6 +19,8 @@ import {
   redactJsonValue,
   type FileSystemRunStore,
 } from "@meguribi/adapters";
+import { createTerminalProjector } from "./terminal.js";
+import { TERMINAL_SSE_EVENT, type TerminalSnapshot } from "../src/terminal-contract.js";
 
 export interface RunSummary {
   runId: string;
@@ -445,6 +447,12 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
     let nextLine = 0;
     let pollCount = 0;
     let sentInitialDetail = false;
+    let lastTerminalJson = "";
+    // 相談端末の投影は consult / discuss の相談系 Run に限定する。
+    // delivery Run（run/resume 等）には tool 等の terminal 行を配信しない。
+    const terminalEnabled = initialState.command === "consult" || initialState.command === "discuss";
+    // 接続ごとの増分 projector。drain ごとの全履歴再解析を避け、新着だけを取り込む。
+    const terminalProjector = createTerminalProjector();
     let closed = false;
     let draining = false;
     let drainAgain = false;
@@ -483,6 +491,17 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
       }
     }
 
+    // terminal は bounded snapshot の置き換え配信。内容が変わったときだけ送り、
+    // 再接続では同じ snapshot が再送されるだけなので重複行にはならない。
+    function writeTerminal(force = false): void {
+      if (!terminalEnabled || closed || res.writableEnded) return;
+      const snapshot: TerminalSnapshot = { rows: terminalProjector.snapshot() };
+      const json = JSON.stringify(snapshot);
+      if (!force && json === lastTerminalJson) return;
+      lastTerminalJson = json;
+      writeSse(res, TERMINAL_SSE_EVENT, snapshot);
+    }
+
     function cleanup(): void {
       if (closed) return;
       closed = true;
@@ -501,6 +520,7 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
     function finish(status: string): void {
       if (closed) return;
       flushRenderers();
+      writeTerminal(true);
       writeSse(res, "end", { status });
       cleanup();
       res.end();
@@ -528,6 +548,12 @@ export function createRunStoreApi(options: RunStoreApiOptions): {
               sawDiscussionEvent = true;
             }
             writeRenderedEvent(record.event);
+            if (terminalEnabled) {
+              terminalProjector.ingest(record.event);
+            }
+          }
+          if (result.records.length > 0) {
+            writeTerminal();
           }
           pollCount += 1;
           if (!sentInitialDetail || result.records.length > 0 || pollCount % 5 === 0) {

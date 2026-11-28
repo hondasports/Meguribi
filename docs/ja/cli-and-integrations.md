@@ -37,6 +37,8 @@ meguribi desk --port 4199
 
 開始後はスレッドワークスペースへ移り、左側に相談・議論の一覧、中央に相談内容と話者名付きの会話、下部に追加入力が表示されます。一覧はタイトル・識別子で検索でき、矢印キーでも移動できます。状態は一覧と会話ヘッダーのラベルで確認できます。大きな新規入力フォームは畳まれ、`新規相談` / `新しい相談` から入力画面へ戻れます。`相談へ戻る` で進行中の会話へ復帰できます。長い会話は中央の会話領域をスクロールして読み、追加入力は下部に固定されたままです。
 
+端末ビューは相談の入力欄の上に置かれ、エージェントの発言・ツール実行・状態変化を時系列で確認できます。末尾にいる間だけ新しい行へ追従し、途中を読むため上へスクロールすると追従は一時停止し、末尾へ戻る操作で再開できます。表示は全員／話者ごとに切り替えられ、長い発言やツール出力は折り畳まれているため、必要な行だけ展開して確認してください。
+
 `既存操作` タブでは、許可された Meguribi コマンドを選択して実行できます。画面は任意のシェルコマンドを受け付けず、検証済みのコマンド名とオプションを引数配列としてローカルの Meguribi CLI に渡します。`Run履歴` タブでは、RunStore に保存された最近の Run 一覧、delivery 工程、エージェントの活動状態、ライブログを表示します。
 
 Issue を持たない相談は `command: "consult"` の Run として `consultations/<runId>` に保存され、`issueNumber` / `branch` / `baseRef` / `baseSha` / `headSha` は `null` です。Issue に紐付く従来の議論 Run は `command: "discuss"` を維持します。`consult` / `discuss` の発言は `replyTo` に沿ったスレッドで表示し、話者ごとの色と話者名で区別します。形式不正のターンには目印を付け、結論に含まれる turn ID から該当ターンへスクロールできます。
@@ -253,6 +255,8 @@ meguribi status 20260725T120000Z-ab12cd --json
 ```
 
 `event` には `workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished`、工程内の `step.started` / `agent.event`、回数や件数を示す `step.progress`、議論の `discussion.turn` / `discussion.ended` が入ります。保存前に secret redaction を行い、append の失敗は Run の結果や終了コードを変えず stderr に 1 回だけ警告します。読み出し時に壊れた行があれば、その行だけを飛ばして警告します。
+
+Web UI の端末表示は、この永続化済みイベントを SSE の `terminal` イベントとして bounded snapshot で受け取ります。payload は `{ rows: TerminalRow[] }` で、`TerminalRow` は `id`、`at`、`profileId`、`label`、`kind`（`message` / `tool` / `status`）、`text`、`active` を持ちます。SSEは増分ではなく最新の bounded snapshot を送るため、途中参加したクライアントも同じ端末状態へ収束します。
 
 実行中の Run を分割画面で追う例:
 
