@@ -358,6 +358,8 @@ cursor:
 
 The five built-in profiles are `claude-code`, `codex` (Codex SDK), `codex-acp`, `devin`, and `cursor`. Use `agents` to define additional profiles with their own `kind` / `transport` / timeout / `inheritedMcpPolicy`. Use `roles` to assign profile IDs to roles such as `planner`, `implementer`, and `reviewer`. `roles.implementer` accepts only a `transport: acp` profile, and the same profile cannot be assigned to both `implementer` and `reviewer` unless `allowSameImplementerReviewer: true` is explicit. `codex` (`transport: sdk`) remains available as the compatibility path for planning and review, but cannot be the implementer.
 
+Only `codex` (`transport: sdk`) and profiles for standalone ACP servers such as `claude-code` / `codex-acp` can be assigned to `planner` and `reviewer`. Profiles whose `kind` is `devin` or `cursor` can currently be assigned only to `implementer`. If one of these profiles is assigned to `planner` or `reviewer`, the CLI stops with a `RoleAssignmentError` whose code is `transport_unsupported`. Support for using `devin` / `cursor` in planning, review, and discussion roles is planned for a future P3.
+
 To use Claude Code / Codex ACP, the user must explicitly install the corresponding package and complete authentication:
 
 ```bash

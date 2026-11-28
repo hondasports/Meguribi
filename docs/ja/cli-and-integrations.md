@@ -367,6 +367,8 @@ cursor:
 
 組み込みプロファイルは `claude-code`、`codex`（Codex SDK）、`codex-acp`、`devin`、`cursor` の5つです。`agents` では同じ `kind` / `transport` / timeout / `inheritedMcpPolicy` を持つ別プロファイルを定義できます。`roles` は `planner`、`implementer`、`reviewer` などの役割へプロファイル ID を割り当てます。`roles.implementer` には `transport: acp` のプロファイルだけを指定でき、`allowSameImplementerReviewer: true` を明示しない限り `implementer` と `reviewer` に同じプロファイルを割り当てられません。`codex`（`transport: sdk`）は計画・レビューの互換経路として使えますが、実装担当には使えません。
 
+`planner` と `reviewer` に割り当てられるのは、`codex`（`transport: sdk`）と、`claude-code` / `codex-acp` などの単体 ACP サーバーのプロファイルです。`kind` が `devin` / `cursor` のプロファイルは、現在 `implementer` にだけ割り当てられます。これらを `planner` / `reviewer` に割り当てると、CLI は `transport_unsupported` の `RoleAssignmentError` で停止します。`devin` / `cursor` を計画・レビュー・議論の役割で使えるようにする対応は、今後（P3）の予定です。
+
 Claude Code / Codex ACP を使う場合は、それぞれ次のパッケージを利用者が明示的に導入し、認証済みであることを確認してください。
 
 ```bash
