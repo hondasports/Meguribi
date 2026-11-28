@@ -265,3 +265,9 @@ export {
   DISCUSSION_PROMPT_VERSION,
   type DiscussionBrief,
 } from "./discussion/prompt.js";
+
+// discussion adapters
+export type {
+  DiscussionStorePort,
+  SummarizeDiscussionInput,
+} from "./discussion/ports.js";
