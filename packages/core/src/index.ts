@@ -198,3 +198,29 @@ export { CODE_REVIEW_MARKER, reviewIssue } from "./review.js";
 export type { PublishGateInput } from "./workflow/delivery.js";
 export { buildFixInstruction } from "./workflow/fix-instruction.js";
 export { matchesProtectedPath } from "./path-match.js";
+export {
+  assertValidWorkflowDefinition,
+  STEP_KINDS,
+  validateWorkflowDefinition,
+  WorkflowDefinitionError,
+} from "./workflow-engine/definition.js";
+export type {
+  StepDefinition,
+  StepKind,
+  StepTransition,
+  WorkflowDefinition,
+  WorkflowDefinitionIssue,
+  WorkflowDefinitionIssueCode,
+} from "./workflow-engine/definition.js";
+export { MissingStepHandlerError, runWorkflow } from "./workflow-engine/engine.js";
+export type {
+  RunWorkflowInput,
+  StepHandler,
+  StepHandlerContext,
+  StepOutcome,
+  StepStateRecord,
+  StepStateStore,
+  WorkflowRunResult,
+} from "./workflow-engine/engine.js";
+export type { WorkflowEvent } from "./workflow-engine/events.js";
+export { createRunStoreStepStateStore } from "./workflow-engine/run-store-step-state.js";
