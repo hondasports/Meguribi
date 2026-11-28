@@ -234,3 +234,12 @@ export type {
   WorkflowEventLog,
   WorkflowEventRecord,
 } from "./workflow-engine/event-log.js";
+export {
+  DEFAULT_DISCUSSION_LIMITS,
+  type DiscussionConclusion,
+  type DiscussionConclusionContent,
+  type DiscussionEndReason,
+  type DiscussionEnvelope,
+  type DiscussionLimits,
+  type DiscussionTurn,
+} from "./discussion/types.js";

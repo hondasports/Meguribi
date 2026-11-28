@@ -11,7 +11,7 @@ import type { LiveLogEvent } from "./live-log.js";
 import type { WorkflowEvent } from "./workflow-engine/events.js";
 import type { AgentKind } from "./role-agent.js";
 
-export type RunCommand = "run" | "resume";
+export type RunCommand = "run" | "resume" | "discuss";
 
 /**
  * Coarse run lifecycle. Fine-grained ACP steps live in currentStep / completedSteps.
@@ -26,6 +26,7 @@ export type RunStatus =
   | "fixing"
   | "publishing"
   | "awaiting_human"
+  | "completed"
   | "blocked"
   | "failed"
   | "cancelled"

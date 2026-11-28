@@ -97,3 +97,13 @@ export type {
   DevinDiagnosis,
   InheritedMcpPolicy,
 } from "./devin-diagnosis.js";
+export {
+  DiscussionConclusionContentSchema,
+  DiscussionConclusionSchema,
+  DiscussionEnvelopeSchema,
+} from "./discussion.js";
+export type {
+  DiscussionConclusion,
+  DiscussionConclusionContent,
+  DiscussionEnvelope,
+} from "./discussion.js";
