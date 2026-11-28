@@ -23,6 +23,18 @@ export type LiveLogEvent =
       event: AgentEvent;
     };
 
+export interface StepProgressEvent {
+  type: "step.progress";
+  runId: string;
+  stepId: string;
+  label: string;
+  current: number;
+  max?: number;
+  at: string;
+}
+
+export type LiveLogRenderEvent = LiveLogEvent | StepProgressEvent;
+
 export type LiveLogMode = "stream" | "compact";
 
 export interface LiveLogOptions {
@@ -34,7 +46,7 @@ export interface LiveLogOptions {
 }
 
 export interface LiveLogRenderer {
-  render(event: LiveLogEvent): string;
+  render(event: LiveLogRenderEvent): string;
   flush(): string;
 }
 
@@ -191,6 +203,11 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
     return emit(`${interruptSpeech()}${paintLine(line, FAILURE_COLOR)}`);
   }
 
+  function renderStepProgress(event: StepProgressEvent): string {
+    const max = event.max === undefined ? "" : `/${String(event.max)}`;
+    return emit(`${interruptSpeech()}  · ${redact(event.label)} ${String(event.current)}${max}\n`);
+  }
+
   function renderAgentEvent(
     stepEvent: Extract<LiveLogEvent, { type: "agent.event" }>,
   ): string {
@@ -227,12 +244,20 @@ export function createLiveLogRenderer(options: LiveLogOptions): LiveLogRenderer 
   }
 
   return {
-    render(event: LiveLogEvent): string {
-      if (options.onlyProfileId !== undefined && event.profileId !== options.onlyProfileId) {
-        return "";
+    render(event: LiveLogRenderEvent): string {
+      if (options.onlyProfileId !== undefined) {
+        if (event.type === "step.progress") {
+          return "";
+        }
+        if (event.profileId !== options.onlyProfileId) {
+          return "";
+        }
       }
       if (event.type === "step.started") {
         return renderStepStarted(event);
+      }
+      if (event.type === "step.progress") {
+        return renderStepProgress(event);
       }
       return renderAgentEvent(event);
     },

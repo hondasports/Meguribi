@@ -30,7 +30,12 @@ import { runExploreCommand, type ExploreCommandDependencies, type ExploreCommand
 import { runRequireCommand, type RequireCommandDependencies, type RequireCommandOptions } from "./commands/require.js";
 import { runMeasureCommand, type MeasureCommandDependencies, type MeasureCommandOptions } from "./commands/measure.js";
 import { runStatusCommand, type StatusCommandDependencies, type StatusCommandOptions } from "./commands/status.js";
-import { runWorkflowValidateCommand, type WorkflowValidateCommandDependencies } from "./commands/workflow.js";
+import {
+  runWorkflowListCommand,
+  runWorkflowValidateCommand,
+  type WorkflowListCommandDependencies,
+  type WorkflowValidateCommandDependencies,
+} from "./commands/workflow.js";
 
 export interface DoctorCommandOptions {
   json?: boolean;
@@ -52,7 +57,7 @@ export interface DoctorDependencies {
 }
 
 export interface ProgramDependencies
-  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies, WorkflowValidateCommandDependencies {
+  extends DoctorDependencies, DeliveryCommandDependencies, InitCommandDependencies, PlanCommandDependencies, ReviewCommandDependencies, CleanupCommandDependencies, DiscoverCommandDependencies, HypothesisCommandDependencies, PromoteCommandDependencies, ExploreCommandDependencies, RequireCommandDependencies, MeasureCommandDependencies, StatusCommandDependencies, WorkflowValidateCommandDependencies, WorkflowListCommandDependencies {
   delivery?: DeliveryDependencies;
 }
 
@@ -396,6 +401,20 @@ export function createProgram(deps: ProgramDependencies = {}): Command {
   const workflow = program
     .command("workflow")
     .description("Inspect declarative workflow definitions");
+
+  workflow
+    .command("list")
+    .description("List built-in and repository workflow definitions")
+    .option("--repo-path <path>", "Path to the target repository checkout")
+    .action(async (cliOptions: { repoPath?: string }) => {
+      try {
+        const result = await runWorkflowListCommand(cliOptions, deps);
+        process.exitCode = result.exitCode;
+      } catch (error) {
+        writeCommandError(error, deps.stderr);
+        process.exitCode = 1;
+      }
+    });
 
   workflow
     .command("validate")

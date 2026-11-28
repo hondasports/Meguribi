@@ -90,6 +90,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const WORKFLOW_EVENT_TYPES = new Set([
   "step.started",
   "agent.event",
+  "step.progress",
   "discussion.turn",
   "discussion.ended",
   "workflow.started",

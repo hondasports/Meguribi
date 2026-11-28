@@ -102,7 +102,7 @@ apps/cli
 
 ### Workflow
 
-P2a で、Meguribi は工程種別が閉じた宣言的ワークフローを逐次実行するエンジンを core に持ちます。既存の `runDelivery` / `resumeDelivery` は、外から見た振る舞い・成果物・終了コードを変えずに、組み込みワークフロー `delivery` として実装済みです。YAML の読み込みと利用者向け `workflow` コマンドは P2b で追加します。
+P2a で、Meguribi は工程種別が閉じた宣言的ワークフローを逐次実行するエンジンを core に持ちます。既存の `runDelivery` / `resumeDelivery` は、外から見た振る舞い・成果物・終了コードを変えずに、組み込みワークフロー `delivery` として実装済みです。YAML の読み込みと利用者向け `workflow validate` / `workflow list` コマンドは P2b で実装済みです。
 
 組み込み `delivery` の工程 ID は、定義順に `plan`、`implement`、`verify`、`review`、`fix-after-verify`、`fix-after-review`、`publish` です。
 
@@ -115,6 +115,12 @@ PolicyEngine は実行前に次を静的検査し、違反があれば実行し�
 - `implement` の後に `verify` がある。
 - すべての `goto` に `max` がある。
 - 工程 ID が一意で、参照先が存在する。
+
+### Workflow イベントとエージェント活動
+
+`run` / `resume` は workflow engine の `WorkflowEvent` と、実行中エージェントの `step.started` / `agent.event` を Run ディレクトリの `events.jsonl` へ追記します。各行は `{ "at": <ISO8601>, "event": <WorkflowEvent> }` の JSON Lines です。`WorkflowEvent` には `workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished` に加え、回数や件数を示す `step.progress` と、ライブログ用の `step.started` / `agent.event` が含まれます。
+
+`WorkflowEventLog` は core の port、`FileSystemWorkflowEventLog` は filesystem adapter です。書き込み前に secret redaction を行い、append 失敗は delivery の結果へ影響させません。`meguribi status` は同じ port からイベントを読み、pure function の `deriveAgentActivity` で各エージェントの現在状態（待機、ツール実行、応答なしなど）を導出します。`--follow` では読み出したイベントをライブログレンダラーへ流し、`--agent` で profile ごとの表示へ絞り込みます。
 
 ### GitHubAdapter
 

@@ -20,7 +20,7 @@ https://github.com/owner/repo/pull/456
 
 ## 2. コマンド一覧
 
-現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`measure`、`cleanup` です。
+現在 CLI に実装されているコマンドは `init`、`doctor`、`discover`、`hypothesis`、`promote`、`explore`、`require`、`plan`、`review`、`run`、`resume`、`status`、`workflow`、`measure`、`cleanup` です。
 
 ### Command Desk（ローカル UI）
 
@@ -214,6 +214,63 @@ meguribi review owner/repo#125 --run-id 20260725T120000Z-ab12cd
 meguribi resume owner/repo#125
 meguribi resume owner/repo#125 --run-id 20260725T120000Z-ab12cd
 ```
+
+### `meguribi status`
+
+`run` / `resume` が Run ディレクトリへ追記する `events.jsonl` と `state.json` から、Run の状態とエージェント活動を表示します。Run ID は `meguribi run` / `resume` の出力にある `Run:` 行で確認できます。
+
+```bash
+meguribi status 20260725T120000Z-ab12cd
+meguribi status 20260725T120000Z-ab12cd --follow
+meguribi status 20260725T120000Z-ab12cd --follow --agent devin
+meguribi status 20260725T120000Z-ab12cd --json
+```
+
+主要オプション:
+
+- `--follow`: `events.jsonl` を追従し、表示可能な工程イベントとエージェントイベントをライブログ形式で表示する
+- `--agent <profileId>`: 指定したエージェントプロファイルのイベントだけを表示する
+- `--json`: Run 状態と `deriveAgentActivity` が導出した活動状態を JSON で出力する
+- `--runs-root <path>`: RunStore のルートを明示する
+
+`events.jsonl` は JSON Lines で、1 行ごとに次の envelope を持ちます。
+
+```json
+{"at":"2026-11-28T12:00:00.000Z","event":{"type":"step.progress","runId":"20260725T120000Z-ab12cd","stepId":"verify","label":"verify","current":1,"max":2,"at":"2026-11-28T12:00:00.000Z"}}
+```
+
+`event` には `workflow.started`、`workflow.step.started`、`workflow.step.completed`、`workflow.step.failed`、`workflow.finished`、工程内の `step.started` / `agent.event`、回数や件数を示す `step.progress` が入ります。保存前に secret redaction を行い、append の失敗は Run の結果や終了コードを変えず stderr に 1 回だけ警告します。読み出し時に壊れた行があれば、その行だけを飛ばして警告します。
+
+実行中の Run を分割画面で追う例:
+
+```bash
+# pane 1: delivery を実行
+meguribi run owner/repo#125 --log compact
+
+# pane 2: Run ID が表示されたら全体を追従
+meguribi status 20260725T120000Z-ab12cd --follow
+
+# pane 3: implementer だけを追従
+meguribi status 20260725T120000Z-ab12cd --follow --agent devin
+```
+
+Ghostty では split right / split down で pane を分けて同じコマンドを実行できます。tmux では次のように分割できます。
+
+```bash
+tmux split-window -h 'meguribi status 20260725T120000Z-ab12cd --follow'
+tmux split-window -v 'meguribi status 20260725T120000Z-ab12cd --follow --agent devin'
+```
+
+### `meguribi workflow`
+
+宣言的ワークフロー定義を検査します。
+
+```bash
+meguribi workflow validate .meguribi/workflows/discuss-to-pr.yml
+meguribi workflow list --repo-path .
+```
+
+`workflow validate <file>` は YAML を parse し、工程 ID、参照、上限付きループ、publish 前の verify / review などの静的制約を検証します。`workflow list` は組み込み `delivery` の工程 ID と、`<repo>/.meguribi/workflows/*.yml` / `*.yaml` にあるワークフローの工程 ID を一覧します。壊れたファイルは一覧を停止せず、そのファイルの error 行として表示します。
 
 ### `meguribi measure`
 

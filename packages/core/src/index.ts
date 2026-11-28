@@ -182,6 +182,8 @@ export {
   type LiveLogMode,
   type LiveLogOptions,
   type LiveLogRenderer,
+  type LiveLogRenderEvent,
+  type StepProgressEvent,
 } from "./live-log.js";
 export type {
   InitDependencyCheck,
@@ -196,6 +198,7 @@ export {
 export { IMPLEMENTATION_PLAN_MARKER, planIssue } from "./workflow/plan.js";
 export { CODE_REVIEW_MARKER, reviewIssue } from "./review.js";
 export type { PublishGateInput } from "./workflow/delivery.js";
+export { createDeliveryWorkflow, DELIVERY_WORKFLOW_NAME } from "./workflow/delivery-definition.js";
 export { buildFixInstruction } from "./workflow/fix-instruction.js";
 export { matchesProtectedPath } from "./path-match.js";
 export {

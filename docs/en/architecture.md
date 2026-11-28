@@ -99,7 +99,7 @@ apps/cli
 
 ### Workflows
 
-In P2a, Meguribi core has an engine that sequentially executes declarative workflows with a closed set of step kinds. The existing `runDelivery` / `resumeDelivery` are implemented as the built-in `delivery` workflow without changing their externally visible behavior, artifacts, or exit codes. YAML loading and the user-facing `workflow` command will be added in P2b.
+In P2a, Meguribi core has an engine that sequentially executes declarative workflows with a closed set of step kinds. The existing `runDelivery` / `resumeDelivery` are implemented as the built-in `delivery` workflow without changing their externally visible behavior, artifacts, or exit codes. YAML loading and the user-facing `workflow validate` / `workflow list` commands are implemented in P2b.
 
 The built-in `delivery` step IDs are, in definition order, `plan`, `implement`, `verify`, `review`, `fix-after-verify`, `fix-after-review`, and `publish`.
 
@@ -112,6 +112,12 @@ Before execution, PolicyEngine statically validates the following and refuses to
 - `verify` exists after `implement`.
 - Every `goto` has a `max`.
 - Step IDs are unique and all references resolve.
+
+### Workflow events and agent activity
+
+`run` / `resume` append workflow-engine `WorkflowEvent` values and in-step `step.started` / `agent.event` values to `events.jsonl` in the Run directory. Every line is JSON Lines with the envelope `{ "at": <ISO8601>, "event": <WorkflowEvent> }`. In addition to `workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, and `workflow.finished`, events include `step.progress` for attempt / command counts and the live-log `step.started` / `agent.event` payloads.
+
+`WorkflowEventLog` is the core port and `FileSystemWorkflowEventLog` is the filesystem adapter. Payloads are redacted before writing, and append failures never change the delivery result. `meguribi status` reads events through the same port and uses the pure `deriveAgentActivity` function to derive each agent's current state (waiting, running a tool, stalled, and so on). With `--follow`, status feeds newly read events into the live-log renderer; `--agent` narrows the view to one profile.
 
 ### `GitHubAdapter`
 

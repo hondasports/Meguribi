@@ -21,15 +21,15 @@ GitHub Issue
 
 This provides responsibility separation, schema validation, reproducibility, human-summary regeneration, idempotent GitHub comments, and input lineage.
 
-### 1.1 Discussion, approval, and step-event artifacts (planned)
+### 1.1 Discussion, approval, and step-event artifacts
 
-In P2/P3, the Run directory is planned to gain the following artifacts:
+In P2/P3, the Run directory gains the following artifacts. `events.jsonl` is implemented in P2b; discussion, approval, and `steps/` remain planned.
 
 - `discussion/transcript.jsonl`: every discussion turn. Each message has a speaker, turn ID, and envelope format (P3, planned).
 - `discussion/conclusion.json`: the `DiscussionConclusion`, including the selected direction, positions by issue, rejected options, open questions, acceptance-criterion seeds, ending reason, and transcript hash (P3, planned).
 - `approval.json`: the approver, timestamp, hash of the approved `conclusion.json`, and optional comment (P3, planned).
 - `steps/<stepId>.json`: per-step state (`pending | running | completed | failed | awaiting_human | skipped`) (P2, planned).
-- `events.jsonl`: events for every step, including `step.progress` and `agent.event` (P2, planned).
+- `events.jsonl`: events for every step, including `workflow.*`, `step.progress`, `step.started`, and `agent.event` (P2b, implemented).
 
 The message envelope is defined as follows. `message` is forwarded to other participants without modification, with the speaker name and turn ID attached.
 
@@ -80,7 +80,7 @@ interface DiscussionConclusion {
               +-- approval.json            # planned (P3)
               +-- steps/                   # planned (P2)
               |   `-- <stepId>.json
-              +-- events.jsonl             # planned (P2)
+              +-- events.jsonl             # workflow / agent events (P2b)
               +-- hypothesis.json
               +-- requirements.json
               +-- plan.json
@@ -98,6 +98,8 @@ interface DiscussionConclusion {
 ```
 
 The Run ID contains a timestamp and random suffix so repeated execution of the same Issue is distinguishable.
+
+`events.jsonl` is JSON Lines with one record per line: `{ "at": <recorded-at ISO8601>, "event": <WorkflowEvent> }`. The event is a workflow lifecycle event (`workflow.started`, `workflow.step.started`, `workflow.step.completed`, `workflow.step.failed`, `workflow.finished`), an in-step `step.started` / `agent.event`, or `step.progress` (`runId`, `stepId`, `label`, `current`, optional `max`, `at`). Payloads are redacted before append, and malformed lines are skipped with a warning when read.
 
 `meguribi plan` does not create a branch, worktree, or Run state. It stores the latest plan at
 `~/.local/share/meguribi/plans/<owner>/<repo>/issue-<number>/plan.json` and atomically replaces that file

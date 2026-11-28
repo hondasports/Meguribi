@@ -79,8 +79,10 @@ function writeRunNotFound(stderr: (text: string) => void, runId: string): void {
   stderr('Next: meguribi status に渡す runId は meguribi run / resume の出力の "Run:" 行で確認できます\n');
 }
 
-function isLiveLogEvent(event: WorkflowEvent): event is LiveLogEvent {
-  return event.type === "step.started" || event.type === "agent.event";
+function isLiveLogEvent(
+  event: WorkflowEvent,
+): event is LiveLogEvent | Extract<WorkflowEvent, { type: "step.progress" }> {
+  return event.type === "step.started" || event.type === "agent.event" || event.type === "step.progress";
 }
 
 function formatElapsed(ms: number): string {
