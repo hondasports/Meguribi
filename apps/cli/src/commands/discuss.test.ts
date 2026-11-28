@@ -690,6 +690,101 @@ describe("runApproveCommand (discuss-to-pr continuation)", () => {
 });
 
 
+describe("--discussion-mcp-policy", () => {
+  it("passes the policy to discussion wiring for the issue-backed discuss path", async () => {
+    let captured: { discussionMcpPolicy?: string } = {};
+    const { deps } = discussDeps({
+      createDependencies: async (options) => {
+        captured = options as { discussionMcpPolicy?: string };
+        return wiringFixture();
+      },
+      runWorkflow: async () => ({ runId: "run-1", status: "awaiting_human", reasons: [] }),
+    });
+    // createRunState 不要: runWorkflow を stub しているため配線の呼び出しだけを見る。
+    await runDiscussCommand(
+      "owner/repo#22",
+      { repoPath: "/tmp/repo", discussionMcpPolicy: "allow", nonInteractive: true, log: "none" },
+      deps,
+    );
+    expect(captured.discussionMcpPolicy).toBe("allow");
+  });
+
+  it("passes the policy to discussion wiring for the issue-less consult path", async () => {
+    const runStore = createMemoryRunStore();
+    const store = {
+      appendTurn: async () => undefined,
+      readTurns: async () => [],
+      readHumanMessages: async () => [],
+      writeHumanMessage: async (message: string) => message,
+      saveConclusion: async () => undefined,
+      readConclusion: async () => null,
+    };
+    let captured: { discussionMcpPolicy?: string } = {};
+    const wiring = {
+      ...wiringFixture(),
+      runStore,
+      createStore: () => store,
+    } as DiscussionWiringDependencies;
+    const { deps } = discussDeps({
+      createDependencies: async (options) => {
+        captured = options as { discussionMcpPolicy?: string };
+        return wiring;
+      },
+    });
+    await runDiscussCommand(
+      undefined,
+      { prompt: "MCP ありきの相談", repoPath: "/tmp/repo", discussionMcpPolicy: "deny", nonInteractive: true, log: "none" },
+      deps,
+    ).catch(() => undefined);
+    expect(captured.discussionMcpPolicy).toBe("deny");
+  });
+
+  it("does not reuse an allow policy on redo wiring in a separate execution", async () => {
+    const { runStore, state } = await createRunState({ status: "awaiting_human" });
+    await runStore.saveArtifact(state.runId, "discussion-input.json", {
+      repositoryPath: "/original/repo",
+      worktreePath: "/tmp/worktree",
+      branch: "meguribi/issue-83",
+      baseRef: "origin/main",
+      requiredLabels: ["agent:ready"],
+      repositoryRules: "Follow AGENTS.md",
+      limits: { maxTurns: 9, maxDurationMs: 1_800_000, turnTimeoutMs: 300_000 },
+      nonInteractive: true,
+      artifactRoot: "/original/artifact-root",
+    });
+    let captured: { discussionMcpPolicy?: string } = {};
+    const { deps } = discussDeps({
+      runStore,
+      createStore: inboxStoreFake().createStore,
+      createDependencies: async (options) => {
+        captured = options as { discussionMcpPolicy?: string };
+        return wiringFixture();
+      },
+      resolveApprover: async () => "Test Rejecter",
+      rejectWorkflow: async (input) => ({ runId: input.runId, status: "awaiting_human", reasons: [] }),
+    });
+
+    const result = await runRejectCommand(state.runId, { reason: "やり直し", redo: true }, deps);
+
+    expect(result.exitCode).toBe(0);
+    // redo は別実行: 元の Run が allow で開始されていても配線へ無条件で引き継がない。
+    expect(captured.discussionMcpPolicy).toBeUndefined();
+  });
+
+  it("rejects an invalid discussion-mcp-policy value", async () => {
+    const { deps, stderr } = discussDeps({
+      createDependencies: async () => wiringFixture(),
+    });
+    const result = await runDiscussCommand(
+      "owner/repo#22",
+      { repoPath: "/tmp/repo", discussionMcpPolicy: "sometimes", nonInteractive: true, log: "none" },
+      deps,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(stderr.join("")).toContain("discussion-mcp-policy");
+  });
+});
+
 describe("prompt-only consultation command", () => {
   /** DiscussionInboxStore ポートを全件実装する test double。cast は使わない。 */
   function consultationMemoryStore(): DiscussionInboxStore & {

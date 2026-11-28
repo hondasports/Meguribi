@@ -285,7 +285,9 @@ meguribi discuss owner/repo#125
 meguribi discuss owner/repo#125 --request "Focus on notification timing" --max-turns 20 --log compact
 ```
 
-Main options are `--repo-path <path>`, `--local`, `--request <text>`, `--max-turns <n>`, `--log <stream|compact|none>`, `--json`, and `--non-interactive`. `--max-turns` defaults to 20. The default discussion duration limit is 30 minutes and the default per-turn timeout is five minutes; two consecutive timeouts by the same participant also end the discussion.
+Main options are `--repo-path <path>`, `--local`, `--request <text>`, `--discussants <ids>`, `--summarizer <id>`, `--discussion-mcp-policy <deny|allow>`, `--max-turns <n>`, `--log <stream|compact|none>`, `--json`, and `--non-interactive`. `--max-turns` defaults to 20. The default discussion duration limit is 30 minutes and the default per-turn timeout is five minutes; two consecutive timeouts by the same participant also end the discussion.
+
+`--discussion-mcp-policy` is an explicit choice scoped to one discussion Run. `deny` stops when an inherited MCP connection is detected; `allow` accepts inherited saved MCP configuration only for that Run. When the option is omitted, the profile's `inheritedMcpPolicy` keeps its existing meaning, so `warn` still fails closed in `--non-interactive` mode. If either the configuration or the diagnosed agent is fixed to `deny`, selecting `allow` does not weaken that denial. The choice is not written to persistent configuration or redo input. It applies only to discussion roles, including the summarizer, and does not expand to the implementer or delivery-side `--allow-inherited-mcp` used by `run` / `discuss-to-pr`.
 
 With `--log stream`, Meguribi renders `discussion.turn` with the speaker, addressee, and turn count, and renders `discussion.ended` as the ending boundary. `compact` prints only the turn heading and the first 80 characters of each message. Malformed messages are marked with `(形式不正)`.
 

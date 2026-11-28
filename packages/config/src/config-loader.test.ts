@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { getDefaultUserConfigPath, loadDevinConfig, loadImplementerConfig } from "./config-loader.js";
+import { getDefaultUserConfigPath, loadCursorConfig, loadDevinConfig, loadImplementerConfig } from "./config-loader.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -161,6 +161,25 @@ describe("loadDevinConfig", () => {
     expect(result.snapshot).not.toHaveProperty("token");
   });
 
+  it("passes a run-scoped discussion MCP policy through loading before non-interactive warn validation", async () => {
+    const root = await createTemporaryDirectory();
+    await writeFile(
+      path.join(root, ".meguribi.yml"),
+      "devin:\n  inheritedMcpPolicy: warn\n",
+    );
+
+    await expect(
+      loadDevinConfig({
+        repositoryPath: root,
+        userConfigPath: path.join(root, "missing-user.yml"),
+        nonInteractive: true,
+        discussionMcpPolicy: "allow",
+      }),
+    ).resolves.toMatchObject({
+      config: { inheritedMcpPolicy: "allow" },
+    });
+  });
+
   it("rejects executable command templates and secret flags from all sources", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = path.join(root, "repository");
@@ -183,6 +202,27 @@ describe("loadDevinConfig", () => {
         cli: { executable: "devin --api-key=SECRET" },
       }),
     ).rejects.toThrow(/executable/);
+  });
+});
+
+describe("loadCursorConfig", () => {
+  it("passes a run-scoped deny through loading even when repository config allows MCP", async () => {
+    const root = await createTemporaryDirectory();
+    await writeFile(
+      path.join(root, ".meguribi.yml"),
+      "cursor:\n  inheritedMcpPolicy: allow\n",
+    );
+
+    await expect(
+      loadCursorConfig({
+        repositoryPath: root,
+        userConfigPath: path.join(root, "missing-user.yml"),
+        nonInteractive: true,
+        discussionMcpPolicy: "deny",
+      }),
+    ).resolves.toMatchObject({
+      config: { inheritedMcpPolicy: "deny" },
+    });
   });
 });
 

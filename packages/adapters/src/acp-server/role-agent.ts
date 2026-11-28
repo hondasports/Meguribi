@@ -8,7 +8,7 @@ import type {
   RoleAgent,
   RoleSession,
 } from "@meguribi/core";
-import { agentDisplayName } from "@meguribi/core";
+import { agentDisplayName, resolveDiscussionMcpPolicy, type DiscussionMcpPolicy } from "@meguribi/core";
 import { startAcpSession, type AcpSession } from "../acp/session.js";
 import type { AcpTransport } from "../acp/transport.js";
 import { createPermissionMediator } from "../acp/permissions.js";
@@ -24,6 +24,8 @@ export interface CreateAcpRoleAgentOptions {
   acpArgs?: string[];
   diagnosis: AgentDiagnosis;
   mode: "interactive" | "non-interactive";
+  /** 議論 Run 限定の明示 MCP 方針。未指定なら profile の従来 policy を使う。 */
+  discussionMcpPolicy?: DiscussionMcpPolicy;
   transport?: AcpTransport;
   env?: NodeJS.ProcessEnv;
 }
@@ -155,6 +157,12 @@ class AcpRoleSession implements RoleSession {
 export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgent {
   assertAcpServerRunnable(options.diagnosis);
   const { profile } = options;
+  const effectiveInheritedMcpPolicy = options.discussionMcpPolicy === undefined
+    ? profile.inheritedMcpPolicy
+    : resolveDiscussionMcpPolicy({
+        configured: [profile.inheritedMcpPolicy],
+        discussionMcpPolicy: options.discussionMcpPolicy,
+      });
 
   return {
     profileId: profile.id,
@@ -187,7 +195,7 @@ export function createAcpRoleAgent(options: CreateAcpRoleAgentOptions): RoleAgen
         }),
         permissionMediator,
         mcpPolicy: {
-          policy: profile.inheritedMcpPolicy,
+          policy: effectiveInheritedMcpPolicy,
           mode: options.mode,
           explicitAllow: false,
         },

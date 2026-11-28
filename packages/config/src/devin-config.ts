@@ -1,3 +1,4 @@
+import { resolveDiscussionMcpPolicy, type DiscussionMcpPolicy } from "@meguribi/core";
 import * as v from "valibot";
 
 // Node.js setTimeout uses a signed 32-bit integer for the delay, so values
@@ -86,6 +87,10 @@ export interface DevinConfigSources {
   environment?: unknown;
   cli?: unknown;
   nonInteractive?: boolean;
+  /**
+   * 議論 Run 限定の明示 MCP 方針。delivery/planner など他用途から渡されない限り従来解決へ影響しない。
+   */
+  discussionMcpPolicy?: DiscussionMcpPolicy;
 }
 
 export function devinConfigFromEnvironment(
@@ -219,6 +224,13 @@ export function resolveDevinConfig(sources: DevinConfigSources): DevinConfig {
     ...environment,
     ...cli,
   };
+
+  if (sources.discussionMcpPolicy !== undefined) {
+    config.inheritedMcpPolicy = resolveDiscussionMcpPolicy({
+      configured: [config.inheritedMcpPolicy],
+      discussionMcpPolicy: sources.discussionMcpPolicy,
+    });
+  }
 
   if (sources.nonInteractive && config.inheritedMcpPolicy === "warn") {
     throw new Error(

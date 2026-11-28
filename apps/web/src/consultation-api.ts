@@ -19,10 +19,13 @@ export interface DiscussionIssuesResponse {
   issues: DiscussionIssue[];
 }
 
+export type DiscussionMcpPolicy = "deny" | "allow";
+
 export interface StartDiscussionInput {
   prompt: string;
   profileIds: string[];
   target?: string;
+  discussionMcpPolicy: DiscussionMcpPolicy;
 }
 
 export interface StartDiscussionResult {
@@ -64,6 +67,7 @@ export function createConsultationApi(fetchImpl: FetchLike = fetch): Consultatio
       if (input.target !== undefined && input.target.trim().length > 0) {
         body["target"] = input.target.trim();
       }
+      body["discussionMcpPolicy"] = input.discussionMcpPolicy;
       const result = await fetchImpl("/api/discussions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

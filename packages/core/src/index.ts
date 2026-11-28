@@ -113,6 +113,7 @@ export { requireSolution, type RequirementArtifact, type RequirementArtifactStor
 export { measureRelease, type MeasurementArtifact, type MeasurementArtifactStore, type MeasureDependencies, type MeasureInput } from "./measure.js";
 export {
   decideInheritedMcpPolicy,
+  resolveDiscussionMcpPolicy,
   type McpDetection,
   type McpPolicyDecision,
   type McpTransport,
@@ -167,7 +168,7 @@ export type {
   DevinExecutableDiagnosis,
   DevinVersionDiagnosis,
 } from "./devin-diagnosis.js";
-export type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+export type { DiscussionMcpPolicy, InheritedMcpPolicy } from "./inherited-mcp-policy.js";
 export {
   agentDisplayName,
   RoleAssignmentError,

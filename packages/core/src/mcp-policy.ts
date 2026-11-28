@@ -1,4 +1,4 @@
-import type { InheritedMcpPolicy } from "./inherited-mcp-policy.js";
+import type { DiscussionMcpPolicy, InheritedMcpPolicy } from "./inherited-mcp-policy.js";
 
 export type McpTransport = "stdio" | "http" | "unknown";
 
@@ -40,4 +40,19 @@ export function decideInheritedMcpPolicy(input: {
     return { outcome: "block", reason: "warn policy is fail-closed in non-interactive mode", warning };
   }
   return { outcome: "allow", reason: "no MCP connection was detected under deny policy", warning };
+}
+
+/**
+ * 議論 Run ごとの明示方針を、既存の設定済み policy へ適用する。
+ * 明示された deny は常に最優先し、設定済みの deny は allow 選択でも弱めない。
+ * warn だけがこの Run 限りの選択で allow/deny へ解決される。
+ */
+export function resolveDiscussionMcpPolicy(input: {
+  configured: readonly InheritedMcpPolicy[];
+  discussionMcpPolicy: DiscussionMcpPolicy;
+}): DiscussionMcpPolicy {
+  if (input.discussionMcpPolicy === "deny" || input.configured.includes("deny")) {
+    return "deny";
+  }
+  return "allow";
 }

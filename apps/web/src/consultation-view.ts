@@ -1,3 +1,5 @@
+import type { DiscussionMcpPolicy } from "./consultation-api.js";
+
 export function consultationTitle(prompt: string): string {
   const firstLine = prompt
     .split("\n")
@@ -9,4 +11,12 @@ export function consultationTitle(prompt: string): string {
 
 export function isConsultationCommand(command: string): boolean {
   return command === "consult" || command === "discuss";
+}
+
+export function initialDiscussionMcpPolicy(): DiscussionMcpPolicy {
+  return "deny";
+}
+
+export function discussionMcpPolicyAfterSubmit(): DiscussionMcpPolicy {
+  return "deny";
 }

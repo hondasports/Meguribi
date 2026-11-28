@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { validateRoleAssignments, type AgentProfile } from "@meguribi/core";
+import { validateRoleAssignments, type AgentProfile, type DiscussionMcpPolicy } from "@meguribi/core";
 import { parse } from "yaml";
 import {
   resolveAgentsConfigData,
@@ -33,6 +33,8 @@ export interface LoadDevinConfigOptions {
   environment?: NodeJS.ProcessEnv;
   cli?: unknown;
   nonInteractive?: boolean;
+  /** 議論 Run 限定の明示 MCP 方針。未指定なら従来の warn fail-closed を維持する。 */
+  discussionMcpPolicy?: DiscussionMcpPolicy;
 }
 
 export interface DevinConfigResult {
@@ -159,6 +161,9 @@ export async function loadDevinConfig(options: LoadDevinConfigOptions): Promise<
     environment: environmentConfig,
     cli,
     nonInteractive: options.nonInteractive,
+    ...(options.discussionMcpPolicy === undefined
+      ? {}
+      : { discussionMcpPolicy: options.discussionMcpPolicy }),
   };
 
   const config = resolveDevinConfig(sources);
@@ -189,6 +194,9 @@ export async function loadCursorConfig(options: LoadDevinConfigOptions): Promise
     environment: environmentConfig,
     cli,
     nonInteractive: options.nonInteractive,
+    ...(options.discussionMcpPolicy === undefined
+      ? {}
+      : { discussionMcpPolicy: options.discussionMcpPolicy }),
   };
 
   const config = resolveCursorConfig(sources);
