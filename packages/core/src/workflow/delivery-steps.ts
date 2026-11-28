@@ -692,16 +692,21 @@ async function verifyStep(context: DeliveryRunContext, releaseLock?: () => Promi
 
 async function fixStep(context: DeliveryRunContext, of: string | undefined) {
   const { deps, delivery } = context;
+  const stateBeforeFix = context.state;
   const implementationBeforeFix = context.implementation;
   const verificationBeforeFix = context.verification;
   const reviewBeforeFix = context.review;
+
+  if (of === "verify") {
+    context.review = undefined;
+  }
 
   try {
     await runDeliveryFixAttempt(context);
   } catch (error) {
     if (isCancelledError(error) || delivery.abortSignal?.aborted) {
       return stopWith(
-        await cancelledResult(deps, context.state, "cancelled during fix", {
+        await cancelledResult(deps, stateBeforeFix, "cancelled during fix", {
           implementation: implementationBeforeFix,
           verification: verificationBeforeFix,
           ...(of === "review" ? { review: reviewBeforeFix } : {}),
