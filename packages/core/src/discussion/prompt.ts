@@ -62,12 +62,12 @@ function escapeAttribute(value: string): string {
   return escapeSource(value).replace(/\s+/g, " ");
 }
 
-function escapeClosingDelimiters(value: string): string {
-  return value.replace(/<\/((?:untrusted|trusted)-[a-z0-9-]+)\s*>/gi, "<escaped-$1>");
+function escapeDelimiterTags(value: string): string {
+  return value.replace(/<\s*\/?\s*((?:untrusted|trusted)-[a-z0-9-]+)/gi, "<escaped-$1");
 }
 
 function normalizeUntrusted(value: string): string {
-  return escapeClosingDelimiters(normalizeText(value));
+  return escapeDelimiterTags(normalizeText(value));
 }
 
 function untrustedBlock(tag: string, content: string): string {
