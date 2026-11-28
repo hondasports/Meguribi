@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import type { AgentDiagnosis, AgentEvent, AgentProfile } from "@meguribi/core";
 import { createAcpRoleAgent, RoleSessionWriteViolationError } from "./role-agent.js";
 import { AcpAgentArtifactStore } from "../acp/artifact-store.js";
+import type { AcpConnection, AcpTransport } from "../acp/transport.js";
 
 const tempDirs: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -81,7 +82,65 @@ function agentFor(mode: string): ReturnType<typeof createAcpRoleAgent> {
   });
 }
 
+function fakeTransportConnection(sessionId: string): AcpConnection {
+  const startedAt = new Date().toISOString();
+  const exit = {
+    code: 0,
+    signal: null,
+    startedAt,
+    finishedAt: startedAt,
+  };
+  return {
+    sessionId,
+    protocolVersion: 1,
+    supportsSessionLoad: false,
+    stderrText: () => "",
+    mcpSecurityAlert: () => undefined,
+    mcpWarning: () => undefined,
+    awaitStderrDrain: async () => undefined,
+    prompt: async function* () {},
+    cancel: async () => undefined,
+    closeInput: async () => undefined,
+    waitForProcessExit: async () => exit,
+    terminate: async () => exit,
+    loadSession: async (input) => ({ sessionId: input.sessionId }),
+  };
+}
+
 describe("createAcpRoleAgent integration", () => {
+  it("passes configured acpArgs to the transport and defaults to an empty array", async () => {
+    const startedAcpArgs: (string[] | undefined)[] = [];
+    const transport: AcpTransport = {
+      start: async (input) => {
+        startedAcpArgs.push(input.acpArgs);
+        return fakeTransportConnection(`fake-transport-${startedAcpArgs.length}`);
+      },
+    };
+    const { cwd, artifactRoot } = await tempGit();
+    const openAndClose = async (acpArgs: string[] | undefined, artifactName: string) => {
+      const agent = createAcpRoleAgent({
+        profile: claudeCodeProfile(),
+        executable: "fake-agent-cli",
+        diagnosis: runnableDiagnosis(),
+        mode: "non-interactive",
+        transport,
+        ...(acpArgs !== undefined ? { acpArgs } : {}),
+      });
+      const session = await agent.openSession({
+        cwd,
+        mode: "read-only",
+        role: "planner",
+        artifactRoot: path.join(artifactRoot, artifactName),
+      });
+      await session.close();
+    };
+
+    await openAndClose(["acp"], "with-acp-args");
+    await openAndClose(undefined, "without-acp-args");
+
+    expect(startedAcpArgs).toEqual([["acp"], []]);
+  });
+
   it("streams events to onEvent and returns concatenated text for a read-only turn", async () => {
     const { cwd, artifactRoot } = await tempGit();
     const agent = agentFor("success");
