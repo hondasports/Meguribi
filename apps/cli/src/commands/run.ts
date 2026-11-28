@@ -89,6 +89,16 @@ function parseLogMode(value: string | undefined): LogModeValue {
 
 export interface DeliveryCommandDependencies {
   delivery?: DeliveryDependencies;
+  createDeliveryDeps?: (options: {
+    cwd?: string;
+    repositoryPath?: string;
+    repository?: string;
+    nonInteractive?: boolean;
+    implementer?: string;
+    allowInheritedMcp?: boolean;
+    localOnly?: boolean;
+    onAgentEvent?: (event: LiveLogEvent) => void;
+  }) => Promise<{ deps: DeliveryDependencies; inheritedMcpPolicy: InheritedMcpPolicy }>;
   inheritedMcpPolicy?: InheritedMcpPolicy;
   runDelivery?: typeof runDelivery;
   resumeDelivery?: typeof resumeDelivery;
@@ -171,9 +181,13 @@ function observeRunStoreIdentity(
 function withWorkflowEventRecording(
   delivery: DeliveryDependencies,
   stderr: (text: string) => void,
-): { delivery: DeliveryDependencies; flush: () => Promise<void> } {
+): {
+  delivery: DeliveryDependencies;
+  flush: () => Promise<void>;
+  append: (event: WorkflowEvent) => void;
+} {
   if (!(delivery.runStore instanceof FileSystemRunStore)) {
-    return { delivery, flush: async () => undefined };
+    return { delivery, flush: async () => undefined, append: () => undefined };
   }
 
   const eventLog = new FileSystemWorkflowEventLog({ runStore: delivery.runStore });
@@ -234,6 +248,30 @@ function withWorkflowEventRecording(
     },
     flush: async () => {
       await queue;
+    },
+    append: appendEvent,
+  };
+}
+
+function createDeferredAgentEventObserver(): {
+  observer: (event: LiveLogEvent) => void;
+  activate: (observer: (event: LiveLogEvent) => void) => void;
+} {
+  const pending: LiveLogEvent[] = [];
+  let downstream: ((event: LiveLogEvent) => void) | undefined;
+  return {
+    observer(event) {
+      if (downstream) {
+        downstream(event);
+      } else {
+        pending.push(event);
+      }
+    },
+    activate(observer) {
+      downstream = observer;
+      for (const event of pending.splice(0)) {
+        downstream(event);
+      }
     },
   };
 }
@@ -394,9 +432,9 @@ async function resolveDeliveryWiring(
       inheritedMcpPolicy: deps.inheritedMcpPolicy ?? "warn",
     };
   }
-  const wiring = await (
-    await import("../wiring/create-delivery-deps.js")
-  ).createDeliveryDeps({
+  const createDeliveryDeps = deps.createDeliveryDeps ??
+    (await import("../wiring/create-delivery-deps.js")).createDeliveryDeps;
+  const wiring = await createDeliveryDeps({
     cwd: deps.cwd,
     repositoryPath: options.repoPath ?? deps.cwd ?? process.cwd(),
     repository: parseIssueTarget(target).repository,
@@ -412,6 +450,45 @@ async function resolveDeliveryWiring(
   };
 }
 
+function composeEventedDelivery(input: {
+  delivery: DeliveryDependencies;
+  liveLog?: { observe: (event: LiveLogEvent) => void };
+  deferredAgentEvents: ReturnType<typeof createDeferredAgentEventObserver>;
+  stderr: (text: string) => void;
+}): {
+  delivery: DeliveryDependencies;
+  recording: ReturnType<typeof withWorkflowEventRecording>;
+} {
+  if (input.delivery.onAgentEvent === input.deferredAgentEvents.observer) {
+    const { onAgentEvent: _wiredAgentEvent, ...withoutWiredAgentEvent } = input.delivery;
+    const recording = withWorkflowEventRecording(withoutWiredAgentEvent, input.stderr);
+    const centralObserver = (event: LiveLogEvent): void => {
+      input.liveLog?.observe(event);
+      recording.append(event);
+    };
+    input.deferredAgentEvents.activate(centralObserver);
+    return {
+      delivery: { ...recording.delivery, onAgentEvent: centralObserver },
+      recording,
+    };
+  }
+
+  let observableDelivery = input.delivery;
+  if (input.liveLog && observableDelivery.onAgentEvent !== input.liveLog.observe) {
+    const downstream = observableDelivery.onAgentEvent;
+    const liveLog = input.liveLog;
+    observableDelivery = {
+      ...observableDelivery,
+      onAgentEvent: (event) => {
+        liveLog.observe(event);
+        downstream?.(event);
+      },
+    };
+  }
+  const recording = withWorkflowEventRecording(observableDelivery, input.stderr);
+  return { delivery: recording.delivery, recording };
+}
+
 export async function runRunCommand(
   target: string,
   options: DeliveryCommandOptions = {},
@@ -424,7 +501,8 @@ export async function runRunCommand(
     logMode !== "none" && options.json !== true
       ? createLiveLogObserver(writeErr, { mode: logMode, color: liveLogColor() })
       : undefined;
-  const wiring = await resolveDeliveryWiring(target, options, deps, liveLog?.observe);
+  const deferredAgentEvents = createDeferredAgentEventObserver();
+  const wiring = await resolveDeliveryWiring(target, options, deps, deferredAgentEvents.observer);
   const run = deps.runDelivery ?? runDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
   const uninstall =
@@ -432,19 +510,14 @@ export async function runRunCommand(
 
   try {
     progress(writeErr, `Starting delivery for ${target}…`);
-    let observableDelivery = wiring.delivery;
-    if (liveLog && observableDelivery.onAgentEvent !== liveLog.observe) {
-      const downstream = observableDelivery.onAgentEvent;
-      observableDelivery = {
-        ...observableDelivery,
-        onAgentEvent: (event) => {
-          liveLog.observe(event);
-          downstream?.(event);
-        },
-      };
-    }
-    const recording = withWorkflowEventRecording(observableDelivery, writeErr);
-    const delivery = withProgress(recording.delivery, writeErr);
+    const evented = composeEventedDelivery({
+      delivery: wiring.delivery,
+      ...(liveLog ? { liveLog } : {}),
+      deferredAgentEvents,
+      stderr: writeErr,
+    });
+    const recording = evented.recording;
+    const delivery = withProgress(evented.delivery, writeErr);
     const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await run(
@@ -476,7 +549,8 @@ export async function runResumeCommand(
     logMode !== "none" && options.json !== true
       ? createLiveLogObserver(writeErr, { mode: logMode, color: liveLogColor() })
       : undefined;
-  const wiring = await resolveDeliveryWiring(target, options, deps, liveLog?.observe);
+  const deferredAgentEvents = createDeferredAgentEventObserver();
+  const wiring = await resolveDeliveryWiring(target, options, deps, deferredAgentEvents.observer);
   const resume = deps.resumeDelivery ?? resumeDelivery;
   const controller = (deps.createAbortController ?? (() => new AbortController()))();
   const uninstall =
@@ -487,19 +561,14 @@ export async function runResumeCommand(
       writeErr,
       `Resuming delivery for ${target}${options.runId ? ` (run ${options.runId})` : ""}…`,
     );
-    let observableDelivery = wiring.delivery;
-    if (liveLog && observableDelivery.onAgentEvent !== liveLog.observe) {
-      const downstream = observableDelivery.onAgentEvent;
-      observableDelivery = {
-        ...observableDelivery,
-        onAgentEvent: (event) => {
-          liveLog.observe(event);
-          downstream?.(event);
-        },
-      };
-    }
-    const recording = withWorkflowEventRecording(observableDelivery, writeErr);
-    const delivery = withProgress(recording.delivery, writeErr);
+    const evented = composeEventedDelivery({
+      delivery: wiring.delivery,
+      ...(liveLog ? { liveLog } : {}),
+      deferredAgentEvents,
+      stderr: writeErr,
+    });
+    const recording = evented.recording;
+    const delivery = withProgress(evented.delivery, writeErr);
     const flushLiveLog = liveLog?.flush ?? (() => undefined);
     try {
       const result = await resume(

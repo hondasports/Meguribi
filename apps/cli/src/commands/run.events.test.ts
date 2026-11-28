@@ -8,6 +8,7 @@ import {
   FileSystemWorkflowEventLog,
 } from "@meguribi/adapters";
 import type {
+  DeliveryDependencies,
   DeliveryResult,
   RunDeliveryInput,
   RunState,
@@ -135,7 +136,7 @@ function successfulResult(runId: string): DeliveryResult {
 
 async function createHarness(): Promise<{
   runStore: FileSystemRunStore;
-  delivery: DeliveryCommandDependencies["delivery"];
+  delivery: DeliveryDependencies;
   eventLog: FileSystemWorkflowEventLog;
 }> {
   const root = await tempRoot();
@@ -204,6 +205,58 @@ describe("run/resume workflow event recording", () => {
     ]);
     expect(read.skippedLines).toBe(0);
     expect(stderr.join("")).not.toContain("warning: failed to append workflow event");
+  });
+
+  it("records planner events emitted through the delivery wiring observer even when live logs are disabled", async () => {
+    const { delivery, eventLog } = await createHarness();
+    let wiringObserver: ((event: LiveLogEvent) => void) | undefined;
+    const plannerStepStarted: LiveLogEvent = {
+      type: "step.started",
+      stepId: "plan",
+      label: "plan",
+      role: "planner",
+      profileId: "codex",
+      agentLabel: "Codex",
+    };
+    const fakeRunDelivery: NonNullable<DeliveryCommandDependencies["runDelivery"]> = async (
+      input,
+      deps,
+    ) => {
+      const state = await createState(deps.runStore, input);
+      await deps.onStateChange?.(state);
+      wiringObserver?.(plannerStepStarted);
+      deps.onAgentEvent?.(implementerAgentEvent());
+      return successfulResult(state.runId);
+    };
+
+    const result = await runRunCommand(
+      "owner/repo#76",
+      { json: true, log: "none" },
+      {
+        createDeliveryDeps: async (options) => {
+          wiringObserver = options.onAgentEvent;
+          return {
+            deps: {
+              ...delivery,
+              ...(options.onAgentEvent ? { onAgentEvent: options.onAgentEvent } : {}),
+            },
+            inheritedMcpPolicy: "allow",
+          };
+        },
+        runDelivery: fakeRunDelivery,
+        stdout: () => undefined,
+        stderr: () => undefined,
+        installSignalHandlers: silentSignalHandlers,
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(wiringObserver).toBeDefined();
+    const read = await eventLog.read(result.result!.runId);
+    expect(read.records.map((record) => record.event.type)).toEqual([
+      "step.started",
+      "agent.event",
+    ]);
   });
 
   it("keeps initial resume workflow events until the first observed state supplies the runId", async () => {
