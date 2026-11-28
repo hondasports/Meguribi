@@ -13,6 +13,10 @@ import {
   discussionMcpPolicyAfterSubmit,
   initialDiscussionMcpPolicy,
 } from "../consultation-view.js";
+import {
+  participantToolbarSummary,
+  shouldOpenOptionsForValidation,
+} from "../consultation-composer-view.js";
 import { shouldSubmitOnEnter } from "../input-keyboard.js";
 
 const props = defineProps<{
@@ -57,7 +61,7 @@ const disabledReason = computed(() => {
 
 const toolbarSummary = computed(() => {
   const issue = target.value.trim().length > 0 ? "Issueあり" : "Issueなし";
-  return `参加CLI ${String(selectedIds.value.length)}件 / ${issue} / MCP ${discussionMcpPolicy.value}`;
+  return `${participantToolbarSummary(selectedIds.value, props.profiles)} / ${issue} / MCP ${discussionMcpPolicy.value}`;
 });
 
 function ensureIssuesLoaded(): void {
@@ -101,10 +105,16 @@ function selectDiscussionMcpPolicy(policy: DiscussionMcpPolicy): void {
 }
 
 function submit(): void {
-  if (submitInFlight || props.starting) return;
+  if (submitInFlight || props.starting || props.loading || props.loadError !== null) return;
   const error = validateConsultationInput({ prompt: prompt.value, profileIds: selectedIds.value });
   validationError.value = error;
-  if (error !== null) return;
+  if (error !== null) {
+    if (shouldOpenOptionsForValidation(error)) {
+      optionsOpen.value = true;
+      ensureIssuesLoaded();
+    }
+    return;
+  }
   submitInFlight = true;
   const submittedMcpPolicy = discussionMcpPolicy.value;
   discussionMcpPolicy.value = discussionMcpPolicyAfterSubmit();

@@ -1721,6 +1721,7 @@ body {
 @media (max-width: 900px) {
   .topbar {
     height: 56px;
+    min-height: 56px;
     gap: 8px;
     padding: 0 10px;
   }
