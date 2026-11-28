@@ -945,8 +945,13 @@ button {
   letter-spacing: 0.03em;
   width: 30px;
 }
+.discussion-turn.human {
+  grid-template-columns: minmax(0, 1fr) 30px;
+}
 .discussion-turn.human .turn-avatar {
   background: rgba(115, 212, 194, 0.12);
+  grid-column: 2;
+  grid-row: 1;
 }
 .turn-body {
   background: rgba(255, 255, 255, 0.025);
@@ -956,8 +961,18 @@ button {
   padding: 10px 12px 11px;
 }
 .discussion-turn.human .turn-body {
-  background: rgba(115, 212, 194, 0.055);
-  border-color: rgba(115, 212, 194, 0.16);
+  background: rgba(115, 212, 194, 0.095);
+  border-color: rgba(115, 212, 194, 0.2);
+  border-radius: 12px 12px 4px 12px;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  max-width: min(78%, 680px);
+  padding: 8px 10px 9px;
+  width: fit-content;
+}
+.discussion-turn.human .discussion-turn-meta {
+  justify-content: flex-end;
 }
 .discussion-turn-meta {
   align-items: center;
@@ -1223,6 +1238,10 @@ button {
 @media (max-width: 1100px) {
   .discussion-turn {
     margin-left: calc(var(--depth) * 16px);
+  }
+  .discussion-turn.human .turn-body,
+  .conversation-scroll > .consultation-prompt-card {
+    max-width: 88%;
   }
   .discussion-section-heading,
   .decision-actions {
@@ -1546,12 +1565,14 @@ button {
   flex-shrink: 0;
 }
 
-.consultation-prompt-card {
-  margin-bottom: 1rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 0.8rem;
-  background: rgba(15, 23, 42, 0.58);
+.conversation-scroll > .consultation-prompt-card {
+  width: fit-content;
+  max-width: min(78%, 680px);
+  margin: 0 0 1rem auto;
+  padding: 0.65rem 0.8rem 0.75rem;
+  border: 1px solid rgba(115, 212, 194, 0.2);
+  border-radius: 12px 12px 4px 12px;
+  background: rgba(115, 212, 194, 0.095);
 }
 
 .consultation-prompt-card h3 {
